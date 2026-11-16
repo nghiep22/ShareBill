@@ -230,6 +230,25 @@ describe.skipIf(!enabled)('Firebase emulator API flow', () => {
     expect(created.statusCode).toBe(200);
     const { id: tripId, ownerParticipantId } = created.json().data;
     const store = db();
+    const assertProjection = async (total: number, category: string, activeCount: number, ledgerVersion: number) => {
+      const [root, signal, balanceQuery] = await Promise.all([
+        store.doc(`trips/${tripId}`).get(), store.doc(`trips/${tripId}/signals/current`).get(),
+        store.collection(`trips/${tripId}/balances`).get(),
+      ]);
+      const balances = balanceQuery.docs.map(doc => doc.data() as Record<string, unknown>);
+      const sum = (field: string) => balances.reduce((value, balance) => value + BigInt(balance[field] as number), 0n);
+      expect(root.get('totalExpenseMinor')).toBe(total);
+      expect(root.get('activeExpenseCount')).toBe(activeCount);
+      expect(root.get('ledgerVersion')).toBe(ledgerVersion);
+      expect(root.get('categoryTotalsMinor')).toEqual({ food: 0, transport: 0, stay: 0,
+        tickets: 0, shopping: 0, other: 0, [category]: total });
+      expect(sum('paidMinor')).toBe(BigInt(total));
+      expect(sum('owedMinor')).toBe(BigInt(total));
+      expect(sum('sentMinor')).toBe(sum('receivedMinor'));
+      expect(sum('netMinor')).toBe(0n);
+      expect(balances.every(balance => balance.schemaVersion === 1 && balance.updatedAt instanceof Timestamp)).toBe(true);
+      expect(signal.data()).toMatchObject({ schemaVersion: 1, revision: root.get('revision'), ledgerVersion });
+    };
     const [tripDoc, ownerDoc, participantDoc, linkDoc, balanceDoc, signalDoc, refDoc, auditQuery, operationDoc] = await Promise.all([
       store.doc(`trips/${tripId}`).get(), store.doc(`trips/${tripId}/memberships/${ownerIdentity.uid}`).get(),
       store.doc(`trips/${tripId}/participants/${ownerParticipantId}`).get(),
@@ -288,6 +307,13 @@ describe.skipIf(!enabled)('Firebase emulator API flow', () => {
     expect(expenseDetail.json().data.splitInput).toEqual(expensePayload.split);
     const expenseList = await app.inject({ method: 'GET', url: `/api/v1/trips/${tripId}/expenses`, headers: { authorization: `Bearer ${idToken}` } });
     expect(expenseList.json().data.items).toHaveLength(1);
+    await assertProjection(101, 'stay', 1, 1);
+    const [ownerAfterExpense, secondAfterExpense] = await Promise.all([
+      store.doc(`trips/${tripId}/participants/${ownerParticipantId}`).get(),
+      store.doc(`trips/${tripId}/participants/${secondParticipantId}`).get(),
+    ]);
+    expect(ownerAfterExpense.get('hasLedgerReferences')).toBe(true);
+    expect(secondAfterExpense.get('hasLedgerReferences')).toBe(true);
     const duplicate = await app.inject({ method: 'POST', url: `/api/v1/trips/${tripId}/expenses`, headers: expenseHeaders, payload: expensePayload });
     expect(duplicate.json().meta.replayed).toBe(true);
     const overview = await app.inject({ method: 'GET', url: `/api/v1/trips/${tripId}/overview`, headers: { authorization: `Bearer ${idToken}` } });
@@ -301,6 +327,7 @@ describe.skipIf(!enabled)('Firebase emulator API flow', () => {
     expect(suggestion.amountMinor).toBeGreaterThan(0);
     const pending = await app.inject({ method: 'POST', url: `/api/v1/trips/${tripId}/settlements`, headers: { ...headers, 'idempotency-key': randomUUID() }, payload: { ...suggestion, occurredOn: '2026-12-20', note: null, basedOnLedgerVersion: 1 } });
     expect(pending.statusCode).toBe(200);
+    await assertProjection(101, 'stay', 1, 1);
     const settlementId = pending.json().data.id;
     const settlementList = await app.inject({ method: 'GET', url: `/api/v1/trips/${tripId}/settlements`, headers: { authorization: `Bearer ${idToken}` } });
     expect(settlementList.json().data.items).toHaveLength(1);
@@ -310,8 +337,17 @@ describe.skipIf(!enabled)('Firebase emulator API flow', () => {
     expect(confirm.statusCode).toBe(200);
     const settled = await app.inject({ method: 'GET', url: `/api/v1/trips/${tripId}/overview`, headers: { authorization: `Bearer ${idToken}` } });
     expect(settled.json().data.balances.every((b: { netMinor: number }) => b.netMinor === 0)).toBe(true);
-    const voided = await app.inject({ method: 'POST', url: `/api/v1/trips/${tripId}/expenses/${expense.json().data.id}/void`, headers: { ...headers, 'idempotency-key': randomUUID(), 'if-match': '"1"' }, payload: { reason: 'Nhập nhầm khoản chi' } });
+    await assertProjection(101, 'stay', 1, 2);
+    const voidHeaders = { ...headers, 'idempotency-key': randomUUID(), 'if-match': '"1"' };
+    const voided = await app.inject({ method: 'POST', url: `/api/v1/trips/${tripId}/expenses/${expenseId}/void`,
+      headers: voidHeaders, payload: { reason: 'Nhập nhầm khoản chi' } });
     expect(voided.statusCode).toBe(200);
+    await assertProjection(0, 'stay', 0, 3);
+    const voidReplay = await app.inject({ method: 'POST', url: `/api/v1/trips/${tripId}/expenses/${expenseId}/void`,
+      headers: voidHeaders, payload: { reason: 'Nhập nhầm khoản chi' } });
+    expect(voidReplay.statusCode).toBe(200);
+    expect(voidReplay.json().meta.replayed).toBe(true);
+    await assertProjection(0, 'stay', 0, 3);
     const voidedExpense = await store.doc(`trips/${tripId}/expenses/${expenseId}`).get();
     expect(expenseDocumentSchema.safeParse(voidedExpense.data()).success).toBe(true);
     expect(voidedExpense.data()).toMatchObject({ status: 'void', version: 2, voidedBy: ownerUid,
@@ -319,6 +355,7 @@ describe.skipIf(!enabled)('Firebase emulator API flow', () => {
     const afterVoid = await app.inject({ method: 'GET', url: `/api/v1/trips/${tripId}/overview`, headers: { authorization: `Bearer ${idToken}` } });
     expect(afterVoid.json().data.trip.totalExpenseMinor).toBe(0);
     expect(afterVoid.json().data.balances.reduce((sum: number, b: { netMinor: number }) => sum + b.netMinor, 0)).toBe(0);
+    expect((await store.doc(`trips/${tripId}/participants/${secondParticipantId}`).get()).get('hasLedgerReferences')).toBe(true);
     const exactPayload = { ...expensePayload, title: 'Vé', splitMethod: 'exact',
       split: { shares: [{ participantId: ownerParticipantId, amountMinor: 1 },
         { participantId: secondParticipantId, amountMinor: 100 }] }, category: 'tickets', receiptIds: [] };
@@ -329,6 +366,7 @@ describe.skipIf(!enabled)('Firebase emulator API flow', () => {
     expect(expenseDocumentSchema.safeParse(exactDoc.data()).success).toBe(true);
     expect(exactDoc.get('splitInput')).toEqual(exactPayload.split);
     expect(exactDoc.get('shares').reduce((sum: number, share: { amountMinor: number }) => sum + share.amountMinor, 0)).toBe(101);
+    await assertProjection(101, 'tickets', 1, 4);
     const receiptAttempt = await app.inject({ method: 'POST', url: `/api/v1/trips/${tripId}/expenses`,
       headers: { ...headers, 'idempotency-key': randomUUID() },
       payload: { ...exactPayload, receiptIds: [randomUUID()] } });
@@ -351,6 +389,16 @@ describe.skipIf(!enabled)('Firebase emulator API flow', () => {
       headers: { authorization: `Bearer ${idToken}` } });
     expect(mixedList.json().data.items).toHaveLength(3);
     expect(mixedList.json().data.items.find((item: { id: string }) => item.id === legacyId).splitInput).toEqual(legacySplit);
+    await store.doc(`trips/${tripId}/balances/${secondParticipantId}`).delete();
+    const revisionBeforeFailure = (await store.doc(`trips/${tripId}`).get()).get('revision');
+    const missingBalanceKey = randomUUID();
+    const missingBalance = await app.inject({ method: 'POST', url: `/api/v1/trips/${tripId}/expenses`,
+      headers: { ...headers, 'idempotency-key': missingBalanceKey }, payload: expensePayload });
+    expect(missingBalance.statusCode).toBe(409);
+    expect(missingBalance.json().error.code).toBe('PROJECTION_INVARIANT_FAILED');
+    expect((await store.collection(`trips/${tripId}/expenses`).get()).size).toBe(3);
+    expect((await store.doc(`trips/${tripId}`).get()).get('revision')).toBe(revisionBeforeFailure);
+    expect((await store.doc(`users/${ownerUid}/operations/${missingBalanceKey}`).get()).exists).toBe(false);
     const unauthorized = await app.inject({ method: 'GET', url: `/api/v1/trips/${tripId}/overview` });
     expect(unauthorized.statusCode).toBe(401);
     const outsiderEmail = `sharebill-outsider-${suffix}@example.test`;

@@ -5,7 +5,7 @@ import { z } from 'zod';
 import { db } from './firebase.js';
 import { ApiError, operationKey, requireUser } from './http.js';
 import { tripInput, participantInput, expenseInput } from './schemas.js';
-import { splitEqual, validateExact, expenseDelta, applyBalanceDelta, type Balance } from './domain/money.js';
+import { splitEqual, validateExact, expenseDelta, applyBalanceDelta, applyExpenseTotals, type Balance } from './domain/money.js';
 import { auth } from './firebase.js';
 import { bootstrapUserProfile } from './services/user-profile.js';
 import { createTripDocuments } from './database/trip.js';
@@ -24,10 +24,6 @@ function params(value: unknown): { tripId: string } {
   if (!result.success) throw new ApiError(404, 'NOT_FOUND', 'Không tìm thấy chuyến đi.');
   return result.data;
 }
-function zeroBalance(participantId: string): Balance {
-  return { participantId, paidMinor: 0, owedMinor: 0, sentMinor: 0, receivedMinor: 0, netMinor: 0 };
-}
-
 export async function registerRoutes(app: FastifyInstance): Promise<void> {
   app.get('/health', async () => ({ status: 'ok', service: 'sharebill-be' }));
 
@@ -161,20 +157,39 @@ export async function registerRoutes(app: FastifyInstance): Promise<void> {
         return { data: op.get('response'), meta: { replayed: true } };
       }
       if (trip.get('status') !== 'active' || trip.get('moderationStatus') !== 'normal') throw new ApiError(409, 'TRIP_NOT_WRITABLE', 'Chuyến đi đang khóa thao tác.');
-      if (trip.get('expenseCountAllTime') >= 2000) throw new ApiError(422, 'TRIP_LIMIT_REACHED', 'Chuyến đi đã đạt giới hạn khoản chi.');
+      const expenseCount = trip.get('expenseCountAllTime'), activeExpenseCount = trip.get('activeExpenseCount');
+      if (!Number.isSafeInteger(expenseCount) || !Number.isSafeInteger(activeExpenseCount) ||
+          expenseCount < 0 || activeExpenseCount < 0 || activeExpenseCount > expenseCount) {
+        throw new ApiError(409, 'PROJECTION_INVARIANT_FAILED', 'Số đếm chuyến chưa sẵn sàng.');
+      }
+      if (expenseCount >= 2000) throw new ApiError(422, 'TRIP_LIMIT_REACHED', 'Chuyến đi đã đạt giới hạn khoản chi.');
       if (participantSnaps.some(p => !p.exists || p.get('status') !== 'active')) throw new ApiError(422, 'INVALID_PARTICIPANTS', 'Có người chưa thuộc chuyến đi hoặc đã ngừng tham gia.');
+      let totals;
+      try { totals = applyExpenseTotals(trip.get('totalExpenseMinor'), trip.get('categoryTotalsMinor'), body.category, body.amountMinor, 1); }
+      catch { throw new ApiError(409, 'PROJECTION_INVARIANT_FAILED', 'Thống kê chuyến chưa sẵn sàng.'); }
       const deltas = expenseDelta(body.amountMinor, body.payerParticipantId, shares, 1);
       const balanceSnaps = await Promise.all([...deltas.keys()].map(id => tx.get(store.doc(`trips/${tripId}/balances/${id}`))));
-      const nextBalances = [...deltas].map(([id, delta], index) => applyBalanceDelta((balanceSnaps[index]?.data() as Balance | undefined) ?? zeroBalance(id), delta));
-      if (!Number.isSafeInteger(trip.get('totalExpenseMinor') + body.amountMinor)) throw new ApiError(422, 'UNSAFE_AMOUNT', 'Tổng tiền vượt giới hạn.');
+      if (balanceSnaps.some(snapshot => !snapshot.exists)) throw new ApiError(409, 'PROJECTION_INVARIANT_FAILED', 'Số dư chuyến chưa sẵn sàng.');
       const now = Timestamp.now();
+      const nextBalances = [...deltas].map(([, delta], index) => ({
+        ...applyBalanceDelta(balanceSnaps[index]!.data() as Balance, delta), updatedAt: now,
+      }));
       const revision = trip.get('revision') + 1;
       const ledgerVersion = trip.get('ledgerVersion') + 1;
+      if (!Number.isSafeInteger(revision) || !Number.isSafeInteger(ledgerVersion)) {
+        throw new ApiError(409, 'PROJECTION_INVARIANT_FAILED', 'Phiên bản chuyến chưa sẵn sàng.');
+      }
       const document = createExpenseDocument({ id: expenseId, body, shares, actorUid: uid, now });
       const response = { id: expenseId, ...body, currency: 'VND', splitInput: body.split, shares, status: 'active', version: 1 };
       tx.create(store.doc(`trips/${tripId}/expenses/${expenseId}`), document);
       nextBalances.forEach(b => tx.set(store.doc(`trips/${tripId}/balances/${b.participantId}`), b));
-      tx.update(tripRef, { expenseCountAllTime: FieldValue.increment(1), activeExpenseCount: FieldValue.increment(1), totalExpenseMinor: FieldValue.increment(body.amountMinor), revision, ledgerVersion, updatedAt: now });
+      participantSnaps.forEach((snapshot, index) => {
+        if (snapshot?.get('hasLedgerReferences') !== true) {
+          tx.update(store.doc(`trips/${tripId}/participants/${participantIds[index]}`), { hasLedgerReferences: true, updatedAt: now });
+        }
+      });
+      tx.update(tripRef, { expenseCountAllTime: expenseCount + 1, activeExpenseCount: activeExpenseCount + 1,
+        ...totals, revision, ledgerVersion, updatedAt: now });
       tx.update(store.doc(`trips/${tripId}/signals/current`), { revision, ledgerVersion, updatedAt: now });
       tx.set(store.doc(`trips/${tripId}/auditEvents/${expenseId}`), { actorUid: uid, action: 'expense.created', expenseId, amountMinor: body.amountMinor, shares, createdAt: now });
       tx.set(opRef, { path, requestHash, response, tripId, committedAt: now });

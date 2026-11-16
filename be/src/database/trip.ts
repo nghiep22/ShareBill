@@ -1,7 +1,6 @@
 import { Timestamp } from 'firebase-admin/firestore';
 import { createParticipantDocuments } from './participant.js';
-
-const categories = ['food', 'transport', 'stay', 'tickets', 'shopping', 'other'] as const;
+import { EXPENSE_CATEGORIES } from '../domain/money.js';
 
 export type TripCreateData = {
   tripId: string;
@@ -17,7 +16,7 @@ export type TripCreateData = {
 /** Documents created together when the first owner starts a trip. */
 export function createTripDocuments(input: TripCreateData) {
   const { tripId, participantId, auditEventId, ownerUid, ownerName, name, operationKey, now } = input;
-  const categoryTotalsMinor = Object.fromEntries(categories.map(category => [category, 0])) as Record<(typeof categories)[number], number>;
+  const categoryTotalsMinor = Object.fromEntries(EXPENSE_CATEGORIES.map(category => [category, 0]));
   const trip = {
     schemaVersion: 1, id: tripId, name, destination: null, note: null, startDate: null, endDate: null,
     timezone: 'Asia/Ho_Chi_Minh', currency: 'VND', currencyExponent: 0,

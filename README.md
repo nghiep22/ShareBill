@@ -15,11 +15,11 @@ Tài liệu thiết kế và triển khai, cập nhật ngày **16/11/2026**. Ng
 | [Website quản trị React/Node.js](docs/ADMIN_WEB.md) | UX đơn giản, dashboard, người dùng, chuyến đi, hỗ trợ, quyền quản trị và API Node.js | FE quản trị và BE |
 | [CI/CD và triển khai](docs/CICD_DEPLOY.md) | Môi trường, secrets, GitHub Actions, Vercel, Firebase Rules, release, rollback, backup, vận hành | Cả FE và BE |
 | [Lộ trình và kiểm thử](docs/ROADMAP_TESTING.md) | Công việc theo giai đoạn, dependency, acceptance criteria, dữ liệu mẫu, test matrix, checklist ra mắt | Cả FE và BE |
-| [Các lát cắt triển khai nhỏ](docs/slices/README.md) | 105 lát tổng cộng, D01–D05 đã xong và 100 còn lại; có dependency, file/module, kiểm thử và tiêu chí hoàn tất | Người trực tiếp triển khai |
+| [Các lát cắt triển khai nhỏ](docs/slices/README.md) | 105 lát tổng cộng, D01–D06 đã xong và 99 còn lại; có dependency, file/module, kiểm thử và tiêu chí hoàn tất | Người trực tiếp triển khai |
 
 **Thứ tự đọc:** Product → Database → Frontend/Backend song song → CI/CD → Roadmap. Khi triển khai, Database là hợp đồng lưu trữ, Backend là hợp đồng API và công thức; phạm vi và quy tắc người dùng trong Product là chuẩn nghiệp vụ. Thay đổi hợp đồng phải cập nhật cả hai phía và test liên quan trong cùng PR.
 
-**Bắt đầu công việc tiếp theo:** D01–D05 đã hoàn tất; làm [D06 — đồng bộ thống kê và số dư](docs/slices/01_DATABASE_BE.md#d06), rồi D07. Mỗi lát có điều kiện nghiệm thu riêng.
+**Bắt đầu công việc tiếp theo:** D01–D06 đã hoàn tất; làm [D07 — chuẩn hóa dữ liệu trả nợ](docs/slices/01_DATABASE_BE.md#d07), rồi D08. Mỗi lát có điều kiện nghiệm thu riêng.
 
 ## Hướng triển khai đề xuất
 

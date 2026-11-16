@@ -1,10 +1,10 @@
 import type { FastifyInstance } from 'fastify';
 import { createHash, randomUUID } from 'node:crypto';
-import { FieldValue } from 'firebase-admin/firestore';
+import { FieldValue, Timestamp } from 'firebase-admin/firestore';
 import { z } from 'zod';
 import { db } from './firebase.js';
 import { ApiError, operationKey, requireUser } from './http.js';
-import { expenseDelta, applyBalanceDelta, type Balance, type Share } from './domain/money.js';
+import { expenseDelta, applyBalanceDelta, applyExpenseTotals, type Balance, type Share, type ExpenseCategory } from './domain/money.js';
 import { suggestSettlements, applySettlement } from './domain/settlement.js';
 
 const settlementInput = z.strictObject({
@@ -96,7 +96,7 @@ export async function registerFinanceRoutes(app: FastifyInstance): Promise<void>
       const response = { id: settlementId, ...body, status: 'pending', version: 1 };
       tx.set(store.doc(`trips/${tripId}/settlements/${settlementId}`), { ...response, createdBy: uid, createdAt: now, updatedAt: now });
       tx.update(tripRef, { settlementCountAllTime: FieldValue.increment(1), pendingSettlementCount: FieldValue.increment(1), revision, updatedAt: now });
-      tx.set(store.doc(`trips/${tripId}/signals/current`), { revision, ledgerVersion: trip.get('ledgerVersion'), updatedAt: now });
+      tx.update(store.doc(`trips/${tripId}/signals/current`), { revision, ledgerVersion: trip.get('ledgerVersion'), updatedAt: now });
       tx.set(store.doc(`trips/${tripId}/auditEvents/${randomUUID()}`), { actorUid: uid, action: 'settlement.created', entityId: settlementId, amountMinor: body.amountMinor, createdAt: now });
       tx.set(opRef, { path, requestHash, response, tripId, committedAt: now });
       return { data: response, meta: { revision, replayed: false } };
@@ -126,13 +126,13 @@ export async function registerFinanceRoutes(app: FastifyInstance): Promise<void>
       const [fromSnap, toSnap] = await Promise.all([tx.get(store.doc(`trips/${tripId}/balances/${fromId}`)), tx.get(store.doc(`trips/${tripId}/balances/${toId}`))]);
       const [from, to] = balancesFrom([fromSnap, toSnap]);
       if (!from || !to || from.netMinor >= 0 || to.netMinor <= 0 || amount > Math.min(-from.netMinor, to.netMinor)) throw new ApiError(422, 'SETTLEMENT_EXCEEDS_BALANCE', 'Số dư hiện tại không còn đủ cho lượt trả này.');
-      const now = FieldValue.serverTimestamp(), revision = trip.get('revision') + 1, ledgerVersion = trip.get('ledgerVersion') + 1;
+      const now = Timestamp.now(), revision = trip.get('revision') + 1, ledgerVersion = trip.get('ledgerVersion') + 1;
       const response = { id, status: 'confirmed', version: expectedVersion + 1, confirmationMode: owner ? 'owner_on_behalf' : 'recipient' };
-      tx.set(store.doc(`trips/${tripId}/balances/${fromId}`), applySettlement(from, 'from', amount, 1));
-      tx.set(store.doc(`trips/${tripId}/balances/${toId}`), applySettlement(to, 'to', amount, 1));
+      tx.set(store.doc(`trips/${tripId}/balances/${fromId}`), { ...applySettlement(from, 'from', amount, 1), updatedAt: now });
+      tx.set(store.doc(`trips/${tripId}/balances/${toId}`), { ...applySettlement(to, 'to', amount, 1), updatedAt: now });
       tx.update(settlementRef, { status: 'confirmed', version: expectedVersion + 1, confirmedBy: uid, confirmationMode: response.confirmationMode, confirmedAt: now, updatedAt: now });
       tx.update(tripRef, { pendingSettlementCount: FieldValue.increment(-1), revision, ledgerVersion, updatedAt: now });
-      tx.set(store.doc(`trips/${tripId}/signals/current`), { revision, ledgerVersion, updatedAt: now });
+      tx.update(store.doc(`trips/${tripId}/signals/current`), { revision, ledgerVersion, updatedAt: now });
       tx.set(store.doc(`trips/${tripId}/auditEvents/${randomUUID()}`), { actorUid: uid, action: 'settlement.confirmed', entityId: id, amountMinor: amount, createdAt: now });
       tx.set(opRef, { path, requestHash, response, tripId, committedAt: now });
       return { data: response, meta: { revision, ledgerVersion, replayed: false } };
@@ -154,16 +154,29 @@ export async function registerFinanceRoutes(app: FastifyInstance): Promise<void>
       if (expense.get('version') !== expectedVersion) throw new ApiError(409, 'VERSION_CONFLICT', 'Khoản chi đã thay đổi.');
       if (expense.get('status') !== 'active') throw new ApiError(409, 'INVALID_STATE_TRANSITION', 'Khoản chi đã hủy.');
       if (member.get('role') !== 'owner' && expense.get('createdBy') !== uid) throw new ApiError(403, 'FORBIDDEN', 'Bạn không thể hủy khoản chi này.');
+      const expenseCount = trip.get('expenseCountAllTime'), activeExpenseCount = trip.get('activeExpenseCount');
+      if (!Number.isSafeInteger(expenseCount) || !Number.isSafeInteger(activeExpenseCount) ||
+          expenseCount < 1 || activeExpenseCount < 1 || activeExpenseCount > expenseCount) {
+        throw new ApiError(409, 'PROJECTION_INVARIANT_FAILED', 'Số đếm chuyến chưa sẵn sàng.');
+      }
       const amount = expense.get('amountMinor') as number, payer = expense.get('payerParticipantId') as string, shares = expense.get('shares') as Share[];
+      let totals;
+      try { totals = applyExpenseTotals(trip.get('totalExpenseMinor'), trip.get('categoryTotalsMinor'),
+        expense.get('category') as ExpenseCategory, amount, -1); }
+      catch { throw new ApiError(409, 'PROJECTION_INVARIANT_FAILED', 'Thống kê chuyến chưa sẵn sàng.'); }
       const deltas = expenseDelta(amount, payer, shares, -1);
       const snaps = await Promise.all([...deltas.keys()].map(pid => tx.get(store.doc(`trips/${tripId}/balances/${pid}`))));
       const balances = balancesFrom(snaps);
-      const now = FieldValue.serverTimestamp(), revision = trip.get('revision') + 1, ledgerVersion = trip.get('ledgerVersion') + 1;
+      const now = Timestamp.now(), revision = trip.get('revision') + 1, ledgerVersion = trip.get('ledgerVersion') + 1;
+      if (!Number.isSafeInteger(revision) || !Number.isSafeInteger(ledgerVersion)) {
+        throw new ApiError(409, 'PROJECTION_INVARIANT_FAILED', 'Phiên bản chuyến chưa sẵn sàng.');
+      }
       const response = { id, status: 'void', version: expectedVersion + 1 };
-      [...deltas].forEach(([pid, delta], index) => tx.set(store.doc(`trips/${tripId}/balances/${pid}`), applyBalanceDelta(balances[index]!, delta)));
+      [...deltas].forEach(([pid, delta], index) => tx.set(store.doc(`trips/${tripId}/balances/${pid}`),
+        { ...applyBalanceDelta(balances[index]!, delta), updatedAt: now }));
       tx.update(expenseRef, { status: 'void', version: expectedVersion + 1, voidReason: body.reason, voidedBy: uid, voidedAt: now, updatedBy: uid, updatedAt: now });
-      tx.update(tripRef, { activeExpenseCount: FieldValue.increment(-1), totalExpenseMinor: FieldValue.increment(-amount), revision, ledgerVersion, updatedAt: now });
-      tx.set(store.doc(`trips/${tripId}/signals/current`), { revision, ledgerVersion, updatedAt: now });
+      tx.update(tripRef, { activeExpenseCount: activeExpenseCount - 1, ...totals, revision, ledgerVersion, updatedAt: now });
+      tx.update(store.doc(`trips/${tripId}/signals/current`), { revision, ledgerVersion, updatedAt: now });
       tx.set(store.doc(`trips/${tripId}/auditEvents/${randomUUID()}`), { actorUid: uid, action: 'expense.voided', entityId: id, amountMinor: amount, reason: body.reason, createdAt: now });
       tx.set(opRef, { path, requestHash, response, tripId, committedAt: now });
       return { data: response, meta: { revision, ledgerVersion, replayed: false } };

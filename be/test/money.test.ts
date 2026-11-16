@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { splitEqual, validateExact, expenseDelta, applyBalanceDelta } from '../src/domain/money.js';
+import { splitEqual, validateExact, expenseDelta, applyBalanceDelta, applyExpenseTotals, EXPENSE_CATEGORIES } from '../src/domain/money.js';
 
 describe('money invariants', () => {
   it('splits the remainder by stable participant ID', () => {
@@ -17,5 +17,22 @@ describe('money invariants', () => {
     expect(delta.get('p_A')).toEqual({ paidMinor: 100, owedMinor: 50, netMinor: 50 });
     const next = applyBalanceDelta({ participantId: 'p_A', paidMinor: 0, owedMinor: 0, sentMinor: 0, receivedMinor: 0, netMinor: 0 }, delta.get('p_A')!);
     expect(next.netMinor).toBe(50);
+  });
+  it('keeps category totals equal to active expenses across create and void', () => {
+    const zero = Object.fromEntries(EXPENSE_CATEGORIES.map(category => [category, 0]));
+    const first = applyExpenseTotals(0, zero, 'stay', 101, 1);
+    const second = applyExpenseTotals(first.totalExpenseMinor, first.categoryTotalsMinor, 'food', 20, 1);
+    const voided = applyExpenseTotals(second.totalExpenseMinor, second.categoryTotalsMinor, 'stay', 101, -1);
+    expect(voided).toEqual({ totalExpenseMinor: 20,
+      categoryTotalsMinor: { food: 20, transport: 0, stay: 0, tickets: 0, shopping: 0, other: 0 } });
+    expect(() => applyExpenseTotals(0, zero, 'stay', 1, -1)).toThrow('EXPENSE_TOTALS_INVARIANT_FAILED');
+    expect(() => applyExpenseTotals(10, zero, 'stay', 1, 1)).toThrow('EXPENSE_TOTALS_INVARIANT_FAILED');
+    const nearLimit = { ...zero, stay: Number.MAX_SAFE_INTEGER };
+    expect(() => applyExpenseTotals(Number.MAX_SAFE_INTEGER, nearLimit, 'stay', 1, 1)).toThrow('EXPENSE_TOTALS_INVARIANT_FAILED');
+  });
+  it('does not let a reversed expense make paid or owed negative', () => {
+    expect(() => applyBalanceDelta({ participantId: 'p_A', paidMinor: 0, owedMinor: 0,
+      sentMinor: 0, receivedMinor: 0, netMinor: 0 },
+    { paidMinor: -1, owedMinor: 0, netMinor: -1 })).toThrow('BALANCE_INVARIANT_FAILED');
   });
 });

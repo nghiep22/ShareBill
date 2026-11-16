@@ -25,12 +25,12 @@ Node API xác minh JWT rồi kiểm quyền trên dữ liệu. Mọi lệnh ghi 
 | Nhóm | Có trong code | Cần hoàn thiện |
 | --- | --- | --- |
 | Auth/user | Register, login, refresh JWT; bootstrap hồ sơ v1 dùng chung | Migration hồ sơ legacy D13; quyền và lifecycle còn trong backlog |
-| Trip | Tạo chuyến v1 với metadata, moderation mặc định, counters và category totals bằng 0 | Cập nhật category totals khi ghi tiền D06; archive/reopen |
+| Trip | Tạo chuyến v1 với metadata, moderation mặc định, counters và category totals; create/void expense cập nhật cùng transaction | Archive/reopen; migration projection legacy D14/D16 |
 | Membership | Owner membership đủ timestamps và tripRef trong cùng transaction | Invite/join/remove/restore; API phân trang |
 | Participant | Owner và người thêm sau có participant/balance zero với metadata v1; owner có participantLink | Link/unlink/inactive; migration dữ liệu cũ |
-| Expense | Writer v1 lưu `splitInput`, shares, currency/receiptIds và void metadata; reader đọc được legacy `split` | Sửa khoản chi; đồng bộ projection tiền D06; migration legacy D15; receipt lifecycle I01–I07 |
+| Expense | Writer v1 lưu `splitInput`, shares, currency/receiptIds và void metadata; reader đọc được legacy `split`; create/void đồng bộ tổng chi và số dư | Sửa khoản chi; migration legacy D15; receipt lifecycle I01–I07 |
 | Settlement | Tạo pending, confirm | Khởi tạo đủ trường nullable; cancel/void; currency; history |
-| Balance/signal | Balance owner và người thêm sau có `updatedAt`; signal tạo cùng trip và cập nhật theo revision | Checker/reconciler và repair có kiểm soát; đồng bộ projection tiền D06 |
+| Balance/signal | Balance có `updatedAt` khi tạo và khi ghi tiền; signal giữ schemaVersion, revision và ledgerVersion theo root | Checker/reconciler và repair có kiểm soát; migration projection legacy D16 |
 | Audit/operation | Tạo chuyến có `trip.created` audit và key chống trùng cùng transaction; có một số sự kiện tiền | Audit thống nhất cho mutation khác D08; chuẩn hóa operation D09; endpoint tra outcome |
 | Receipt/invite/admin/support/jobs | Đã có mô tả trong tài liệu | Chưa có lifecycle/API/worker hoàn chỉnh |
 | Index | Đã bổ sung file cấu hình trong lần cập nhật này | Deploy staging, đợi index ready và chạy query thật; API hiện vẫn chỉ lấy 20/30 bản gần nhất |

@@ -46,8 +46,13 @@ try {
   }, token);
   const overview = await call('GET', `${base}/overview`, undefined, token);
   const expected = new Map([[trip.ownerParticipantId, 500000], [binh.id, -100000], [chi.id, -400000]]);
+  const categoryTotals: Record<string, number> = { food: 300000, transport: 0, stay: 900000, tickets: 0, shopping: 0, other: 0 };
+  const sum = (field: string) => overview.balances.reduce((total: bigint, balance: Record<string, number>) => total + BigInt(balance[field] ?? 0), 0n);
   if (overview.trip.totalExpenseMinor !== 1200000 || overview.trip.pendingSettlementCount !== 1 ||
-      overview.balances.length !== 3 || overview.balances.some((balance: { participantId: string; netMinor: number }) => expected.get(balance.participantId) !== balance.netMinor)) {
+      Object.keys(overview.trip.categoryTotalsMinor ?? {}).length !== 6 ||
+      Object.keys(categoryTotals).some(category => overview.trip.categoryTotalsMinor?.[category] !== categoryTotals[category]) ||
+      overview.balances.length !== 3 || overview.balances.some((balance: { participantId: string; netMinor: number }) => expected.get(balance.participantId) !== balance.netMinor) ||
+      sum('paidMinor') !== 1200000n || sum('owedMinor') !== 1200000n || sum('netMinor') !== 0n) {
     throw new Error('Seed ledger does not match expected balances.');
   }
   // JWTs and refresh tokens are deliberately omitted from the summary.

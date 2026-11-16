@@ -6,7 +6,7 @@ Backend Node.js/Fastify + TypeScript, dùng Firebase Authentication và Cloud Fi
 
 Thiết kế lưu trữ và backlog hoàn thiện ở [DATABASE.md](../docs/DATABASE.md). Index P0 đã có trong `firestore.indexes.json` và được nối với `firebase.json`; cần deploy và smoke query trên staging trước release. File index bao gồm cả query của chức năng chưa được code.
 
-Để triển khai từng phần nhỏ, mở [danh mục lát cắt](../docs/slices/README.md). D01–D05 đã hoàn tất; hàng đợi BE tiếp tục ở [D06 — đồng bộ thống kê và số dư](../docs/slices/01_DATABASE_BE.md#d06). Mỗi mã có phạm vi/kiểm thử/nghiệm thu riêng.
+Để triển khai từng phần nhỏ, mở [danh mục lát cắt](../docs/slices/README.md). D01–D06 đã hoàn tất; hàng đợi BE tiếp tục ở [D07 — chuẩn hóa dữ liệu trả nợ](../docs/slices/01_DATABASE_BE.md#d07). Mỗi mã có phạm vi/kiểm thử/nghiệm thu riêng.
 
 - Node.js 24 LTS, pnpm 11.25.0; phiên bản lưu trong `.node-version` và `package.json` ở thư mục gốc.
 - Java 21 cho Firebase Emulator Suite.
@@ -112,7 +112,7 @@ Tạo một bộ dữ liệu mẫu khi Auth/Firestore Emulator đang chạy:
 pnpm --dir be db:seed
 ```
 
-Script chỉ chấp nhận `demo-sharebill` và cả hai emulator trên `127.0.0.1`. Nó đi qua API để tạo An/Bình/Chi, hai khoản chi tổng 1.200.000đ và một đề nghị trả nợ pending; kiểm số dư 500.000đ/-100.000đ/-400.000đ. Mỗi lần chạy thêm bộ dữ liệu mới; không reset dữ liệu cũ. Email được in trong summary, mật khẩu emulator công khai `LocalDemo-123!`; không in JWT/refresh token. Xem [schema và seed kỳ vọng](../docs/DATABASE.md#12-seed-và-kịch-bản-kiểm-thử).
+Script chỉ chấp nhận `demo-sharebill` và cả hai emulator trên `127.0.0.1`. Nó đi qua API để tạo An/Bình/Chi, hai khoản chi tổng 1.200.000đ và một đề nghị trả nợ pending; kiểm category totals stay 900.000đ, food 300.000đ và số dư 500.000đ/-100.000đ/-400.000đ. Mỗi lần chạy thêm bộ dữ liệu mới; không reset dữ liệu cũ. Email được in trong summary, mật khẩu emulator công khai `LocalDemo-123!`; không in JWT/refresh token. Xem [schema và seed kỳ vọng](../docs/DATABASE.md#12-seed-và-kịch-bản-kiểm-thử).
 
 ```powershell
 pnpm check:be

@@ -2,9 +2,9 @@
 
 [Danh mục và thứ tự thực hiện](README.md) · [Thiết kế CSDL](../DATABASE.md) · [Hợp đồng API](../BACKEND.md)
 
-Hoàn thiện dữ liệu được các API hiện có ghi ra trước khi bổ sung thêm chức năng. D01–D05 đã hoàn tất; D06–D22 còn lại. Schema/index/seed đã có là đầu vào.
+Hoàn thiện dữ liệu được các API hiện có ghi ra trước khi bổ sung thêm chức năng. D01–D06 đã hoàn tất; D07–D22 còn lại. Schema/index/seed đã có là đầu vào.
 
-**Số lát cắt: 22; đã xong: 5; còn lại: 17.** File hiện có là điểm sửa; đường dẫn ghi “mới” hoặc tên module chưa tồn tại là vị trí dự kiến. Mỗi lát cập nhật hợp đồng API/schema liên quan nếu có thay đổi.
+**Số lát cắt: 22; đã xong: 6; còn lại: 16.** File hiện có là điểm sửa; đường dẫn ghi “mới” hoặc tên module chưa tồn tại là vị trí dự kiến. Mỗi lát cập nhật hợp đồng API/schema liên quan nếu có thay đổi.
 
 ## Danh sách nhanh
 
@@ -15,7 +15,7 @@ Hoàn thiện dữ liệu được các API hiện có ghi ra trước khi bổ 
 | [D03](#d03) | ✅ Tạo chuyến với đủ liên kết của owner | [D02](#d02) |
 | [D04](#d04) | ✅ Người tham gia và balance zero đủ metadata | [D03](#d03) |
 | [D05](#d05) | ✅ Chuẩn hóa document khoản chi | [D04](#d04) |
-| [D06](#d06) | Đồng bộ thống kê và số dư khi ghi tiền | [D05](#d05) |
+| [D06](#d06) | ✅ Đồng bộ thống kê và số dư khi ghi tiền | [D05](#d05) |
 | [D07](#d07) | Chuẩn hóa document trả nợ | [D06](#d06) |
 | [D08](#d08) | Audit thống nhất cho mutation hiện có | [D03](#d03), [D04](#d04), [D05](#d05), [D07](#d07) |
 | [D09](#d09) | Operation chuẩn và tương thích key cũ | [D08](#d08) |
@@ -133,23 +133,27 @@ Hoàn thiện dữ liệu được các API hiện có ghi ra trước khi bổ 
 
 **Đã làm:** Factory và schema v1 tạo expense có `currency=VND`, `splitInput`, shares được kiểm theo cách chia, `receiptIds=[]`, actor/timestamps và void metadata nullable. API POST vẫn nhận `split` để tương thích payload hiện có; document mới chỉ lưu `splitInput`. Hash operation giữ định dạng cũ khi `receiptIds` rỗng để retry trước D05 vẫn nhận đúng kết quả. Reader list/detail bổ sung `splitInput` cho document legacy chỉ có `split`, không sửa bản gốc. Void cập nhật `updatedBy`; receipt ID khác rỗng trả 422 cho tới khi có luồng xác thực ảnh I01–I07.
 
-**Bằng chứng:** TypeScript check, unit/HTTP tests, build, Firebase Emulator và seed local đạt. Unit test kiểm schema/factory và đọc legacy; integration test kiểm equal chia lẻ 101, exact 1+100, document mới/void hợp schema, đọc legacy qua list/detail và không nhận receipt chưa có lifecycle. Seed xác nhận tổng chi 1.200.000đ và net 500.000đ/-100.000đ/-400.000đ. D06 tiếp tục đồng bộ category totals, balance timestamps, hasLedgerReferences và signal khi ghi tiền; D15 migration expense legacy.
+**Bằng chứng:** TypeScript check, unit/HTTP tests, build, Firebase Emulator và seed local đạt. Unit test kiểm schema/factory và đọc legacy; integration test kiểm equal chia lẻ 101, exact 1+100, document mới/void hợp schema, đọc legacy qua list/detail và không nhận receipt chưa có lifecycle. Seed xác nhận tổng chi 1.200.000đ và net 500.000đ/-100.000đ/-400.000đ. D06 đã đồng bộ category totals, balance timestamps, hasLedgerReferences và signal khi ghi tiền; D15 migration expense legacy.
 
 ### D06
 
 **Đồng bộ thống kê và số dư khi ghi tiền**
 
-**Trạng thái:** Chưa làm. **Phụ thuộc:** [D05](#d05).
+**Trạng thái:** Hoàn tất. **Phụ thuộc:** [D05](#d05).
 
 **Kết quả:** Tạo/hủy khoản chi cập nhật đúng balance, counters và category totals.
 
-**Phạm vi file/module:** `be/src/routes.ts`, `be/src/finance-routes.ts`, `be/src/domain/money.ts`.
+**Phạm vi file/module:** `be/src/routes.ts`, `be/src/finance-routes.ts`, `be/src/domain/money.ts`, `be/src/database/trip.ts`, `be/scripts/seed-database.ts`, `be/test/money.test.ts`, `be/test/emulator.test.ts`.
 
 **Việc làm:** Dùng delta chung; thêm updatedAt và hasLedgerReferences; kiểm safe integer và signal/version trong cùng transaction.
 
 **Kiểm thử:** Emulator: create→void→retry; tổng paid=owed=totalExpense; tổng net=0; category totals đúng.
 
 **Hoàn tất khi:** Không còn writer tiền bỏ qua categoryTotalsMinor hoặc timestamp balance.
+
+**Đã làm:** Hàm delta chung cập nhật `totalExpenseMinor` và sáu `categoryTotalsMinor` cho tạo/hủy, kiểm map gốc, tổng, số nguyên an toàn và không âm. Route từ chối balance thiếu thay vì tự tạo zero balance; cập nhật `updatedAt` của mọi balance thay đổi, `hasLedgerReferences=true` cho payer/người chia và giữ true khi void. Expense counters, revision, ledgerVersion, signal cùng commit; signal giữ `schemaVersion`. Xác nhận trả nợ cũng cập nhật timestamp balance; tạo pending không làm mất schemaVersion của signal. Trip/projection legacy thiếu category totals cần migration D14/D16 trước khi tiếp tục ghi tiền, thay vì ghi sai thống kê.
+
+**Bằng chứng:** `pnpm check:be`, `pnpm test:be`, `pnpm --dir be build`, Firebase Emulator và seed local đạt. Test kiểm create→confirm→void→retry, tổng paid=owed=totalExpense, tổng sent=received, tổng net=0, category totals, timestamp và signal theo từng bước; balance bị thiếu trả 409 và không ghi expense/operation. Seed kiểm 1.200.000đ chia stay 900.000đ, food 300.000đ và net 500.000đ/-100.000đ/-400.000đ. D07 tiếp tục chuẩn hóa settlement document; migration projection legacy ở D14/D16.
 
 ### D07
 
