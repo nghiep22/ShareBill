@@ -13,7 +13,7 @@ function dto(snapshot: FirebaseFirestore.DocumentSnapshot) {
   const value = snapshot.data();
   if (!value) return null;
   const result: Record<string, unknown> = { ...value };
-  for (const key of ['createdAt', 'updatedAt', 'voidedAt', 'confirmedAt']) {
+  for (const key of ['createdAt', 'updatedAt', 'voidedAt', 'confirmedAt', 'cancelledAt']) {
     if (result[key] && typeof (result[key] as { toDate?: unknown }).toDate === 'function') {
       result[key] = (result[key] as FirebaseFirestore.Timestamp).toDate().toISOString();
     }

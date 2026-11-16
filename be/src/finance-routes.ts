@@ -6,15 +6,8 @@ import { db } from './firebase.js';
 import { ApiError, operationKey, requireUser } from './http.js';
 import { expenseDelta, applyBalanceDelta, applyExpenseTotals, type Balance, type Share, type ExpenseCategory } from './domain/money.js';
 import { suggestSettlements, applySettlement } from './domain/settlement.js';
+import { settlementInput, settlementDocumentSchema, createSettlementDocument, confirmationChanges } from './database/settlement.js';
 
-const settlementInput = z.strictObject({
-  fromParticipantId: z.string().uuid(),
-  toParticipantId: z.string().uuid(),
-  amountMinor: z.number().int().min(1).max(1_000_000_000_000),
-  occurredOn: z.iso.date(),
-  note: z.string().trim().max(1000).nullable().default(null),
-  basedOnLedgerVersion: z.number().int().min(0),
-});
 const confirmInput = z.strictObject({ basedOnLedgerVersion: z.number().int().min(0) });
 const voidInput = z.strictObject({ reason: z.string().trim().min(1).max(300) });
 
@@ -92,9 +85,16 @@ export async function registerFinanceRoutes(app: FastifyInstance): Promise<void>
       const [from, to] = balancesFrom([fromBalanceSnap, toBalanceSnap]);
       if (!from || !to || from.netMinor >= 0 || to.netMinor <= 0 || body.amountMinor > Math.min(-from.netMinor, to.netMinor)) throw new ApiError(422, 'SETTLEMENT_EXCEEDS_BALANCE', 'Số tiền trả vượt số nợ hiện tại.');
       if (trip.get('settlementCountAllTime') >= 2000) throw new ApiError(422, 'TRIP_LIMIT_REACHED', 'Chuyến đi đã đạt giới hạn lượt trả nợ.');
-      const now = FieldValue.serverTimestamp(), revision = trip.get('revision') + 1;
-      const response = { id: settlementId, ...body, status: 'pending', version: 1 };
-      tx.set(store.doc(`trips/${tripId}/settlements/${settlementId}`), { ...response, createdBy: uid, createdAt: now, updatedAt: now });
+      const now = Timestamp.now(), revision = trip.get('revision') + 1;
+      const document = createSettlementDocument({ id: settlementId, body, actorUid: uid, now });
+      const response = { id: settlementId, ...body, currency: 'VND', status: 'pending', version: 1 };
+      tx.create(store.doc(`trips/${tripId}/settlements/${settlementId}`), document);
+      if (fromParticipant.get('hasLedgerReferences') !== true) {
+        tx.update(store.doc(`trips/${tripId}/participants/${body.fromParticipantId}`), { hasLedgerReferences: true, updatedAt: now });
+      }
+      if (toParticipant.get('hasLedgerReferences') !== true) {
+        tx.update(store.doc(`trips/${tripId}/participants/${body.toParticipantId}`), { hasLedgerReferences: true, updatedAt: now });
+      }
       tx.update(tripRef, { settlementCountAllTime: FieldValue.increment(1), pendingSettlementCount: FieldValue.increment(1), revision, updatedAt: now });
       tx.update(store.doc(`trips/${tripId}/signals/current`), { revision, ledgerVersion: trip.get('ledgerVersion'), updatedAt: now });
       tx.set(store.doc(`trips/${tripId}/auditEvents/${randomUUID()}`), { actorUid: uid, action: 'settlement.created', entityId: settlementId, amountMinor: body.amountMinor, createdAt: now });
@@ -127,10 +127,15 @@ export async function registerFinanceRoutes(app: FastifyInstance): Promise<void>
       const [from, to] = balancesFrom([fromSnap, toSnap]);
       if (!from || !to || from.netMinor >= 0 || to.netMinor <= 0 || amount > Math.min(-from.netMinor, to.netMinor)) throw new ApiError(422, 'SETTLEMENT_EXCEEDS_BALANCE', 'Số dư hiện tại không còn đủ cho lượt trả này.');
       const now = Timestamp.now(), revision = trip.get('revision') + 1, ledgerVersion = trip.get('ledgerVersion') + 1;
-      const response = { id, status: 'confirmed', version: expectedVersion + 1, confirmationMode: owner ? 'owner_on_behalf' : 'recipient' };
+      const mode = owner ? 'owner_on_behalf' as const : 'recipient' as const;
+      const response = { id, status: 'confirmed', version: expectedVersion + 1, confirmationMode: mode };
+      const changes = confirmationChanges({ actorUid: uid, mode, version: expectedVersion, now });
+      if (settlement.get('schemaVersion') === 1 && !settlementDocumentSchema.safeParse({ ...settlement.data(), ...changes }).success) {
+        throw new ApiError(409, 'SETTLEMENT_INVARIANT_FAILED', 'Lượt trả nợ chưa sẵn sàng.');
+      }
       tx.set(store.doc(`trips/${tripId}/balances/${fromId}`), { ...applySettlement(from, 'from', amount, 1), updatedAt: now });
       tx.set(store.doc(`trips/${tripId}/balances/${toId}`), { ...applySettlement(to, 'to', amount, 1), updatedAt: now });
-      tx.update(settlementRef, { status: 'confirmed', version: expectedVersion + 1, confirmedBy: uid, confirmationMode: response.confirmationMode, confirmedAt: now, updatedAt: now });
+      tx.update(settlementRef, changes);
       tx.update(tripRef, { pendingSettlementCount: FieldValue.increment(-1), revision, ledgerVersion, updatedAt: now });
       tx.update(store.doc(`trips/${tripId}/signals/current`), { revision, ledgerVersion, updatedAt: now });
       tx.set(store.doc(`trips/${tripId}/auditEvents/${randomUUID()}`), { actorUid: uid, action: 'settlement.confirmed', entityId: id, amountMinor: amount, createdAt: now });

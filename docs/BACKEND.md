@@ -271,6 +271,8 @@ type SettlementDoc = {
 
 P0 không đính kèm ảnh settlement để giữ lifecycle ảnh đơn giản. Không UPDATE from/to/amount khi đã tạo; cancel rồi tạo bản mới. Người nhận đã linked không loại bỏ quyền owner xác nhận thay, nhưng mọi lần thay mặt luôn có nhãn/audit.
 
+Code hiện tạo pending document v1 với các trường trạng thái chưa xảy ra bằng `null`. Confirm ghi `confirmedBy`, `confirmedAt`, `confirmationMode` và version mới; `basedOnLedgerVersion` vẫn là mốc lúc tạo. Cancel/void settlement là API còn trong backlog.
+
 ### 3.7. Balance và signal
 
 ```ts

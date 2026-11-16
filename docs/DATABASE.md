@@ -29,7 +29,7 @@ Node API xác minh JWT rồi kiểm quyền trên dữ liệu. Mọi lệnh ghi 
 | Membership | Owner membership đủ timestamps và tripRef trong cùng transaction | Invite/join/remove/restore; API phân trang |
 | Participant | Owner và người thêm sau có participant/balance zero với metadata v1; owner có participantLink | Link/unlink/inactive; migration dữ liệu cũ |
 | Expense | Writer v1 lưu `splitInput`, shares, currency/receiptIds và void metadata; reader đọc được legacy `split`; create/void đồng bộ tổng chi và số dư | Sửa khoản chi; migration legacy D15; receipt lifecycle I01–I07 |
-| Settlement | Tạo pending, confirm | Khởi tạo đủ trường nullable; cancel/void; currency; history |
+| Settlement | Writer v1 tạo pending/confirm đủ currency, metadata nullable, actor/mode/timestamps; giữ mốc ledger lúc tạo | Cancel/void; migration legacy D15; history và audit chuẩn D08 |
 | Balance/signal | Balance có `updatedAt` khi tạo và khi ghi tiền; signal giữ schemaVersion, revision và ledgerVersion theo root | Checker/reconciler và repair có kiểm soát; migration projection legacy D16 |
 | Audit/operation | Tạo chuyến có `trip.created` audit và key chống trùng cùng transaction; có một số sự kiện tiền | Audit thống nhất cho mutation khác D08; chuẩn hóa operation D09; endpoint tra outcome |
 | Receipt/invite/admin/support/jobs | Đã có mô tả trong tài liệu | Chưa có lifecycle/API/worker hoàn chỉnh |

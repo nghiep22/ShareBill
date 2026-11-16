@@ -1,6 +1,6 @@
 # ShareBill — Các lát cắt triển khai nhỏ
 
-Cập nhật 16/11/2026. **105 lát cắt tổng cộng; đã xong D01–D06, còn 99**, chia thành 6 nhóm tài liệu. Đây là kế hoạch thực thi phần còn thiếu của ShareBill, giữ ưu tiên **backend trước**. Không đánh dấu hoàn tất chỉ vì đã có schema mẫu hoặc API happy path.
+Cập nhật 16/11/2026. **105 lát cắt tổng cộng; đã xong D01–D07, còn 98**, chia thành 6 nhóm tài liệu. Đây là kế hoạch thực thi phần còn thiếu của ShareBill, giữ ưu tiên **backend trước**. Không đánh dấu hoàn tất chỉ vì đã có schema mẫu hoặc API happy path.
 
 ## 1. Những gì đã có để dùng làm đầu vào
 
@@ -11,7 +11,7 @@ Cập nhật 16/11/2026. **105 lát cắt tổng cộng; đã xong D01–D06, c�
 | Tạo chuyến/người/khoản chi equal/exact, void expense, overview/suggestions, pending/confirm settlement | Chưa đủ fields/audit/operation của thiết kế; còn thiếu nhiều lifecycle và pagination |
 | Thiết kế CSDL, 16 composite indexes, seed local có assertion | Chưa có migration runner/checker, chưa deploy/test index cloud |
 
-Các phần đã có không tạo thành task “làm lại”. Lát D/F/B tương ứng chỉ bổ sung điều kiện còn thiếu hoặc nối FE vào BE hiện có. [D01](01_DATABASE_BE.md#d01) đến [D06](01_DATABASE_BE.md#d06) đã hoàn tất; [D07](01_DATABASE_BE.md#d07) là lát kế tiếp.
+Các phần đã có không tạo thành task “làm lại”. Lát D/F/B tương ứng chỉ bổ sung điều kiện còn thiếu hoặc nối FE vào BE hiện có. [D01](01_DATABASE_BE.md#d01) đến [D07](01_DATABASE_BE.md#d07) đã hoàn tất; [D08](01_DATABASE_BE.md#d08) là lát kế tiếp.
 
 ## 2. Cách dùng một lát cắt
 
@@ -51,7 +51,7 @@ Mỗi thẻ có: trạng thái, dependency, kết quả, phạm vi file/module, 
 
 Thứ tự trên đã được đối chiếu dependency của cả 105 lát. Cloud staging O06/O07 và CI O01 có thể làm sớm khi đủ dependency để giảm thời gian chờ; không cần trì hoãn cấu hình cloud đến cuối. Đây không phải yêu cầu chạy đồng thời hoặc giao nhiều agent.
 
-## 5. Sáu lát đã xong và lát kế tiếp
+## 5. Bảy lát đã xong và lát kế tiếp
 
 | Thứ tự | Lát | Sản phẩm review được |
 | --- | --- | --- |
@@ -61,7 +61,8 @@ Thứ tự trên đã được đối chiếu dependency của cả 105 lát. Cl
 | 4 ✅ | [D04](01_DATABASE_BE.md#d04) — thêm participant | Người chưa có tài khoản có metadata và zero balance đúng; giới hạn 50 và retry đã kiểm |
 | 5 ✅ | [D05](01_DATABASE_BE.md#d05) — expense v1 | Writer đủ trường, reader vẫn đọc expense legacy; equal/exact và seed đã kiểm |
 | 6 ✅ | [D06](01_DATABASE_BE.md#d06) — đồng bộ tiền | Counters, category totals, balance và signal cùng transaction; create/void/retry đã kiểm |
-| 7 | [D07](01_DATABASE_BE.md#d07) — settlement v1 | Pending/confirmed ghi đủ metadata và cờ tham chiếu ledger |
+| 7 ✅ | [D07](01_DATABASE_BE.md#d07) — settlement v1 | Pending/confirmed ghi đủ metadata; mốc tạo không đổi sau confirm |
+| 8 | [D08](01_DATABASE_BE.md#d08) — audit thống nhất | Mỗi mutation hiện có ghi event đối soát cùng transaction |
 
 Đã chạy luồng emulator và seed sau D03–D05 để kiểm lại tổng chi/số dư; cả hai đạt. Seed không thay kiểm migration hoặc cloud index.
 

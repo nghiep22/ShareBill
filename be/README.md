@@ -6,7 +6,7 @@ Backend Node.js/Fastify + TypeScript, dùng Firebase Authentication và Cloud Fi
 
 Thiết kế lưu trữ và backlog hoàn thiện ở [DATABASE.md](../docs/DATABASE.md). Index P0 đã có trong `firestore.indexes.json` và được nối với `firebase.json`; cần deploy và smoke query trên staging trước release. File index bao gồm cả query của chức năng chưa được code.
 
-Để triển khai từng phần nhỏ, mở [danh mục lát cắt](../docs/slices/README.md). D01–D06 đã hoàn tất; hàng đợi BE tiếp tục ở [D07 — chuẩn hóa dữ liệu trả nợ](../docs/slices/01_DATABASE_BE.md#d07). Mỗi mã có phạm vi/kiểm thử/nghiệm thu riêng.
+Để triển khai từng phần nhỏ, mở [danh mục lát cắt](../docs/slices/README.md). D01–D07 đã hoàn tất; hàng đợi BE tiếp tục ở [D08 — audit thống nhất](../docs/slices/01_DATABASE_BE.md#d08). Mỗi mã có phạm vi/kiểm thử/nghiệm thu riêng.
 
 - Node.js 24 LTS, pnpm 11.25.0; phiên bản lưu trong `.node-version` và `package.json` ở thư mục gốc.
 - Java 21 cho Firebase Emulator Suite.

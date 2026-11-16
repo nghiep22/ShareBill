@@ -5,6 +5,7 @@ import { auth, db } from '../src/firebase.js';
 import { userDocumentSchema } from '../src/database/user.js';
 import { createTripDocuments } from '../src/database/trip.js';
 import { expenseDocumentSchema } from '../src/database/expense.js';
+import { settlementDocumentSchema } from '../src/database/settlement.js';
 import { Timestamp } from 'firebase-admin/firestore';
 
 const enabled = Boolean(process.env.FIRESTORE_EMULATOR_HOST && process.env.FIREBASE_AUTH_EMULATOR_HOST);
@@ -213,6 +214,101 @@ describe.skipIf(!enabled)('Firebase emulator API flow', () => {
     expect(tripAtLimit.get('revision')).toBe(50);
     await app.close();
   }, 60_000);
+
+  it('keeps a settlement creation ledger version through pending, confirm, and retry', async () => {
+    const app = await buildApp();
+    const registered = await app.inject({ method: 'POST', url: '/api/v1/auth/register',
+      payload: { email: `settlement-${randomUUID()}@example.test`, password: 'TestPassword-123!', displayName: 'An' } });
+    expect(registered.statusCode).toBe(201);
+    const { accessToken, user } = registered.json().data;
+    const authorization = `Bearer ${accessToken}`;
+    const created = await app.inject({ method: 'POST', url: '/api/v1/trips',
+      headers: { authorization, 'idempotency-key': randomUUID() }, payload: { name: 'Hội An', ownerName: 'An' } });
+    expect(created.statusCode).toBe(200);
+    const { id: tripId, ownerParticipantId } = created.json().data;
+    const participant = await app.inject({ method: 'POST', url: `/api/v1/trips/${tripId}/participants`,
+      headers: { authorization, 'idempotency-key': randomUUID() }, payload: { displayName: 'Bình' } });
+    expect(participant.statusCode).toBe(200);
+    const guestId = participant.json().data.id as string;
+    const store = db();
+    const expenseUrl = `/api/v1/trips/${tripId}/expenses`;
+    const expensePayload = (amountMinor: number) => ({ title: 'Ăn uống', amountMinor,
+      payerParticipantId: ownerParticipantId, splitMethod: 'equal',
+      split: { participantIds: [ownerParticipantId, guestId] }, occurredOn: '2026-12-20', category: 'food' });
+    const firstExpense = await app.inject({ method: 'POST', url: expenseUrl,
+      headers: { authorization, 'idempotency-key': randomUUID() }, payload: expensePayload(100) });
+    expect(firstExpense.statusCode).toBe(200);
+    await Promise.all([ownerParticipantId, guestId].map(id =>
+      store.doc(`trips/${tripId}/participants/${id}`).update({ hasLedgerReferences: false })));
+    const balanceBefore = (await store.collection(`trips/${tripId}/balances`).get()).docs.map(doc => doc.data());
+    const settlementUrl = `/api/v1/trips/${tripId}/settlements`;
+    const pendingHeaders = { authorization, 'idempotency-key': randomUUID() };
+    const pendingPayload = { fromParticipantId: guestId, toParticipantId: ownerParticipantId,
+      amountMinor: 10, occurredOn: '2026-12-20', basedOnLedgerVersion: 1 };
+    const pending = await app.inject({ method: 'POST', url: settlementUrl,
+      headers: pendingHeaders, payload: pendingPayload });
+    expect(pending.statusCode).toBe(200);
+    const settlementId = pending.json().data.id as string;
+    const pendingDoc = await store.doc(`trips/${tripId}/settlements/${settlementId}`).get();
+    expect(settlementDocumentSchema.safeParse(pendingDoc.data()).success).toBe(true);
+    expect(pendingDoc.data()).toMatchObject({ schemaVersion: 1, currency: 'VND', note: null,
+      basedOnLedgerVersion: 1, status: 'pending', version: 1,
+      confirmedBy: null, confirmedAt: null, confirmationMode: null,
+      cancelledBy: null, cancelledAt: null, voidedBy: null, voidedAt: null, voidReason: null });
+    expect(pendingDoc.get('createdAt').toMillis()).toBe(pendingDoc.get('updatedAt').toMillis());
+    expect((await store.collection(`trips/${tripId}/balances`).get()).docs.map(doc => doc.data())).toEqual(balanceBefore);
+    expect((await store.doc(`trips/${tripId}`).get()).get('ledgerVersion')).toBe(1);
+    const pendingList = await app.inject({ method: 'GET', url: settlementUrl,
+      headers: { authorization } });
+    expect(pendingList.json().data.items[0]).toMatchObject({ id: settlementId,
+      currency: 'VND', status: 'pending', basedOnLedgerVersion: 1, confirmedAt: null, confirmationMode: null });
+    for (const id of [ownerParticipantId, guestId]) {
+      expect((await store.doc(`trips/${tripId}/participants/${id}`).get()).get('hasLedgerReferences')).toBe(true);
+    }
+    const pendingReplay = await app.inject({ method: 'POST', url: settlementUrl,
+      headers: pendingHeaders, payload: pendingPayload });
+    expect(pendingReplay.json().meta.replayed).toBe(true);
+    expect(pendingReplay.json().data.id).toBe(settlementId);
+    expect((await store.collection(`trips/${tripId}/settlements`).get()).size).toBe(1);
+    const secondExpense = await app.inject({ method: 'POST', url: expenseUrl,
+      headers: { authorization, 'idempotency-key': randomUUID() }, payload: expensePayload(20) });
+    expect(secondExpense.statusCode).toBe(200);
+    expect((await store.doc(`trips/${tripId}`).get()).get('ledgerVersion')).toBe(2);
+    const staleConfirm = await app.inject({ method: 'POST', url: `${settlementUrl}/${settlementId}/confirm`,
+      headers: { authorization, 'idempotency-key': randomUUID(), 'if-match': '"1"' },
+      payload: { basedOnLedgerVersion: 1 } });
+    expect(staleConfirm.statusCode).toBe(409);
+    expect(staleConfirm.json().error.code).toBe('LEDGER_CHANGED');
+    expect((await store.doc(`trips/${tripId}/settlements/${settlementId}`).get()).get('status')).toBe('pending');
+    const confirmHeaders = { authorization, 'idempotency-key': randomUUID(), 'if-match': '"1"' };
+    const confirm = await app.inject({ method: 'POST', url: `${settlementUrl}/${settlementId}/confirm`,
+      headers: confirmHeaders, payload: { basedOnLedgerVersion: 2 } });
+    expect(confirm.statusCode).toBe(200);
+    const confirmedDoc = await store.doc(`trips/${tripId}/settlements/${settlementId}`).get();
+    expect(settlementDocumentSchema.safeParse(confirmedDoc.data()).success).toBe(true);
+    expect(confirmedDoc.data()).toMatchObject({ status: 'confirmed', version: 2,
+      basedOnLedgerVersion: 1, confirmedBy: user.uid, confirmationMode: 'owner_on_behalf' });
+    expect(confirmedDoc.get('confirmedAt').toMillis()).toBe(confirmedDoc.get('updatedAt').toMillis());
+    const confirmedList = await app.inject({ method: 'GET', url: settlementUrl,
+      headers: { authorization } });
+    expect(confirmedList.json().data.items[0]).toMatchObject({ id: settlementId,
+      status: 'confirmed', basedOnLedgerVersion: 1, confirmationMode: 'owner_on_behalf' });
+    expect(new Date(confirmedList.json().data.items[0].confirmedAt).getTime()).toBe(confirmedDoc.get('confirmedAt').toMillis());
+    const confirmedTrip = await store.doc(`trips/${tripId}`).get();
+    expect(confirmedTrip.data()).toMatchObject({ settlementCountAllTime: 1,
+      pendingSettlementCount: 0, ledgerVersion: 3 });
+    const guestBalance = await store.doc(`trips/${tripId}/balances/${guestId}`).get();
+    const ownerBalance = await store.doc(`trips/${tripId}/balances/${ownerParticipantId}`).get();
+    expect(guestBalance.get('sentMinor')).toBe(10);
+    expect(ownerBalance.get('receivedMinor')).toBe(10);
+    const confirmReplay = await app.inject({ method: 'POST', url: `${settlementUrl}/${settlementId}/confirm`,
+      headers: confirmHeaders, payload: { basedOnLedgerVersion: 2 } });
+    expect(confirmReplay.statusCode).toBe(200);
+    expect(confirmReplay.json().meta.replayed).toBe(true);
+    expect((await store.doc(`trips/${tripId}`).get()).get('ledgerVersion')).toBe(3);
+    expect((await store.doc(`trips/${tripId}/balances/${guestId}`).get()).get('sentMinor')).toBe(10);
+    await app.close();
+  }, 30_000);
 
   it('creates a trip, splits an expense once, and protects it from outsiders', async () => {
     const app = await buildApp();
