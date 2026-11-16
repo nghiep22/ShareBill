@@ -9,6 +9,7 @@ import { splitEqual, validateExact, expenseDelta, applyBalanceDelta, type Balanc
 import { auth } from './firebase.js';
 import { bootstrapUserProfile } from './services/user-profile.js';
 import { createTripDocuments } from './database/trip.js';
+import { createParticipantDocuments } from './database/participant.js';
 
 function parse<T>(schema: { safeParse: (value: unknown) => { success: true; data: T } | { success: false } }, body: unknown): T {
   const result = schema.safeParse(body);
@@ -115,14 +116,17 @@ export async function registerRoutes(app: FastifyInstance): Promise<void> {
       if (member.get('role') !== 'owner') throw new ApiError(403, 'FORBIDDEN', 'Chỉ chủ nhóm có thể thêm người.');
       if (trip.get('status') !== 'active' || trip.get('moderationStatus') !== 'normal') throw new ApiError(409, 'TRIP_NOT_WRITABLE', 'Chuyến đi đang khóa thao tác.');
       if (trip.get('participantCount') >= 50) throw new ApiError(422, 'TRIP_LIMIT_REACHED', 'Chuyến đi đã đủ 50 người.');
-      const now = FieldValue.serverTimestamp();
+      const now = Timestamp.now();
       const revision = trip.get('revision') + 1;
       const response = { id: participantId, displayName: body.displayName, status: 'active', version: 1 };
-      tx.set(store.doc(`trips/${tripId}/participants/${participantId}`), { ...response, linkedUid: null, createdAt: now });
-      tx.set(store.doc(`trips/${tripId}/balances/${participantId}`), zeroBalance(participantId));
+      const initial = createParticipantDocuments({
+        participantId, displayName: body.displayName, createdBy: uid, linkedUid: null, now,
+      });
+      tx.create(store.doc(`trips/${tripId}/participants/${participantId}`), initial.participant);
+      tx.create(store.doc(`trips/${tripId}/balances/${participantId}`), initial.balance);
       tx.update(tripRef, { participantCount: FieldValue.increment(1), revision, updatedAt: now });
-      tx.set(store.doc(`trips/${tripId}/signals/current`), { revision, ledgerVersion: trip.get('ledgerVersion'), updatedAt: now });
-      tx.set(opRef, { path, requestHash, response, tripId, committedAt: now });
+      tx.update(store.doc(`trips/${tripId}/signals/current`), { revision, ledgerVersion: trip.get('ledgerVersion'), updatedAt: now });
+      tx.create(opRef, { path, requestHash, response, tripId, committedAt: now });
       return { data: response, meta: { revision, replayed: false } };
     });
   });

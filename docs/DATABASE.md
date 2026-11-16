@@ -27,10 +27,10 @@ Node API xác minh JWT rồi kiểm quyền trên dữ liệu. Mọi lệnh ghi 
 | Auth/user | Register, login, refresh JWT; bootstrap hồ sơ v1 dùng chung | Migration hồ sơ legacy D13; quyền và lifecycle còn trong backlog |
 | Trip | Tạo chuyến v1 với metadata, moderation mặc định, counters và category totals bằng 0 | Cập nhật category totals khi ghi tiền D06; archive/reopen |
 | Membership | Owner membership đủ timestamps và tripRef trong cùng transaction | Invite/join/remove/restore; API phân trang |
-| Participant | Owner có participant, participantLink, balance zero và metadata v1 | Người thêm sau cần metadata D04; link/unlink/inactive |
+| Participant | Owner và người thêm sau có participant/balance zero với metadata v1; owner có participantLink | Link/unlink/inactive; migration dữ liệu cũ |
 | Expense | Equal/exact, lưu shares, hủy khoản chi | Chuẩn hóa `splitInput` thay trường legacy `split`; currency/receiptIds/update/void metadata; sửa khoản chi |
 | Settlement | Tạo pending, confirm | Khởi tạo đủ trường nullable; cancel/void; currency; history |
-| Balance/signal | Balance owner và signal tạo cùng trip với `updatedAt`; cập nhật tiền trong transaction | Balance người thêm sau cần `updatedAt` D04; checker/reconciler và repair có kiểm soát |
+| Balance/signal | Balance owner và người thêm sau có `updatedAt`; signal tạo cùng trip và cập nhật theo revision | Checker/reconciler và repair có kiểm soát; đồng bộ projection tiền D06 |
 | Audit/operation | Tạo chuyến có `trip.created` audit và key chống trùng cùng transaction; có một số sự kiện tiền | Audit thống nhất cho mutation khác D08; chuẩn hóa operation D09; endpoint tra outcome |
 | Receipt/invite/admin/support/jobs | Đã có mô tả trong tài liệu | Chưa có lifecycle/API/worker hoàn chỉnh |
 | Index | Đã bổ sung file cấu hình trong lần cập nhật này | Deploy staging, đợi index ready và chạy query thật; API hiện vẫn chỉ lấy 20/30 bản gần nhất |

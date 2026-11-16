@@ -129,6 +129,90 @@ describe.skipIf(!enabled)('Firebase emulator API flow', () => {
     await app.close();
   }, 30_000);
 
+  it('creates unlinked participants with zero balances and stops at 50 without orphan records', async () => {
+    const app = await buildApp();
+    const email = `participants-${randomUUID()}@example.test`;
+    const registered = await app.inject({ method: 'POST', url: '/api/v1/auth/register',
+      payload: { email, password: 'TestPassword-123!', displayName: 'An' } });
+    expect(registered.statusCode).toBe(201);
+    const { accessToken, user } = registered.json().data;
+    const authorization = `Bearer ${accessToken}`;
+    const created = await app.inject({ method: 'POST', url: '/api/v1/trips',
+      headers: { authorization, 'idempotency-key': randomUUID() }, payload: { name: 'Đà Nẵng', ownerName: 'An' } });
+    expect(created.statusCode).toBe(200);
+    const tripId = created.json().data.id as string;
+    const url = `/api/v1/trips/${tripId}/participants`;
+    const firstKey = randomUUID();
+    const firstPayload = { displayName: 'Người 01' };
+    const first = await app.inject({ method: 'POST', url,
+      headers: { authorization, 'idempotency-key': firstKey }, payload: firstPayload });
+    expect(first.statusCode).toBe(200);
+    const firstId = first.json().data.id as string;
+    const store = db();
+    const [participant, balance, tripAfterFirst, signalAfterFirst] = await Promise.all([
+      store.doc(`trips/${tripId}/participants/${firstId}`).get(),
+      store.doc(`trips/${tripId}/balances/${firstId}`).get(),
+      store.doc(`trips/${tripId}`).get(), store.doc(`trips/${tripId}/signals/current`).get(),
+    ]);
+    expect(participant.data()).toMatchObject({ schemaVersion: 1, id: firstId, displayName: 'Người 01',
+      linkedUid: null, status: 'active', version: 1, hasLedgerReferences: false, createdBy: user.uid });
+    expect(balance.data()).toMatchObject({ schemaVersion: 1, participantId: firstId,
+      paidMinor: 0, owedMinor: 0, sentMinor: 0, receivedMinor: 0, netMinor: 0 });
+    expect(participant.get('createdAt').toMillis()).toBe(participant.get('updatedAt').toMillis());
+    expect(balance.get('updatedAt').toMillis()).toBe(participant.get('createdAt').toMillis());
+    expect(tripAfterFirst.get('participantCount')).toBe(2);
+    expect(tripAfterFirst.get('revision')).toBe(2);
+    expect(signalAfterFirst.get('schemaVersion')).toBe(1);
+    expect(signalAfterFirst.get('revision')).toBe(2);
+
+    const replay = await app.inject({ method: 'POST', url,
+      headers: { authorization, 'idempotency-key': firstKey }, payload: firstPayload });
+    expect(replay.statusCode).toBe(200);
+    expect(replay.json().data.id).toBe(firstId);
+    expect(replay.json().meta.replayed).toBe(true);
+    expect((await store.doc(`trips/${tripId}`).get()).get('participantCount')).toBe(2);
+
+    for (let number = 2; number <= 49; number++) {
+      const added = await app.inject({ method: 'POST', url,
+        headers: { authorization, 'idempotency-key': randomUUID() },
+        payload: { displayName: `Người ${String(number).padStart(2, '0')}` } });
+      expect(added.statusCode).toBe(200);
+    }
+    const countAtLimit = await store.doc(`trips/${tripId}`).get();
+    expect(countAtLimit.get('participantCount')).toBe(50);
+    expect(countAtLimit.get('revision')).toBe(50);
+    const failedKey = randomUUID();
+    const blocked = await app.inject({ method: 'POST', url,
+      headers: { authorization, 'idempotency-key': failedKey }, payload: { displayName: 'Người 50' } });
+    expect(blocked.statusCode).toBe(422);
+    expect(blocked.json().error.code).toBe('TRIP_LIMIT_REACHED');
+    const replayAtLimit = await app.inject({ method: 'POST', url,
+      headers: { authorization, 'idempotency-key': firstKey }, payload: firstPayload });
+    expect(replayAtLimit.statusCode).toBe(200);
+    expect(replayAtLimit.json().data.id).toBe(firstId);
+    expect(replayAtLimit.json().meta.replayed).toBe(true);
+    const reusedKey = await app.inject({ method: 'POST', url,
+      headers: { authorization, 'idempotency-key': firstKey }, payload: { displayName: 'Tên khác' } });
+    expect(reusedKey.statusCode).toBe(409);
+    const [people, balances, memberships, links, failedOperation, tripAtLimit] = await Promise.all([
+      store.collection(`trips/${tripId}/participants`).get(), store.collection(`trips/${tripId}/balances`).get(),
+      store.collection(`trips/${tripId}/memberships`).get(), store.collection(`trips/${tripId}/participantLinks`).get(),
+      store.doc(`users/${user.uid}/operations/${failedKey}`).get(), store.doc(`trips/${tripId}`).get(),
+    ]);
+    expect(people.size).toBe(50);
+    expect(balances.size).toBe(50);
+    expect(people.docs.map(doc => doc.id).sort()).toEqual(balances.docs.map(doc => doc.id).sort());
+    expect(people.docs.every(doc => doc.get('schemaVersion') === 1 && doc.get('hasLedgerReferences') === false)).toBe(true);
+    expect(balances.docs.every(doc => doc.get('schemaVersion') === 1 && doc.get('netMinor') === 0)).toBe(true);
+    expect(memberships.size).toBe(1);
+    expect(links.size).toBe(1);
+    expect(failedOperation.exists).toBe(false);
+    expect(tripAtLimit.get('participantCount')).toBe(50);
+    expect(tripAtLimit.get('membershipCountAllTime')).toBe(1);
+    expect(tripAtLimit.get('revision')).toBe(50);
+    await app.close();
+  }, 60_000);
+
   it('creates a trip, splits an expense once, and protects it from outsiders', async () => {
     const app = await buildApp();
     const suffix = randomUUID();

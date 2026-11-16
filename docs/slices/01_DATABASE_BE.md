@@ -2,9 +2,9 @@
 
 [Danh mục và thứ tự thực hiện](README.md) · [Thiết kế CSDL](../DATABASE.md) · [Hợp đồng API](../BACKEND.md)
 
-Hoàn thiện dữ liệu được các API hiện có ghi ra trước khi bổ sung thêm chức năng. D01–D03 đã hoàn tất; D04–D22 còn lại. Schema/index/seed đã có là đầu vào.
+Hoàn thiện dữ liệu được các API hiện có ghi ra trước khi bổ sung thêm chức năng. D01–D04 đã hoàn tất; D05–D22 còn lại. Schema/index/seed đã có là đầu vào.
 
-**Số lát cắt: 22; đã xong: 3; còn lại: 19.** File hiện có là điểm sửa; đường dẫn ghi “mới” hoặc tên module chưa tồn tại là vị trí dự kiến. Mỗi lát cập nhật hợp đồng API/schema liên quan nếu có thay đổi.
+**Số lát cắt: 22; đã xong: 4; còn lại: 18.** File hiện có là điểm sửa; đường dẫn ghi “mới” hoặc tên module chưa tồn tại là vị trí dự kiến. Mỗi lát cập nhật hợp đồng API/schema liên quan nếu có thay đổi.
 
 ## Danh sách nhanh
 
@@ -13,7 +13,7 @@ Hoàn thiện dữ liệu được các API hiện có ghi ra trước khi bổ 
 | [D01](#d01) | ✅ Schema và factory hồ sơ người dùng | Nền dự án đã có |
 | [D02](#d02) | ✅ Dùng chung một luồng bootstrap hồ sơ | [D01](#d01) |
 | [D03](#d03) | ✅ Tạo chuyến với đủ liên kết của owner | [D02](#d02) |
-| [D04](#d04) | Người tham gia và balance zero đủ metadata | [D03](#d03) |
+| [D04](#d04) | ✅ Người tham gia và balance zero đủ metadata | [D03](#d03) |
 | [D05](#d05) | Chuẩn hóa document khoản chi | [D04](#d04) |
 | [D06](#d06) | Đồng bộ thống kê và số dư khi ghi tiền | [D05](#d05) |
 | [D07](#d07) | Chuẩn hóa document trả nợ | [D06](#d06) |
@@ -93,23 +93,27 @@ Hoàn thiện dữ liệu được các API hiện có ghi ra trước khi bổ 
 
 **Đã làm:** Factory tạo TripDoc v1 với metadata, số đếm và tổng sáu nhóm chi đều bằng 0. Route tạo trong cùng Firestore transaction owner membership, participant, participantLink, balance, signal, tripRef, audit `trip.created` và operation. Một `Timestamp` dùng cho toàn bộ dữ liệu gốc; `tx.create` tránh ghi đè document đã tồn tại. Retry cùng key trả lại kết quả cũ; dùng key đó cho nội dung khác trả 409.
 
-**Bằng chứng:** `pnpm check:be`, `pnpm test:be`, `pnpm --dir be build` và Firebase Emulator đạt. Integration test đọc đủ chín loại document, kiểm liên kết UID/participant, metadata và timestamps; kiểm retry không tạo chuyến/audit thứ hai và transaction lỗi không để lại document nào. D04 tiếp tục chuẩn hóa participant được thêm sau; D06 đồng bộ category totals khi ghi chi; D08/D09 chuẩn hóa audit/operation cho mọi mutation.
+**Bằng chứng:** `pnpm check:be`, `pnpm test:be`, `pnpm --dir be build` và Firebase Emulator đạt. Integration test đọc đủ chín loại document, kiểm liên kết UID/participant, metadata và timestamps; kiểm retry không tạo chuyến/audit thứ hai và transaction lỗi không để lại document nào. D04 đã chuẩn hóa participant được thêm sau; D06 đồng bộ category totals khi ghi chi; D08/D09 chuẩn hóa audit/operation cho mọi mutation.
 
 ### D04
 
 **Người tham gia và balance zero đủ metadata**
 
-**Trạng thái:** Chưa làm. **Phụ thuộc:** [D03](#d03).
+**Trạng thái:** Hoàn tất. **Phụ thuộc:** [D03](#d03).
 
 **Kết quả:** Thêm người chưa có tài khoản tạo đúng participant và balance v1.
 
-**Phạm vi file/module:** `be/src/routes.ts`, `be/src/database/participant.ts` (mới).
+**Phạm vi file/module:** `be/src/routes.ts`, `be/src/database/participant.ts`, `be/src/database/trip.ts`, `be/test/emulator.test.ts`.
 
 **Việc làm:** Ghi createdBy/updatedAt/hasLedgerReferences/schemaVersion; balance có updatedAt; giữ giới hạn 50 người all-time.
 
 **Kiểm thử:** Emulator: thêm người, retry, participant thứ 51 bị chặn và không để balance mồ côi.
 
 **Hoàn tất khi:** Một participant có đúng một balance; participantCount tăng một lần; không tự tạo membership.
+
+**Đã làm:** Factory dùng chung cho owner và người thêm sau tạo ParticipantDoc v1 và balance zero với cùng `Timestamp`. Người chưa có tài khoản có `linkedUid=null`, `createdBy`, `updatedAt` và `hasLedgerReferences=false`; balance có `schemaVersion` và `updatedAt`. Transaction dùng `create` cho participant, balance, operation; cập nhật root trip và signal nhưng giữ `schemaVersion` hiện có. Giới hạn 50 người tính cả owner và người từng tạo, không tăng lại khi retry.
+
+**Bằng chứng:** TypeScript check, unit/HTTP tests, build và Firebase Emulator đạt. Integration test kiểm metadata, timestamp, retry trước và tại giới hạn, key dùng lại sai nội dung trả 409; tạo đủ 50 participant có đúng 50 balance, đúng một membership/link owner, lần thêm thứ 51 trả 422 và không ghi operation hay document mồ côi. D05 tiếp tục chuẩn hóa expense; D08/D09 chuẩn hóa audit/operation cho các mutation.
 
 ### D05
 

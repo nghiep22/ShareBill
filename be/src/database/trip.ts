@@ -1,5 +1,5 @@
 import { Timestamp } from 'firebase-admin/firestore';
-import type { Balance } from '../domain/money.js';
+import { createParticipantDocuments } from './participant.js';
 
 const categories = ['food', 'transport', 'stay', 'tickets', 'shopping', 'other'] as const;
 
@@ -31,16 +31,10 @@ export function createTripDocuments(input: TripCreateData) {
     schemaVersion: 1, uid: ownerUid, role: 'owner', status: 'active', participantId,
     version: 1, joinedAt: now, updatedAt: now, removedAt: null,
   } as const;
-  const participant = {
-    schemaVersion: 1, id: participantId, displayName: ownerName, linkedUid: ownerUid,
-    status: 'active', version: 1, hasLedgerReferences: false, createdBy: ownerUid,
-    createdAt: now, updatedAt: now,
-  } as const;
+  const { participant, balance } = createParticipantDocuments({
+    participantId, displayName: ownerName, createdBy: ownerUid, linkedUid: ownerUid, now,
+  });
   const participantLink = { schemaVersion: 1, uid: ownerUid, participantId, updatedAt: now } as const;
-  const balance: Balance & { schemaVersion: 1; updatedAt: Timestamp } = {
-    schemaVersion: 1, participantId, paidMinor: 0, owedMinor: 0, sentMinor: 0, receivedMinor: 0,
-    netMinor: 0, updatedAt: now,
-  };
   const signal = { schemaVersion: 1, revision: 1, ledgerVersion: 0, updatedAt: now } as const;
   const tripRef = { schemaVersion: 1, tripId, status: 'active', joinedAt: now, updatedAt: now } as const;
   const audit = {
