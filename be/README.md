@@ -1,6 +1,6 @@
 # ShareBill backend
 
-Backend Node.js/Fastify + TypeScript, dùng Firebase Authentication và Cloud Firestore. Đây là **lát cắt backend đầu tiên**: tạo chuyến, thêm người tham gia, tạo khoản chi chia đều/chia số tiền riêng và xem tổng quan số dư. Chưa có API sửa/hủy khoản chi, mời thành viên, trả nợ, upload hóa đơn hay quản trị app. Đặc tả đầy đủ nằm trong [BACKEND.md](../docs/BACKEND.md).
+Backend Node.js/Fastify + TypeScript, dùng Firebase Authentication và Cloud Firestore. Đây là **lát cắt backend đầu tiên**: tạo chuyến, thêm người tham gia, tạo/hủy khoản chi chia đều/chia số tiền riêng, xem tổng quan và gợi ý trả nợ, tạo và xác nhận trả nợ. Chưa có API sửa khoản chi, mời thành viên, hủy lượt trả nợ, upload hóa đơn hay quản trị app. Đặc tả đầy đủ nằm trong [BACKEND.md](../docs/BACKEND.md).
 
 ## Yêu cầu máy
 
@@ -34,9 +34,17 @@ Backend đọc `be/.env` khi chạy từ thư mục `be`. Đừng commit file n�
 | --- | --- | --- |
 | GET | `/health` | Public |
 | POST | `/api/v1/trips` | Firebase ID token, Idempotency-Key, body `{name, ownerName}` |
+| GET | `/api/v1/trips` | Danh sách tối đa 20 chuyến gần đây của tài khoản |
 | GET | `/api/v1/trips/:tripId/overview` | ID token, membership active |
 | POST | `/api/v1/trips/:tripId/participants` | ID token, owner, Idempotency-Key, body `{displayName}` |
 | POST | `/api/v1/trips/:tripId/expenses` | ID token, member, Idempotency-Key, split equal/exact |
+| GET | `/api/v1/trips/:tripId/expenses` | 30 khoản chi gần nhất |
+| GET | `/api/v1/trips/:tripId/expenses/:id` | Chi tiết khoản chi |
+| POST | `/api/v1/trips/:tripId/expenses/:id/void` | Chủ nhóm/người tạo, If-Match, lý do |
+| GET | `/api/v1/trips/:tripId/settlement-suggestions` | Gợi ý từ số dư hiện tại |
+| POST | `/api/v1/trips/:tripId/settlements` | Tạo đề nghị trả nợ, Idempotency-Key |
+| POST | `/api/v1/trips/:tripId/settlements/:id/confirm` | Người nhận/chủ nhóm xác nhận, If-Match |
+| GET | `/api/v1/trips/:tripId/settlements` | 30 lượt trả nợ gần nhất |
 
 Header của lệnh ghi:
 
@@ -82,7 +90,7 @@ $env:FIRESTORE_EMULATOR_HOST='127.0.0.1:8080'
 pnpm --dir be test:emulator
 ```
 
-GitHub Actions có workflow `Backend CI` để chạy kiểm tra TypeScript, unit tests, build và emulator integration. Các luồng sửa/hủy, trả nợ và upload vẫn chưa code; chưa xem đây là backend hoàn chỉnh để chạy production.
+GitHub Actions có workflow `Backend CI` để chạy kiểm tra TypeScript, unit tests, build và emulator integration. List endpoints hiện giới hạn 20/30 bản gần nhất và chưa có cursor; cần bổ sung pagination trước khi dùng cho chuyến nhiều dữ liệu. Các luồng sửa khoản chi, hủy/void trả nợ, lời mời, ảnh và quản trị vẫn chưa code; chưa xem đây là backend hoàn chỉnh để chạy production.
 
 ## Deploy
 

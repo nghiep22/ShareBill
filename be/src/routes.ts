@@ -1,6 +1,7 @@
 import type { FastifyInstance } from 'fastify';
 import { randomUUID, createHash } from 'node:crypto';
 import { FieldValue } from 'firebase-admin/firestore';
+import { z } from 'zod';
 import { db } from './firebase.js';
 import { ApiError, operationKey, requireUser } from './http.js';
 import { tripInput, participantInput, expenseInput } from './schemas.js';
@@ -13,7 +14,11 @@ function parse<T>(schema: { safeParse: (value: unknown) => { success: true; data
 }
 
 function hash(value: unknown): string { return createHash('sha256').update(JSON.stringify(value)).digest('hex'); }
-function params(value: unknown): { tripId: string } { return value as { tripId: string }; }
+function params(value: unknown): { tripId: string } {
+  const result = z.strictObject({ tripId: z.uuid() }).safeParse(value);
+  if (!result.success) throw new ApiError(404, 'NOT_FOUND', 'Không tìm thấy chuyến đi.');
+  return result.data;
+}
 function zeroBalance(participantId: string): Balance {
   return { participantId, paidMinor: 0, owedMinor: 0, sentMinor: 0, receivedMinor: 0, netMinor: 0 };
 }
@@ -43,7 +48,8 @@ export async function registerRoutes(app: FastifyInstance): Promise<void> {
       const trip = {
         id: tripId, name: body.name, ownerUid: uid, status: 'active', moderationStatus: 'normal', currency: 'VND',
         version: 1, revision: 1, ledgerVersion: 0, participantCount: 1, membershipCountAllTime: 1,
-        expenseCountAllTime: 0, activeExpenseCount: 0, totalExpenseMinor: 0, createdAt: now, updatedAt: now,
+        expenseCountAllTime: 0, activeExpenseCount: 0, settlementCountAllTime: 0, pendingSettlementCount: 0,
+        totalExpenseMinor: 0, createdAt: now, updatedAt: now,
       };
       tx.set(store.doc(`trips/${tripId}`), trip);
       tx.set(store.doc(`trips/${tripId}/memberships/${uid}`), { uid, role: 'owner', status: 'active', participantId, version: 1, joinedAt: now });
