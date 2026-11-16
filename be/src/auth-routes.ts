@@ -1,7 +1,8 @@
 import type { FastifyInstance, FastifyReply } from 'fastify';
 import { z } from 'zod';
-import { auth, db } from './firebase.js';
-import { ApiError } from './http.js';
+import { auth } from './firebase.js';
+import { ApiError, requireUser } from './http.js';
+import { bootstrapUserProfile, readUserProfile, type UserProfile } from './services/user-profile.js';
 
 const email = z.string().trim().toLowerCase().pipe(z.email().max(254));
 const password = z.string().min(8).max(128);
@@ -67,28 +68,7 @@ async function callFirebase<T>(action: AuthAction, body: Record<string, unknown>
   return payload as T;
 }
 
-async function profile(uid: string, userEmail: string, requestedName?: string): Promise<{ uid: string; email: string; displayName: string }> {
-  const ref = db().doc(`users/${uid}`);
-  const name = requestedName ?? userEmail.split('@')[0] ?? 'Người dùng';
-  const result = await db().runTransaction(async tx => {
-    const snap = await tx.get(ref);
-    if (snap.exists && snap.get('status') === 'disabled') {
-      throw new ApiError(403, 'ACCOUNT_DISABLED', 'Tài khoản đang tạm khóa.');
-    }
-    if (!snap.exists) {
-      const now = new Date();
-      tx.create(ref, {
-        displayName: name, email: userEmail, emailLower: userEmail.toLowerCase(), status: 'active',
-        moderationVersion: 1, desiredAuthDisabled: false, authSyncStatus: 'synced',
-        disabledReason: null, disabledAt: null, disabledBy: null, createdAt: now, updatedAt: now,
-      });
-    }
-    return { uid, email: userEmail, displayName: (snap.get('displayName') as string | undefined) || name };
-  });
-  return result;
-}
-
-function tokenData(idToken: string, refreshToken: string, expiresIn: string, user: Awaited<ReturnType<typeof profile>>) {
+function tokenData(idToken: string, refreshToken: string, expiresIn: string, user: UserProfile) {
   if (!idToken || !refreshToken || !Number.isFinite(Number(expiresIn))) {
     throw new ApiError(503, 'AUTH_UNAVAILABLE', 'Phản hồi đăng nhập không hợp lệ.');
   }
@@ -104,8 +84,8 @@ export async function registerAuthRoutes(app: FastifyInstance): Promise<void> {
     if (!parsed.success) throw new ApiError(422, 'INVALID_INPUT', 'Kiểm tra lại email, mật khẩu và tên hiển thị.');
     const body = parsed.data;
     const result = await callFirebase<AuthReply>('register', { email: body.email, password: body.password, returnSecureToken: true });
-    await auth().updateUser(result.localId, { displayName: body.displayName });
-    const user = await profile(result.localId, result.email, body.displayName);
+    const identity = await auth().updateUser(result.localId, { displayName: body.displayName });
+    const user = await bootstrapUserProfile(identity);
     return reply.status(201).send(tokenData(result.idToken, result.refreshToken, result.expiresIn, user));
   });
 
@@ -114,7 +94,8 @@ export async function registerAuthRoutes(app: FastifyInstance): Promise<void> {
     const parsed = loginInput.safeParse(request.body);
     if (!parsed.success) throw new ApiError(422, 'INVALID_INPUT', 'Kiểm tra lại email và mật khẩu.');
     const result = await callFirebase<AuthReply>('login', { ...parsed.data, returnSecureToken: true });
-    const user = await profile(result.localId, result.email, result.displayName || undefined);
+    const identity = await auth().getUser(result.localId);
+    const user = await bootstrapUserProfile(identity);
     return tokenData(result.idToken, result.refreshToken, result.expiresIn, user);
   });
 
@@ -128,7 +109,25 @@ export async function registerAuthRoutes(app: FastifyInstance): Promise<void> {
     catch { throw new ApiError(401, 'INVALID_REFRESH_TOKEN', 'Phiên đăng nhập đã hết hạn.'); }
     if (decoded.uid !== result.user_id) throw new ApiError(401, 'INVALID_REFRESH_TOKEN', 'Phiên đăng nhập đã hết hạn.');
     if (!decoded.email) throw new ApiError(401, 'INVALID_REFRESH_TOKEN', 'Phiên đăng nhập đã hết hạn.');
-    const user = await profile(decoded.uid, decoded.email);
+    const identity = await auth().getUser(decoded.uid);
+    const user = await bootstrapUserProfile(identity);
     return tokenData(result.id_token, result.refresh_token, result.expires_in, user);
+  });
+
+  app.post('/api/v1/me/bootstrap', async (request, reply) => {
+    noStore(reply);
+    if (request.body !== undefined && (typeof request.body !== 'object' || request.body === null || Object.keys(request.body).length > 0)) {
+      throw new ApiError(422, 'INVALID_INPUT', 'Yêu cầu không cần dữ liệu hồ sơ.');
+    }
+    const uid = await requireUser(request);
+    const identity = await auth().getUser(uid);
+    return { data: await bootstrapUserProfile(identity) };
+  });
+
+  app.get('/api/v1/me', async (request, reply) => {
+    noStore(reply);
+    const uid = await requireUser(request);
+    const identity = await auth().getUser(uid);
+    return { data: await readUserProfile(identity) };
   });
 }

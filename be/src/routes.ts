@@ -6,6 +6,8 @@ import { db } from './firebase.js';
 import { ApiError, operationKey, requireUser } from './http.js';
 import { tripInput, participantInput, expenseInput } from './schemas.js';
 import { splitEqual, validateExact, expenseDelta, applyBalanceDelta, type Balance } from './domain/money.js';
+import { auth } from './firebase.js';
+import { bootstrapUserProfile } from './services/user-profile.js';
 
 function parse<T>(schema: { safeParse: (value: unknown) => { success: true; data: T } | { success: false } }, body: unknown): T {
   const result = schema.safeParse(body);
@@ -30,6 +32,7 @@ export async function registerRoutes(app: FastifyInstance): Promise<void> {
     const uid = await requireUser(request);
     const key = operationKey(request);
     const body = parse(tripInput, request.body);
+    await bootstrapUserProfile(await auth().getUser(uid));
     const requestHash = hash(body);
     const tripId = randomUUID();
     const participantId = randomUUID();
@@ -43,7 +46,8 @@ export async function registerRoutes(app: FastifyInstance): Promise<void> {
       }
       const userRef = store.doc(`users/${uid}`);
       const userSnap = await tx.get(userRef);
-      if (userSnap.exists && userSnap.get('status') === 'disabled') throw new ApiError(403, 'ACCOUNT_DISABLED', 'Tài khoản đang tạm khóa.');
+      if (!userSnap.exists) throw new ApiError(409, 'PROFILE_NOT_FOUND', 'Hồ sơ chưa sẵn sàng. Hãy thử lại.');
+      if (userSnap.get('status') !== 'active') throw new ApiError(403, 'ACCOUNT_DISABLED', 'Tài khoản đang tạm khóa.');
       const now = FieldValue.serverTimestamp();
       const trip = {
         id: tripId, name: body.name, ownerUid: uid, status: 'active', moderationStatus: 'normal', currency: 'VND',
@@ -57,7 +61,6 @@ export async function registerRoutes(app: FastifyInstance): Promise<void> {
       tx.set(store.doc(`trips/${tripId}/balances/${participantId}`), zeroBalance(participantId));
       tx.set(store.doc(`trips/${tripId}/signals/current`), { revision: 1, ledgerVersion: 0, updatedAt: now });
       tx.set(store.doc(`users/${uid}/tripRefs/${tripId}`), { tripId, status: 'active', joinedAt: now });
-      if (!userSnap.exists) tx.set(userRef, { status: 'active', createdAt: now, updatedAt: now });
       const response = { id: tripId, name: body.name, ownerParticipantId: participantId, currency: 'VND', version: 1 };
       tx.set(opRef, { requestHash, path: '/api/v1/trips', response, committedAt: now });
       return { data: response, meta: { replayed: false } };

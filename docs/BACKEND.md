@@ -6,6 +6,8 @@ Phiên bản 1.0 · 16/11/2026 · Phương án chính: Next.js API trên Vercel 
 
 **Cập nhật auth:** P0 hiện dùng email/password. `POST /api/v1/auth/register`, `/login`, `/refresh` trả Firebase ID token dạng JWT và refresh token; các API protected dùng `verifyIdToken(token, true)`. Web API key chọn Firebase project, không phải bằng chứng xác thực. Google OAuth trong bản thiết kế cũ là tùy chọn sau này hoặc dành riêng cho admin nếu triển khai.
 
+**Hồ sơ app đã triển khai (D02):** `POST /api/v1/me/bootstrap` nhận Bearer ID token và body trống, lấy danh tính từ Firebase Auth để chỉ tạo hồ sơ v1 khi chưa có. `GET /api/v1/me` chỉ đọc hồ sơ, trả 404 nếu chưa bootstrap. Register/login/refresh và tạo chuyến dùng cùng bootstrap service; hồ sơ legacy được giữ nguyên để migration D13 xử lý sau. Xem [API đang chạy](../be/README.md).
+
 **Thiết kế CSDL hợp nhất:** [DATABASE.md](DATABASE.md) bổ sung từ điển dữ liệu cho cả app/admin/jobs, schemaVersion, owner link, receipt cleanup fields, index thực thi, migration và cổng nghiệm thu. Đây là hợp đồng lưu trữ đích; trạng thái code hiện tại được ghi riêng, không coi collection đã hoàn thiện chỉ vì có schema mẫu. Các mục bên dưới tiếp tục giải thích thuật toán và API.
 
 Các quy tắc trong [Product](PRODUCT_PLAN.md) là chuẩn nghiệp vụ. Các schema, endpoint và mã lỗi dưới đây là hợp đồng để FE/BE cùng triển khai. Code mẫu minh họa cấu trúc, chưa thay thế implementation và test.

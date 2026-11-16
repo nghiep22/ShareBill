@@ -195,6 +195,8 @@ Số trong wireframe là minh họa theo fixture; hiển thị chính thức l�
 
 ### 5.1. Đăng nhập
 
+Sau khi Firebase Web SDK đăng ký/đăng nhập, cập nhật tên hiển thị trong Auth, gọi `POST /api/v1/me/bootstrap` với ID token và body trống rồi `GET /api/v1/me` để lấy hồ sơ app. Không gửi UID/role/status từ form; hai endpoint đã có ở backend.
+
 - Hai form đơn giản: đăng nhập bằng email/mật khẩu; đăng ký thêm tên hiển thị. Nút chính ghi rõ “Đăng nhập” hoặc “Tạo tài khoản”; có liên kết chuyển form.
 - Kiểm tra email và mật khẩu tối thiểu 8 ký tự ở đăng ký; báo lỗi ngay dưới trường, không xóa dữ liệu đã nhập khi thất bại. Phân biệt trùng email, sai thông tin đăng nhập, mạng yếu và tài khoản disabled.
 - `returnTo` chỉ nhận đường dẫn nội bộ trong allowlist; chặn URL ngoài và `//evil.example`.

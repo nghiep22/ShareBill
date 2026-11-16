@@ -6,7 +6,7 @@ Backend Node.js/Fastify + TypeScript, dùng Firebase Authentication và Cloud Fi
 
 Thiết kế lưu trữ và backlog hoàn thiện ở [DATABASE.md](../docs/DATABASE.md). Index P0 đã có trong `firestore.indexes.json` và được nối với `firebase.json`; cần deploy và smoke query trên staging trước release. File index bao gồm cả query của chức năng chưa được code.
 
-Để triển khai từng phần nhỏ, mở [danh mục lát cắt](../docs/slices/README.md). [D01 — schema user](../docs/slices/01_DATABASE_BE.md#d01) đã hoàn tất; hàng đợi BE tiếp tục ở [D02 — bootstrap hồ sơ](../docs/slices/01_DATABASE_BE.md#d02), rồi D03 tạo chuyến đầy đủ. Mỗi mã có phạm vi/kiểm thử/nghiệm thu riêng.
+Để triển khai từng phần nhỏ, mở [danh mục lát cắt](../docs/slices/README.md). D01–D02 đã hoàn tất; hàng đợi BE tiếp tục ở [D03 — tạo chuyến đầy đủ](../docs/slices/01_DATABASE_BE.md#d03). Mỗi mã có phạm vi/kiểm thử/nghiệm thu riêng.
 
 - Node.js 24 LTS, pnpm 11.25.0; phiên bản lưu trong `.node-version` và `package.json` ở thư mục gốc.
 - Java 21 cho Firebase Emulator Suite.
@@ -39,6 +39,8 @@ Backend đọc `be/.env` khi chạy từ thư mục `be`. Đừng commit file n�
 | POST | `/api/v1/auth/register` | `{ "email", "password", "displayName" }` | 201; tạo Firebase Auth user và hồ sơ Firestore |
 | POST | `/api/v1/auth/login` | `{ "email", "password" }` | 200; lấy phiên hiện tại |
 | POST | `/api/v1/auth/refresh` | `{ "refreshToken" }` | 200; lấy ID token mới |
+| POST | `/api/v1/me/bootstrap` | Không có body; Bearer JWT | 200; tạo hồ sơ v1 nếu chưa có, giữ nguyên hồ sơ hiện có |
+| GET | `/api/v1/me` | Không có body; Bearer JWT | 200; đọc hồ sơ hiện có, 404 nếu chưa bootstrap |
 
 Mật khẩu cần 8–128 ký tự; tên hiển thị 1–80 ký tự. Cả ba API trả `Cache-Control: no-store` và `data` gồm `tokenType`, `accessToken`, `refreshToken`, `expiresIn` (giây), `user` (`uid`, `email`, `displayName`). `accessToken` là **Firebase ID token dạng JWT**, gửi trong header `Authorization: Bearer <accessToken>` cho các API chuyến đi. API kiểm chữ ký, project, hạn token, revoke và trạng thái tài khoản. Refresh token là bí mật dài hạn; không ghi log, không gắn vào URL. Với React web, nên dùng Firebase Web SDK để quản lý phiên và tự làm mới token; ba endpoint này hữu ích cho client dùng REST. Đăng xuất một thiết bị là xóa phiên phía client; chức năng thu hồi mọi phiên chưa được triển khai.
 
@@ -52,6 +54,8 @@ Invoke-RestMethod -Uri http://localhost:3001/api/v1/trips -Headers @{ Authorizat
 
 Đăng ký có thể tạo tài khoản Auth thành công trước khi ghi hồ sơ Firestore. Nếu Firestore tạm lỗi, đăng nhập lại sẽ hoàn tất hồ sơ; không tạo tài khoản thứ hai. Trên production cần đặt rate limit tại ingress cho các endpoint đăng ký/đăng nhập/làm mới phiên.
 
+Frontend dùng Firebase Web SDK gọi `POST /api/v1/me/bootstrap` một lần sau đăng ký/đăng nhập bằng `Authorization: Bearer <ID token>` rồi dùng `GET /api/v1/me` để đọc hồ sơ. Body bootstrap phải trống; API lấy UID/email/tên từ Firebase Auth, không nhận role/status từ client. Hồ sơ legacy thiếu trường v1 hiện được giữ nguyên khi đọc; migration D13 xử lý bổ sung sau.
+
 ## API đã làm
 
 | Method | Path | Yêu cầu |
@@ -60,6 +64,8 @@ Invoke-RestMethod -Uri http://localhost:3001/api/v1/trips -Headers @{ Authorizat
 | POST | `/api/v1/auth/register` | Public; email, password, displayName |
 | POST | `/api/v1/auth/login` | Public; email, password |
 | POST | `/api/v1/auth/refresh` | Public; refreshToken |
+| POST | `/api/v1/me/bootstrap` | Bearer JWT; tạo hồ sơ nếu thiếu, không nhận field từ client |
+| GET | `/api/v1/me` | Bearer JWT; chỉ đọc hồ sơ app |
 | POST | `/api/v1/trips` | Firebase ID token, Idempotency-Key, body `{name, ownerName}` |
 | GET | `/api/v1/trips` | Danh sách tối đa 20 chuyến gần đây của tài khoản |
 | GET | `/api/v1/trips/:tripId/overview` | ID token, membership active |

@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { describe, expect, it } from 'vitest';
 import { buildApp } from '../src/app.js';
 import { auth, db } from '../src/firebase.js';
+import { userDocumentSchema } from '../src/database/user.js';
 
 const enabled = Boolean(process.env.FIRESTORE_EMULATOR_HOST && process.env.FIREBASE_AUTH_EMULATOR_HOST);
 
@@ -21,7 +22,9 @@ describe.skipIf(!enabled)('Firebase emulator API flow', () => {
     expect(session.accessToken.split('.')).toHaveLength(3);
     expect(session.refreshToken).toBeTruthy();
     expect(session.user).toMatchObject({ email, displayName: 'An' });
-    expect((await db().doc(`users/${session.user.uid}`).get()).get('status')).toBe('active');
+    const profile = (await db().doc(`users/${session.user.uid}`).get()).data();
+    expect(userDocumentSchema.safeParse(profile).success).toBe(true);
+    expect(profile).toMatchObject({ status: 'active', schemaVersion: 1, displayName: 'An' });
     const trip = await app.inject({ method: 'POST', url: '/api/v1/trips', headers: { authorization: `Bearer ${session.accessToken}`, 'idempotency-key': randomUUID() }, payload: { name: 'Huế', ownerName: 'An' } });
     expect(trip.statusCode).toBe(200);
     const duplicate = await app.inject({ method: 'POST', url: '/api/v1/auth/register', payload });
@@ -36,11 +39,63 @@ describe.skipIf(!enabled)('Firebase emulator API flow', () => {
     expect(refreshed.json().data.accessToken).toBeTruthy();
     const badRefresh = await app.inject({ method: 'POST', url: '/api/v1/auth/refresh', payload: { refreshToken: 'invalid' } });
     expect(badRefresh.statusCode).toBe(401);
-    await db().doc(`users/${session.user.uid}`).update({ status: 'disabled' });
+    await db().doc(`users/${session.user.uid}`).update({ status: 'disabled', moderationVersion: 7, desiredAuthDisabled: true });
     const disabledLogin = await app.inject({ method: 'POST', url: '/api/v1/auth/login', payload: { email, password } });
     expect(disabledLogin.statusCode).toBe(403);
     const disabledRefresh = await app.inject({ method: 'POST', url: '/api/v1/auth/refresh', payload: { refreshToken: session.refreshToken } });
     expect(disabledRefresh.statusCode).toBe(403);
+    expect((await db().doc(`users/${session.user.uid}`).get()).data()).toMatchObject({ status: 'disabled', moderationVersion: 7, desiredAuthDisabled: true, displayName: 'An' });
+    await app.close();
+  }, 30_000);
+
+  it('bootstraps SDK users and direct Auth users without accepting profile fields from the client', async () => {
+    const app = await buildApp();
+    const password = 'TestPassword-123!';
+    const signIn = async (email: string) => {
+      const response = await fetch(`http://${process.env.FIREBASE_AUTH_EMULATOR_HOST}/identitytoolkit.googleapis.com/v1/accounts:signInWithPassword?key=demo`, {
+        method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ email, password, returnSecureToken: true }),
+      });
+      expect(response.ok).toBe(true);
+      return ((await response.json()) as { idToken: string }).idToken;
+    };
+
+    const sdkEmail = `sdk-${randomUUID()}@example.test`;
+    const sdk = await auth().createUser({ email: sdkEmail, password, displayName: 'Tên từ Auth' });
+    const sdkToken = await signIn(sdkEmail);
+    const sdkHeaders = { authorization: `Bearer ${sdkToken}` };
+    const missing = await app.inject({ method: 'GET', url: '/api/v1/me', headers: sdkHeaders });
+    expect(missing.statusCode).toBe(404);
+    const forbiddenInput = await app.inject({ method: 'POST', url: '/api/v1/me/bootstrap', headers: sdkHeaders, payload: { status: 'active', role: 'admin' } });
+    expect(forbiddenInput.statusCode).toBe(422);
+    expect((await db().doc(`users/${sdk.uid}`).get()).exists).toBe(false);
+    const bootstrapped = await app.inject({ method: 'POST', url: '/api/v1/me/bootstrap', headers: sdkHeaders });
+    expect(bootstrapped.statusCode).toBe(200);
+    expect(bootstrapped.headers['cache-control']).toBe('no-store');
+    expect(bootstrapped.json().data).toMatchObject({ uid: sdk.uid, email: sdkEmail, displayName: 'Tên từ Auth', status: 'active' });
+    expect(userDocumentSchema.safeParse((await db().doc(`users/${sdk.uid}`).get()).data()).success).toBe(true);
+    const read = await app.inject({ method: 'GET', url: '/api/v1/me', headers: sdkHeaders });
+    expect(read.json().data.displayName).toBe('Tên từ Auth');
+    await db().doc(`users/${sdk.uid}`).update({ displayName: 'Tên đã sửa', moderationVersion: 5 });
+    const repeated = await app.inject({ method: 'POST', url: '/api/v1/me/bootstrap', headers: sdkHeaders });
+    expect(repeated.json().data.displayName).toBe('Tên đã sửa');
+    expect((await db().doc(`users/${sdk.uid}`).get()).get('moderationVersion')).toBe(5);
+
+    const directEmail = `direct-${randomUUID()}@example.test`;
+    const direct = await auth().createUser({ email: directEmail, password });
+    const directToken = await signIn(directEmail);
+    const created = await app.inject({ method: 'POST', url: '/api/v1/trips', headers: { authorization: `Bearer ${directToken}`, 'idempotency-key': randomUUID() }, payload: { name: 'Sa Pa', ownerName: 'An' } });
+    expect(created.statusCode).toBe(200);
+    expect(userDocumentSchema.safeParse((await db().doc(`users/${direct.uid}`).get()).data()).success).toBe(true);
+
+    const legacyEmail = `legacy-${randomUUID()}@example.test`;
+    const legacy = await auth().createUser({ email: legacyEmail, password });
+    const legacyDoc = { status: 'active', createdAt: new Date('2025-01-01T00:00:00.000Z'), updatedAt: new Date('2025-01-01T00:00:00.000Z') };
+    await db().doc(`users/${legacy.uid}`).create(legacyDoc);
+    const legacyLogin = await app.inject({ method: 'POST', url: '/api/v1/auth/login', payload: { email: legacyEmail, password } });
+    expect(legacyLogin.statusCode).toBe(200);
+    expect(legacyLogin.json().data.user).toMatchObject({ uid: legacy.uid, displayName: legacyEmail.split('@')[0] });
+    expect((await db().doc(`users/${legacy.uid}`).get()).data()).toEqual(expect.objectContaining({ status: 'active' }));
+    expect((await db().doc(`users/${legacy.uid}`).get()).get('schemaVersion')).toBeUndefined();
     await app.close();
   }, 30_000);
 
