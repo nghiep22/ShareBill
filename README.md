@@ -11,11 +11,12 @@ Tài liệu thiết kế và triển khai, cập nhật ngày **16/11/2026**. Ng
 | [Kế hoạch sản phẩm](docs/PRODUCT_PLAN.md) | Phạm vi MVP, hành trình người dùng, quy tắc tiền, quyền, kiến trúc, quyết định SQLite/Firebase | Cả FE và BE |
 | [Đặc tả Frontend](docs/FRONTEND.md) | Từng màn hình, form, component, state, API integration, mobile-first, PWA, offline, accessibility | FE |
 | [Đặc tả Backend](docs/BACKEND.md) | Schema Firestore, API, phân quyền, chia tiền, transaction, idempotency, ảnh hóa đơn, phương án SQLite | BE |
+| [Thiết kế và hoàn thiện CSDL](docs/DATABASE.md) | Quan hệ và từ điển dữ liệu đầy đủ, index, ràng buộc, migration legacy, seed, backup/restore và kế hoạch hoàn thiện | BE, FE và vận hành |
 | [Website quản trị React/Node.js](docs/ADMIN_WEB.md) | UX đơn giản, dashboard, người dùng, chuyến đi, hỗ trợ, quyền quản trị và API Node.js | FE quản trị và BE |
 | [CI/CD và triển khai](docs/CICD_DEPLOY.md) | Môi trường, secrets, GitHub Actions, Vercel, Firebase Rules, release, rollback, backup, vận hành | Cả FE và BE |
 | [Lộ trình và kiểm thử](docs/ROADMAP_TESTING.md) | Công việc theo giai đoạn, dependency, acceptance criteria, dữ liệu mẫu, test matrix, checklist ra mắt | Cả FE và BE |
 
-**Thứ tự đọc:** Product → Frontend/Backend song song → CI/CD → Roadmap. Khi triển khai, mã lỗi, tên trường và công thức trong Backend là hợp đồng kỹ thuật; phạm vi và quy tắc người dùng trong Product là chuẩn nghiệp vụ. Thay đổi hợp đồng phải cập nhật cả hai phía và test liên quan trong cùng PR.
+**Thứ tự đọc:** Product → Database → Frontend/Backend song song → CI/CD → Roadmap. Khi triển khai, Database là hợp đồng lưu trữ, Backend là hợp đồng API và công thức; phạm vi và quy tắc người dùng trong Product là chuẩn nghiệp vụ. Thay đổi hợp đồng phải cập nhật cả hai phía và test liên quan trong cùng PR.
 
 ## Hướng triển khai đề xuất
 

@@ -51,6 +51,21 @@ flowchart TD
 
 Không làm OCR/đa tiền tệ trước khi shares, idempotency, membership và settlement ổn định. Không đặt yêu cầu viết xong toàn bộ admin trước khi có dữ liệu trip để demo.
 
+### 3.1. Công việc CSDL cần hoàn thiện
+
+Theo [thiết kế CSDL](DATABASE.md), thực hiện DB-02 (schema/factory) → DB-03 (bổ sung dữ liệu writer) → DB-04 (migration/checker), sau đó DB-05..08 theo tính năng; DB-09 là gate staging/restore. Các việc này nằm trong giai đoạn BE bên trên, không cộng nguyên ước lượng CSDL một lần nữa vào tổng lịch.
+
+| Hạng mục CSDL | Trạng thái hiện tại | Điều kiện đóng |
+| --- | --- | --- |
+| DB-01: thiết kế và index | Đã có DATABASE.md, 16 composite index và field exemptions | Index inventory đồng bộ từng query khi triển khai |
+| Dữ liệu mẫu | Có script `db:seed` cho emulator qua API | Assertion tổng chi/số dư/pending đạt; không trỏ được cloud |
+| DB-02..03: schema/writers | Chưa hoàn tất | Field đủ, owner link ba chiều, audit/operation chuẩn |
+| DB-04: migration/checker | Đã thiết kế DBM-001..007, chưa có runner | Dry-run/checkpoint/rerun không đổi tiền; checker không diff |
+| DB-05..08: lifecycle và admin | Còn thiếu các API/workers liệt kê trong DATABASE.md | Test transaction/quyền/lifecycle của từng nhóm đạt |
+| DB-09: staging/restore | Chưa chạy cloud | Index ready, query thật/concurrency/restore đạt |
+
+Ma trận DATA-01..16 và checklist nghiệm thu ở cuối DATABASE.md là gate CSDL v1. Seed sử dụng writer hiện tại nên không là chứng nhận schema v1 hoặc migration đã hoàn tất.
+
 ## 4. Backlog có acceptance criteria
 
 | ID | Hạng mục | Tiêu chí hoàn tất cụ thể | Phụ thuộc |

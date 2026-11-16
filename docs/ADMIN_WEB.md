@@ -187,6 +187,8 @@ Ghi nhận cả khóa/mở user, khóa/mở trip, đổi ticket, cấp quyền o
 
 ## 6. Schema bổ sung cho BE
 
+Schema lưu trữ hợp nhất và index triển khai xem [DATABASE.md](DATABASE.md#6-ảnh-lời-mời-và-dữ-liệu-quản-trị). Tài liệu đó bổ sung `adminAuthLeases`, jobs, migration, trường timestamp/version và retention; các luồng admin dưới đây là yêu cầu nghiệp vụ, chưa phải API đã code.
+
 ### 6.1. User và trip mở rộng
 
 ```ts

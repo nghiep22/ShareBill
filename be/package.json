@@ -13,6 +13,7 @@
     "check": "tsc --noEmit",
     "emulators": "firebase emulators:start --project demo-sharebill --only auth,firestore",
     "test:emulator": "vitest run test/emulator.test.ts",
+    "db:seed": "tsx scripts/seed-database.ts",
     "test": "vitest run",
     "test:watch": "vitest"
   },

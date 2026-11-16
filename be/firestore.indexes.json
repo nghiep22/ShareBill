@@ -1,0 +1,37 @@
+{
+  "indexes": [
+    { "collectionGroup": "tripRefs", "queryScope": "COLLECTION", "fields": [{ "fieldPath": "status", "order": "ASCENDING" }, { "fieldPath": "joinedAt", "order": "DESCENDING" }] },
+    { "collectionGroup": "expenses", "queryScope": "COLLECTION", "fields": [{ "fieldPath": "status", "order": "ASCENDING" }, { "fieldPath": "occurredOn", "order": "DESCENDING" }] },
+    { "collectionGroup": "expenses", "queryScope": "COLLECTION", "fields": [{ "fieldPath": "status", "order": "ASCENDING" }, { "fieldPath": "category", "order": "ASCENDING" }, { "fieldPath": "occurredOn", "order": "DESCENDING" }] },
+    { "collectionGroup": "expenses", "queryScope": "COLLECTION", "fields": [{ "fieldPath": "status", "order": "ASCENDING" }, { "fieldPath": "payerParticipantId", "order": "ASCENDING" }, { "fieldPath": "occurredOn", "order": "DESCENDING" }] },
+    { "collectionGroup": "settlements", "queryScope": "COLLECTION", "fields": [{ "fieldPath": "status", "order": "ASCENDING" }, { "fieldPath": "createdAt", "order": "DESCENDING" }] },
+    { "collectionGroup": "users", "queryScope": "COLLECTION", "fields": [{ "fieldPath": "status", "order": "ASCENDING" }, { "fieldPath": "createdAt", "order": "DESCENDING" }] },
+    { "collectionGroup": "trips", "queryScope": "COLLECTION", "fields": [{ "fieldPath": "status", "order": "ASCENDING" }, { "fieldPath": "createdAt", "order": "DESCENDING" }] },
+    { "collectionGroup": "trips", "queryScope": "COLLECTION", "fields": [{ "fieldPath": "moderationStatus", "order": "ASCENDING" }, { "fieldPath": "createdAt", "order": "DESCENDING" }] },
+    { "collectionGroup": "supportTickets", "queryScope": "COLLECTION", "fields": [{ "fieldPath": "createdBy", "order": "ASCENDING" }, { "fieldPath": "createdAt", "order": "DESCENDING" }] },
+    { "collectionGroup": "supportTickets", "queryScope": "COLLECTION", "fields": [{ "fieldPath": "status", "order": "ASCENDING" }, { "fieldPath": "updatedAt", "order": "DESCENDING" }] },
+    { "collectionGroup": "adminAuditEvents", "queryScope": "COLLECTION", "fields": [{ "fieldPath": "targetType", "order": "ASCENDING" }, { "fieldPath": "createdAt", "order": "DESCENDING" }] },
+    { "collectionGroup": "adminAuthJobs", "queryScope": "COLLECTION", "fields": [{ "fieldPath": "status", "order": "ASCENDING" }, { "fieldPath": "availableAt", "order": "ASCENDING" }] },
+    { "collectionGroup": "maintenanceJobs", "queryScope": "COLLECTION", "fields": [{ "fieldPath": "status", "order": "ASCENDING" }, { "fieldPath": "availableAt", "order": "ASCENDING" }] },
+    { "collectionGroup": "receipts", "queryScope": "COLLECTION_GROUP", "fields": [{ "fieldPath": "status", "order": "ASCENDING" }, { "fieldPath": "expiresAt", "order": "ASCENDING" }] },
+    { "collectionGroup": "receipts", "queryScope": "COLLECTION_GROUP", "fields": [{ "fieldPath": "status", "order": "ASCENDING" }, { "fieldPath": "updatedAt", "order": "ASCENDING" }] },
+    { "collectionGroup": "receipts", "queryScope": "COLLECTION_GROUP", "fields": [{ "fieldPath": "status", "order": "ASCENDING" }, { "fieldPath": "processingLeaseUntil", "order": "ASCENDING" }] }
+  ],
+  "fieldOverrides": [
+    { "collectionGroup": "expenses", "fieldPath": "note", "indexes": [] },
+    { "collectionGroup": "expenses", "fieldPath": "shares", "indexes": [] },
+    { "collectionGroup": "expenses", "fieldPath": "splitInput", "indexes": [] },
+    { "collectionGroup": "settlements", "fieldPath": "note", "indexes": [] },
+    { "collectionGroup": "trips", "fieldPath": "note", "indexes": [] },
+    { "collectionGroup": "trips", "fieldPath": "categoryTotalsMinor", "indexes": [] },
+    { "collectionGroup": "auditEvents", "fieldPath": "before", "indexes": [] },
+    { "collectionGroup": "auditEvents", "fieldPath": "after", "indexes": [] },
+    { "collectionGroup": "adminAuditEvents", "fieldPath": "before", "indexes": [] },
+    { "collectionGroup": "adminAuditEvents", "fieldPath": "after", "indexes": [] },
+    { "collectionGroup": "operations", "fieldPath": "responseSnapshot", "indexes": [] },
+    { "collectionGroup": "operations", "fieldPath": "response", "indexes": [] },
+    { "collectionGroup": "keys", "fieldPath": "responseSnapshot", "indexes": [] },
+    { "collectionGroup": "supportTickets", "fieldPath": "message", "indexes": [] },
+    { "collectionGroup": "internalNotes", "fieldPath": "message", "indexes": [] }
+  ]
+}

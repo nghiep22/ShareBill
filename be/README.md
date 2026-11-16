@@ -4,6 +4,8 @@ Backend Node.js/Fastify + TypeScript, dùng Firebase Authentication và Cloud Fi
 
 ## Yêu cầu máy
 
+Thiết kế lưu trữ và backlog hoàn thiện ở [DATABASE.md](../docs/DATABASE.md). Index P0 đã có trong `firestore.indexes.json` và được nối với `firebase.json`; cần deploy và smoke query trên staging trước release. File index bao gồm cả query của chức năng chưa được code.
+
 - Node.js 24 LTS, pnpm 11.25.0; phiên bản lưu trong `.node-version` và `package.json` ở thư mục gốc.
 - Java 21 cho Firebase Emulator Suite.
 - GitHub CLI chỉ dùng để tạo/đẩy repo, không cần để chạy API.
@@ -95,6 +97,14 @@ Payload khoản chi chia đều:
 Mọi lệnh ghi được kiểm tra quyền trong Firestore transaction, ghi operation key cùng dữ liệu để retry không tạo trùng. Tiền lưu số nguyên VND. Firestore Rules hiện deny toàn bộ client direct reads/writes; API server dùng Admin SDK và tự kiểm quyền.
 
 ## Kiểm tra
+
+Tạo một bộ dữ liệu mẫu khi Auth/Firestore Emulator đang chạy:
+
+```powershell
+pnpm --dir be db:seed
+```
+
+Script chỉ chấp nhận `demo-sharebill` và cả hai emulator trên `127.0.0.1`. Nó đi qua API để tạo An/Bình/Chi, hai khoản chi tổng 1.200.000đ và một đề nghị trả nợ pending; kiểm số dư 500.000đ/-100.000đ/-400.000đ. Mỗi lần chạy thêm bộ dữ liệu mới; không reset dữ liệu cũ. Email được in trong summary, mật khẩu emulator công khai `LocalDemo-123!`; không in JWT/refresh token. Xem [schema và seed kỳ vọng](../docs/DATABASE.md#12-seed-và-kịch-bản-kiểm-thử).
 
 ```powershell
 pnpm check:be
