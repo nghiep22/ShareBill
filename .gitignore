@@ -1,0 +1,14 @@
+node_modules/
+dist/
+.next/
+.vercel/
+coverage/
+.env
+.env.*
+!.env.example
+*.log
+*.local
+service-account*.json
+firebase-debug.log
+firestore-debug.log
+ui-debug.log
