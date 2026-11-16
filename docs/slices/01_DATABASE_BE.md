@@ -2,15 +2,15 @@
 
 [Danh mục và thứ tự thực hiện](README.md) · [Thiết kế CSDL](../DATABASE.md) · [Hợp đồng API](../BACKEND.md)
 
-Hoàn thiện dữ liệu được các API hiện có ghi ra trước khi bổ sung thêm chức năng. Tất cả các lát dưới đây chưa hoàn tất; schema/index/seed đã có là đầu vào.
+Hoàn thiện dữ liệu được các API hiện có ghi ra trước khi bổ sung thêm chức năng. D01 đã hoàn tất; D02–D22 còn lại. Schema/index/seed đã có là đầu vào.
 
-**Số lát cắt: 22.** Trạng thái ban đầu đều **Chưa làm**. File hiện có là điểm sửa; đường dẫn ghi “mới” hoặc tên module chưa tồn tại là vị trí dự kiến. Mỗi lát cập nhật hợp đồng API/schema liên quan nếu có thay đổi.
+**Số lát cắt: 22; đã xong: 1; còn lại: 21.** File hiện có là điểm sửa; đường dẫn ghi “mới” hoặc tên module chưa tồn tại là vị trí dự kiến. Mỗi lát cập nhật hợp đồng API/schema liên quan nếu có thay đổi.
 
 ## Danh sách nhanh
 
 | Mã | Kết quả cần làm | Phụ thuộc |
 | --- | --- | --- |
-| [D01](#d01) | Schema và factory hồ sơ người dùng | Nền dự án đã có |
+| [D01](#d01) | ✅ Schema và factory hồ sơ người dùng | Nền dự án đã có |
 | [D02](#d02) | Dùng chung một luồng bootstrap hồ sơ | [D01](#d01) |
 | [D03](#d03) | Tạo chuyến với đủ liên kết của owner | [D02](#d02) |
 | [D04](#d04) | Người tham gia và balance zero đủ metadata | [D03](#d03) |
@@ -39,17 +39,21 @@ Hoàn thiện dữ liệu được các API hiện có ghi ra trước khi bổ 
 
 **Schema và factory hồ sơ người dùng**
 
-**Trạng thái:** Chưa làm. **Phụ thuộc:** nền dự án đã có.
+**Trạng thái:** Hoàn tất. **Phụ thuộc:** nền dự án đã có.
 
 **Kết quả:** Tạo một schema v1 và factory cho UserDoc theo DATABASE.md.
 
-**Phạm vi file/module:** `be/src/database/user.ts` (mới), `be/test/database-user.test.ts` (mới).
+**Phạm vi file/module:** `be/src/database/user.ts`, `be/test/database-user.test.ts`.
 
 **Việc làm:** Phân biệt field DB và input HTTP; default moderation chỉ áp cho user mới; không có password/token trong UserDoc.
 
 **Kiểm thử:** Kiểm factory mới và profile disabled; từ chối field sai kiểu.
 
 **Hoàn tất khi:** Factory sinh đủ trường; đọc được profile hợp lệ; không tự đổi disabled sang active.
+
+**Đã làm:** Thêm `userDocumentSchema`, kiểu `UserDocument` và factory `createUserDocument` từ danh tính Firebase Auth. Hồ sơ mới có đủ trường v1; schema từ chối field lạ, trạng thái sai, emailLower không khớp và thời gian cập nhật trước thời gian tạo. Factory không nhận password/token và không sửa document đã tồn tại.
+
+**Bằng chứng:** `pnpm check:be`, `pnpm test:be` (4 test mới, tổng 8 test unit/HTTP đạt) và `pnpm --dir be build` đều thành công. Test đọc profile disabled giữ status/moderation fields. D02 sẽ nối factory vào register/login/create trip và kiểm tích hợp emulator; D01 chỉ cung cấp schema/factory, chưa đổi writer đang chạy.
 
 ### D02
 

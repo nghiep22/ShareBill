@@ -1,6 +1,6 @@
 # ShareBill — Các lát cắt triển khai nhỏ
 
-Cập nhật 16/11/2026. **105 lát cắt còn phải làm**, chia thành 6 nhóm tài liệu. Đây là kế hoạch thực thi phần còn thiếu của ShareBill, giữ ưu tiên **backend trước**. Không đánh dấu hoàn tất chỉ vì đã có schema mẫu hoặc API happy path.
+Cập nhật 16/11/2026. **105 lát cắt tổng cộng; đã xong D01, còn 104**, chia thành 6 nhóm tài liệu. Đây là kế hoạch thực thi phần còn thiếu của ShareBill, giữ ưu tiên **backend trước**. Không đánh dấu hoàn tất chỉ vì đã có schema mẫu hoặc API happy path.
 
 ## 1. Những gì đã có để dùng làm đầu vào
 
@@ -11,7 +11,7 @@ Cập nhật 16/11/2026. **105 lát cắt còn phải làm**, chia thành 6 nhó
 | Tạo chuyến/người/khoản chi equal/exact, void expense, overview/suggestions, pending/confirm settlement | Chưa đủ fields/audit/operation của thiết kế; còn thiếu nhiều lifecycle và pagination |
 | Thiết kế CSDL, 16 composite indexes, seed local có assertion | Chưa có migration runner/checker, chưa deploy/test index cloud |
 
-Các phần đã có không tạo thành task “làm lại”. Lát D/F/B tương ứng chỉ bổ sung điều kiện còn thiếu hoặc nối FE vào BE hiện có. Trạng thái các lát ở thời điểm lập kế hoạch đều **Chưa làm**; D01 là lát nên bắt đầu ngay.
+Các phần đã có không tạo thành task “làm lại”. Lát D/F/B tương ứng chỉ bổ sung điều kiện còn thiếu hoặc nối FE vào BE hiện có. [D01](01_DATABASE_BE.md#d01) đã hoàn tất; [D02](01_DATABASE_BE.md#d02) là lát kế tiếp.
 
 ## 2. Cách dùng một lát cắt
 
@@ -51,17 +51,17 @@ Mỗi thẻ có: trạng thái, dependency, kết quả, phạm vi file/module, 
 
 Thứ tự trên đã được đối chiếu dependency của cả 105 lát. Cloud staging O06/O07 và CI O01 có thể làm sớm khi đủ dependency để giảm thời gian chờ; không cần trì hoãn cấu hình cloud đến cuối. Đây không phải yêu cầu chạy đồng thời hoặc giao nhiều agent.
 
-## 5. Năm lát bắt đầu ngay
+## 5. Lát đầu đã xong và bốn lát kế tiếp
 
 | Thứ tự | Lát | Sản phẩm review được |
 | --- | --- | --- |
-| 1 | [D01](01_DATABASE_BE.md#d01) — schema user | Một schema/factory hồ sơ có test, không ghi mật khẩu/token |
+| 1 ✅ | [D01](01_DATABASE_BE.md#d01) — schema user | Đã có schema/factory hồ sơ và 4 kiểm thử; chưa nối vào writer (D02) |
 | 2 | [D02](01_DATABASE_BE.md#d02) — bootstrap thống nhất | Register/login/create trip cùng dùng một writer, user disabled không bị mở lại |
 | 3 | [D03](01_DATABASE_BE.md#d03) — tạo chuyến đầy đủ | Một transaction có owner membership/participant/link/balance/ref/signal/audit/op |
 | 4 | [D04](01_DATABASE_BE.md#d04) — thêm participant | Người chưa có tài khoản có metadata và zero balance đúng |
 | 5 | [D05](01_DATABASE_BE.md#d05) — expense v1 | Writer đủ trường, reader vẫn đọc expense legacy |
 
-Sau năm lát này, chạy luồng emulator đang có và seed để kiểm lại tổng chi/số dư. Nếu fail phải sửa trong lát vừa làm trước khi chuyển D06; không dùng seed thay kiểm migration hoặc cloud index.
+Sau D02–D05, chạy luồng emulator đang có và seed để kiểm lại tổng chi/số dư. Nếu fail phải sửa trong lát vừa làm trước khi chuyển D06; không dùng seed thay kiểm migration hoặc cloud index.
 
 ## 6. Cổng nghiệm thu theo cụm
 
