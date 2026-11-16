@@ -2,9 +2,9 @@
 
 [Danh mục và thứ tự thực hiện](README.md) · [Thiết kế CSDL](../DATABASE.md) · [Hợp đồng API](../BACKEND.md)
 
-Hoàn thiện dữ liệu được các API hiện có ghi ra trước khi bổ sung thêm chức năng. D01–D07 đã hoàn tất; D08–D22 còn lại. Schema/index/seed đã có là đầu vào.
+Hoàn thiện dữ liệu được các API hiện có ghi ra trước khi bổ sung thêm chức năng. D01–D08 đã hoàn tất; D09–D22 còn lại. Schema/index/seed đã có là đầu vào.
 
-**Số lát cắt: 22; đã xong: 7; còn lại: 15.** File hiện có là điểm sửa; đường dẫn ghi “mới” hoặc tên module chưa tồn tại là vị trí dự kiến. Mỗi lát cập nhật hợp đồng API/schema liên quan nếu có thay đổi.
+**Số lát cắt: 22; đã xong: 8; còn lại: 14.** File hiện có là điểm sửa; đường dẫn ghi “mới” hoặc tên module chưa tồn tại là vị trí dự kiến. Mỗi lát cập nhật hợp đồng API/schema liên quan nếu có thay đổi.
 
 ## Danh sách nhanh
 
@@ -17,7 +17,7 @@ Hoàn thiện dữ liệu được các API hiện có ghi ra trước khi bổ 
 | [D05](#d05) | ✅ Chuẩn hóa document khoản chi | [D04](#d04) |
 | [D06](#d06) | ✅ Đồng bộ thống kê và số dư khi ghi tiền | [D05](#d05) |
 | [D07](#d07) | ✅ Chuẩn hóa document trả nợ | [D06](#d06) |
-| [D08](#d08) | Audit thống nhất cho mutation hiện có | [D03](#d03), [D04](#d04), [D05](#d05), [D07](#d07) |
+| [D08](#d08) | ✅ Audit thống nhất cho mutation hiện có | [D03](#d03), [D04](#d04), [D05](#d05), [D07](#d07) |
 | [D09](#d09) | Operation chuẩn và tương thích key cũ | [D08](#d08) |
 | [D10](#d10) | Checker chỉ đọc cho schema và liên kết | [D09](#d09) |
 | [D11](#d11) | Đối soát ledger và projection chỉ đọc | [D10](#d10) |
@@ -173,23 +173,27 @@ Hoàn thiện dữ liệu được các API hiện có ghi ra trước khi bổ 
 
 **Đã làm:** Factory/schema v1 tạo settlement pending với `currency=VND`, `basedOnLedgerVersion`, timestamp và toàn bộ trường confirmed/cancelled/void nullable. Transaction tạo settlement cùng counters, signal, operation và đặt `hasLedgerReferences=true` cho cả hai participant. Confirm chỉ cập nhật trạng thái, version, actor/mode/timestamp; giữ nguyên `basedOnLedgerVersion` của lúc tạo. Reader xuất timestamp confirmed/cancelled ở dạng ISO. Cancel/void settlement chưa có route, thuộc các lát nghiệp vụ sau.
 
-**Bằng chứng:** TypeScript check, unit/HTTP tests, build, Firebase Emulator và seed local đạt. Test kiểm pending không đổi balances, metadata trước/sau đúng schema, retry pending/confirm không ghi trùng; ledger thay đổi giữa tạo và confirm thì payload cũ bị từ chối, payload theo ledger hiện tại được xác nhận nhưng document vẫn giữ mốc tạo cũ. GET danh sách trả đủ metadata cho FE. D08 tiếp tục chuẩn hóa audit cho các mutation; D15 migration settlement legacy.
+**Bằng chứng:** TypeScript check, unit/HTTP tests, build, Firebase Emulator và seed local đạt. Test kiểm pending không đổi balances, metadata trước/sau đúng schema, retry pending/confirm không ghi trùng; ledger thay đổi giữa tạo và confirm thì payload cũ bị từ chối, payload theo ledger hiện tại được xác nhận nhưng document vẫn giữ mốc tạo cũ. GET danh sách trả đủ metadata cho FE. D08 đã chuẩn hóa audit cho các mutation; D15 migration settlement legacy.
 
 ### D08
 
 **Audit thống nhất cho mutation hiện có**
 
-**Trạng thái:** Chưa làm. **Phụ thuộc:** [D03](#d03), [D04](#d04), [D05](#d05), [D07](#d07).
+**Trạng thái:** Hoàn tất. **Phụ thuộc:** [D03](#d03), [D04](#d04), [D05](#d05), [D07](#d07).
 
 **Kết quả:** Mọi mutation hiện có tạo sự kiện đủ đối soát trong cùng commit.
 
-**Phạm vi file/module:** `be/src/database/audit.ts` (mới), các route ghi trong `be/src/`.
+**Phạm vi file/module:** `be/src/database/audit.ts`, `be/src/database/trip.ts`, `be/src/routes.ts`, `be/src/finance-routes.ts`, `be/test/database-audit.test.ts`, `be/test/emulator.test.ts`.
 
 **Việc làm:** Builder allowlist action/entity/before/after; nối create trip, add participant, expense và settlement; không sửa audit legacy.
 
 **Kiểm thử:** Emulator: mutation và audit cùng thành công/thất bại; không có token/email/support content trong audit nhóm.
 
 **Hoàn tất khi:** Có actor/entity/revision/ledgerVersion/operationKey; event retry không bị nhân đôi.
+
+**Đã làm:** Một builder/schema v1 chỉ nhận sáu action hiện có: trip/participant/expense/settlement created, expense voided và settlement confirmed. Snapshot trước/sau dùng strict allowlist; expense giữ payer, amount, shares, status và version; settlement giữ hai participant, amount, mốc ledger, status và mode. Mọi route ghi event cùng transaction, gồm thêm participant trước đây thiếu audit. Event có actor, entity, revision, ledgerVersion, operationKey và timestamp; tên actor dạng email/token bị bỏ, email/link/token trong tên chuyến, tên participant và reason được che. Audit legacy không bị sửa; D18 xử lý baseline lịch sử cũ.
+
+**Bằng chứng:** TypeScript check, unit/HTTP tests, build và Firebase Emulator đạt. Unit test loại snapshot chứa token hoặc sai entity/transition, kiểm che email/link/token trong reason. Emulator xác nhận đủ bảy event trong luồng tạo chuyến→thêm người→chi→pending→confirm→void→chi, snapshot trước/sau và không chứa email/token; retry trip/participant/expense/settlement/void không nhân event. Khi tạo expense thất bại vì thiếu balance, không ghi audit hay operation. D09 tiếp tục chuẩn hóa operation; D18 baseline audit legacy.
 
 ### D09
 

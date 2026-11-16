@@ -7,6 +7,7 @@ import { ApiError, operationKey, requireUser } from './http.js';
 import { expenseDelta, applyBalanceDelta, applyExpenseTotals, type Balance, type Share, type ExpenseCategory } from './domain/money.js';
 import { suggestSettlements, applySettlement } from './domain/settlement.js';
 import { settlementInput, settlementDocumentSchema, createSettlementDocument, confirmationChanges } from './database/settlement.js';
+import { createAuditEvent } from './database/audit.js';
 
 const confirmInput = z.strictObject({ basedOnLedgerVersion: z.number().int().min(0) });
 const voidInput = z.strictObject({ reason: z.string().trim().min(1).max(300) });
@@ -69,6 +70,7 @@ export async function registerFinanceRoutes(app: FastifyInstance): Promise<void>
     const body = parse(settlementInput, request.body);
     if (body.fromParticipantId === body.toParticipantId) throw new ApiError(422, 'VALIDATION_ERROR', 'Hai người phải khác nhau.');
     const path = `/api/v1/trips/${tripId}/settlements`, requestHash = digest(body), settlementId = randomUUID(), store = db();
+    const auditEventId = randomUUID();
     return store.runTransaction(async tx => {
       const opRef = store.doc(`users/${uid}/operations/${key}`), tripRef = store.doc(`trips/${tripId}`);
       const [op, trip, member, user, fromParticipant, toParticipant, fromBalanceSnap, toBalanceSnap] = await Promise.all([
@@ -97,7 +99,15 @@ export async function registerFinanceRoutes(app: FastifyInstance): Promise<void>
       }
       tx.update(tripRef, { settlementCountAllTime: FieldValue.increment(1), pendingSettlementCount: FieldValue.increment(1), revision, updatedAt: now });
       tx.update(store.doc(`trips/${tripId}/signals/current`), { revision, ledgerVersion: trip.get('ledgerVersion'), updatedAt: now });
-      tx.set(store.doc(`trips/${tripId}/auditEvents/${randomUUID()}`), { actorUid: uid, action: 'settlement.created', entityId: settlementId, amountMinor: body.amountMinor, createdAt: now });
+      tx.create(store.doc(`trips/${tripId}/auditEvents/${auditEventId}`), createAuditEvent({
+        eventId: auditEventId, actorUid: uid, actorDisplayNameSnapshot: user.get('displayName'),
+        action: 'settlement.created', entityType: 'settlement', entityId: settlementId,
+        before: null, after: { id: settlementId, fromParticipantId: body.fromParticipantId,
+          toParticipantId: body.toParticipantId, amountMinor: body.amountMinor,
+          basedOnLedgerVersion: body.basedOnLedgerVersion, status: 'pending', version: 1,
+          confirmationMode: null }, reason: null,
+        revision, ledgerVersion: trip.get('ledgerVersion'), operationKey: key, createdAt: now,
+      }));
       tx.set(opRef, { path, requestHash, response, tripId, committedAt: now });
       return { data: response, meta: { revision, replayed: false } };
     });
@@ -106,8 +116,10 @@ export async function registerFinanceRoutes(app: FastifyInstance): Promise<void>
   app.post('/api/v1/trips/:tripId/settlements/:id/confirm', async request => {
     const uid = await requireUser(request), key = operationKey(request);
     const { tripId, id } = ids(request.params);
+    if (!id) throw new ApiError(404, 'NOT_FOUND', 'Không tìm thấy lượt trả nợ.');
     const body = parse(confirmInput, request.body), expectedVersion = version(request.headers['if-match']);
     const path = `/api/v1/trips/${tripId}/settlements/${id}/confirm`, requestHash = digest({ body, expectedVersion }), store = db();
+    const auditEventId = randomUUID();
     return store.runTransaction(async tx => {
       const opRef = store.doc(`users/${uid}/operations/${key}`), tripRef = store.doc(`trips/${tripId}`), settlementRef = store.doc(`trips/${tripId}/settlements/${id}`);
       const [op, trip, member, user, settlement] = await Promise.all([
@@ -130,6 +142,9 @@ export async function registerFinanceRoutes(app: FastifyInstance): Promise<void>
       const mode = owner ? 'owner_on_behalf' as const : 'recipient' as const;
       const response = { id, status: 'confirmed', version: expectedVersion + 1, confirmationMode: mode };
       const changes = confirmationChanges({ actorUid: uid, mode, version: expectedVersion, now });
+      const beforeAudit = { id, fromParticipantId: fromId, toParticipantId: toId, amountMinor: amount,
+        basedOnLedgerVersion: settlement.get('basedOnLedgerVersion'), status: 'pending',
+        version: expectedVersion, confirmationMode: settlement.get('confirmationMode') ?? null };
       if (settlement.get('schemaVersion') === 1 && !settlementDocumentSchema.safeParse({ ...settlement.data(), ...changes }).success) {
         throw new ApiError(409, 'SETTLEMENT_INVARIANT_FAILED', 'Lượt trả nợ chưa sẵn sàng.');
       }
@@ -138,7 +153,13 @@ export async function registerFinanceRoutes(app: FastifyInstance): Promise<void>
       tx.update(settlementRef, changes);
       tx.update(tripRef, { pendingSettlementCount: FieldValue.increment(-1), revision, ledgerVersion, updatedAt: now });
       tx.update(store.doc(`trips/${tripId}/signals/current`), { revision, ledgerVersion, updatedAt: now });
-      tx.set(store.doc(`trips/${tripId}/auditEvents/${randomUUID()}`), { actorUid: uid, action: 'settlement.confirmed', entityId: id, amountMinor: amount, createdAt: now });
+      tx.create(store.doc(`trips/${tripId}/auditEvents/${auditEventId}`), createAuditEvent({
+        eventId: auditEventId, actorUid: uid, actorDisplayNameSnapshot: user.get('displayName'),
+        action: 'settlement.confirmed', entityType: 'settlement', entityId: id,
+        before: beforeAudit, after: { ...beforeAudit, status: 'confirmed', version: expectedVersion + 1,
+          confirmationMode: mode }, reason: null,
+        revision, ledgerVersion, operationKey: key, createdAt: now,
+      }));
       tx.set(opRef, { path, requestHash, response, tripId, committedAt: now });
       return { data: response, meta: { revision, ledgerVersion, replayed: false } };
     });
@@ -147,8 +168,10 @@ export async function registerFinanceRoutes(app: FastifyInstance): Promise<void>
   app.post('/api/v1/trips/:tripId/expenses/:id/void', async request => {
     const uid = await requireUser(request), key = operationKey(request);
     const { tripId, id } = ids(request.params);
+    if (!id) throw new ApiError(404, 'NOT_FOUND', 'Không tìm thấy khoản chi.');
     const body = parse(voidInput, request.body), expectedVersion = version(request.headers['if-match']);
     const path = `/api/v1/trips/${tripId}/expenses/${id}/void`, requestHash = digest({ body, expectedVersion }), store = db();
+    const auditEventId = randomUUID();
     return store.runTransaction(async tx => {
       const opRef = store.doc(`users/${uid}/operations/${key}`), tripRef = store.doc(`trips/${tripId}`), expenseRef = store.doc(`trips/${tripId}/expenses/${id}`);
       const [op, trip, member, user, expense] = await Promise.all([tx.get(opRef), tx.get(tripRef), tx.get(store.doc(`trips/${tripId}/memberships/${uid}`)), tx.get(store.doc(`users/${uid}`)), tx.get(expenseRef)]);
@@ -165,6 +188,8 @@ export async function registerFinanceRoutes(app: FastifyInstance): Promise<void>
         throw new ApiError(409, 'PROJECTION_INVARIANT_FAILED', 'Số đếm chuyến chưa sẵn sàng.');
       }
       const amount = expense.get('amountMinor') as number, payer = expense.get('payerParticipantId') as string, shares = expense.get('shares') as Share[];
+      const beforeAudit = { id, amountMinor: amount, payerParticipantId: payer, shares,
+        status: 'active', version: expectedVersion };
       let totals;
       try { totals = applyExpenseTotals(trip.get('totalExpenseMinor'), trip.get('categoryTotalsMinor'),
         expense.get('category') as ExpenseCategory, amount, -1); }
@@ -182,7 +207,12 @@ export async function registerFinanceRoutes(app: FastifyInstance): Promise<void>
       tx.update(expenseRef, { status: 'void', version: expectedVersion + 1, voidReason: body.reason, voidedBy: uid, voidedAt: now, updatedBy: uid, updatedAt: now });
       tx.update(tripRef, { activeExpenseCount: activeExpenseCount - 1, ...totals, revision, ledgerVersion, updatedAt: now });
       tx.update(store.doc(`trips/${tripId}/signals/current`), { revision, ledgerVersion, updatedAt: now });
-      tx.set(store.doc(`trips/${tripId}/auditEvents/${randomUUID()}`), { actorUid: uid, action: 'expense.voided', entityId: id, amountMinor: amount, reason: body.reason, createdAt: now });
+      tx.create(store.doc(`trips/${tripId}/auditEvents/${auditEventId}`), createAuditEvent({
+        eventId: auditEventId, actorUid: uid, actorDisplayNameSnapshot: user.get('displayName'),
+        action: 'expense.voided', entityType: 'expense', entityId: id,
+        before: beforeAudit, after: { ...beforeAudit, status: 'void', version: expectedVersion + 1 },
+        reason: body.reason, revision, ledgerVersion, operationKey: key, createdAt: now,
+      }));
       tx.set(opRef, { path, requestHash, response, tripId, committedAt: now });
       return { data: response, meta: { revision, ledgerVersion, replayed: false } };
     });

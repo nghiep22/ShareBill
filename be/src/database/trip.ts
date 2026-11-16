@@ -1,6 +1,7 @@
 import { Timestamp } from 'firebase-admin/firestore';
 import { createParticipantDocuments } from './participant.js';
 import { EXPENSE_CATEGORIES } from '../domain/money.js';
+import { createAuditEvent } from './audit.js';
 
 export type TripCreateData = {
   tripId: string;
@@ -8,6 +9,7 @@ export type TripCreateData = {
   auditEventId: string;
   ownerUid: string;
   ownerName: string;
+  actorDisplayNameSnapshot?: unknown;
   name: string;
   operationKey: string;
   now: Timestamp;
@@ -36,11 +38,12 @@ export function createTripDocuments(input: TripCreateData) {
   const participantLink = { schemaVersion: 1, uid: ownerUid, participantId, updatedAt: now } as const;
   const signal = { schemaVersion: 1, revision: 1, ledgerVersion: 0, updatedAt: now } as const;
   const tripRef = { schemaVersion: 1, tripId, status: 'active', joinedAt: now, updatedAt: now } as const;
-  const audit = {
-    schemaVersion: 1, eventId: auditEventId, actorUid: ownerUid, actorDisplayNameSnapshot: ownerName,
+  const audit = createAuditEvent({
+    eventId: auditEventId, actorUid: ownerUid,
+    actorDisplayNameSnapshot: input.actorDisplayNameSnapshot,
     action: 'trip.created', entityType: 'trip', entityId: tripId, before: null,
-    after: { name, ownerUid, status: 'active', version: 1 }, reason: null,
+    after: { id: tripId, name, ownerUid, status: 'active', version: 1 }, reason: null,
     revision: 1, ledgerVersion: 0, operationKey, createdAt: now,
-  } as const;
+  });
   return { trip, membership, participant, participantLink, balance, signal, tripRef, audit };
 }

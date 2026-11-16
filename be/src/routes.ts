@@ -11,6 +11,7 @@ import { bootstrapUserProfile } from './services/user-profile.js';
 import { createTripDocuments } from './database/trip.js';
 import { createParticipantDocuments } from './database/participant.js';
 import { createExpenseDocument } from './database/expense.js';
+import { createAuditEvent } from './database/audit.js';
 
 function parse<T>(schema: { safeParse: (value: unknown) => { success: true; data: T } | { success: false } }, body: unknown): T {
   const result = schema.safeParse(body);
@@ -51,7 +52,7 @@ export async function registerRoutes(app: FastifyInstance): Promise<void> {
       const now = Timestamp.now();
       const initial = createTripDocuments({
         tripId, participantId, auditEventId, ownerUid: uid, ownerName: body.ownerName,
-        name: body.name, operationKey: key, now,
+        actorDisplayNameSnapshot: userSnap.get('displayName'), name: body.name, operationKey: key, now,
       });
       tx.create(store.doc(`trips/${tripId}`), initial.trip);
       tx.create(store.doc(`trips/${tripId}/memberships/${uid}`), initial.membership);
@@ -97,6 +98,7 @@ export async function registerRoutes(app: FastifyInstance): Promise<void> {
     const path = `/api/v1/trips/${tripId}/participants`;
     const requestHash = hash(body);
     const participantId = randomUUID();
+    const auditEventId = randomUUID();
     const store = db();
     return store.runTransaction(async tx => {
       const opRef = store.doc(`users/${uid}/operations/${key}`);
@@ -121,6 +123,13 @@ export async function registerRoutes(app: FastifyInstance): Promise<void> {
       });
       tx.create(store.doc(`trips/${tripId}/participants/${participantId}`), initial.participant);
       tx.create(store.doc(`trips/${tripId}/balances/${participantId}`), initial.balance);
+      tx.create(store.doc(`trips/${tripId}/auditEvents/${auditEventId}`), createAuditEvent({
+        eventId: auditEventId, actorUid: uid, actorDisplayNameSnapshot: user.get('displayName'),
+        action: 'participant.created', entityType: 'participant', entityId: participantId,
+        before: null, after: { id: participantId, displayName: body.displayName, linkedUid: null,
+          status: 'active', version: 1 }, reason: null,
+        revision, ledgerVersion: trip.get('ledgerVersion'), operationKey: key, createdAt: now,
+      }));
       tx.update(tripRef, { participantCount: FieldValue.increment(1), revision, updatedAt: now });
       tx.update(store.doc(`trips/${tripId}/signals/current`), { revision, ledgerVersion: trip.get('ledgerVersion'), updatedAt: now });
       tx.create(opRef, { path, requestHash, response, tripId, committedAt: now });
@@ -141,6 +150,7 @@ export async function registerRoutes(app: FastifyInstance): Promise<void> {
     // Empty receiptIds was absent from requests before D05; preserve their operation hash.
     const requestHash = hash({ ...body, receiptIds: undefined });
     const expenseId = randomUUID();
+    const auditEventId = randomUUID();
     const store = db();
     return store.runTransaction(async tx => {
       const opRef = store.doc(`users/${uid}/operations/${key}`);
@@ -191,7 +201,13 @@ export async function registerRoutes(app: FastifyInstance): Promise<void> {
       tx.update(tripRef, { expenseCountAllTime: expenseCount + 1, activeExpenseCount: activeExpenseCount + 1,
         ...totals, revision, ledgerVersion, updatedAt: now });
       tx.update(store.doc(`trips/${tripId}/signals/current`), { revision, ledgerVersion, updatedAt: now });
-      tx.set(store.doc(`trips/${tripId}/auditEvents/${expenseId}`), { actorUid: uid, action: 'expense.created', expenseId, amountMinor: body.amountMinor, shares, createdAt: now });
+      tx.create(store.doc(`trips/${tripId}/auditEvents/${auditEventId}`), createAuditEvent({
+        eventId: auditEventId, actorUid: uid, actorDisplayNameSnapshot: user.get('displayName'),
+        action: 'expense.created', entityType: 'expense', entityId: expenseId, before: null,
+        after: { id: expenseId, amountMinor: body.amountMinor, payerParticipantId: body.payerParticipantId,
+          shares, status: 'active', version: 1 }, reason: null,
+        revision, ledgerVersion, operationKey: key, createdAt: now,
+      }));
       tx.set(opRef, { path, requestHash, response, tripId, committedAt: now });
       return { data: response, meta: { revision, ledgerVersion, replayed: false } };
     });

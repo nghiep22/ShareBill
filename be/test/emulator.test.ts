@@ -6,6 +6,7 @@ import { userDocumentSchema } from '../src/database/user.js';
 import { createTripDocuments } from '../src/database/trip.js';
 import { expenseDocumentSchema } from '../src/database/expense.js';
 import { settlementDocumentSchema } from '../src/database/settlement.js';
+import { auditEventSchema } from '../src/database/audit.js';
 import { Timestamp } from 'firebase-admin/firestore';
 
 const enabled = Boolean(process.env.FIRESTORE_EMULATOR_HOST && process.env.FIREBASE_AUTH_EMULATOR_HOST);
@@ -212,6 +213,9 @@ describe.skipIf(!enabled)('Firebase emulator API flow', () => {
     expect(tripAtLimit.get('participantCount')).toBe(50);
     expect(tripAtLimit.get('membershipCountAllTime')).toBe(1);
     expect(tripAtLimit.get('revision')).toBe(50);
+    const participantAudits = await store.collection(`trips/${tripId}/auditEvents`).get();
+    expect(participantAudits.size).toBe(50);
+    expect(participantAudits.docs.filter(doc => doc.get('action') === 'participant.created')).toHaveLength(49);
     await app.close();
   }, 60_000);
 
@@ -270,6 +274,7 @@ describe.skipIf(!enabled)('Firebase emulator API flow', () => {
     expect(pendingReplay.json().meta.replayed).toBe(true);
     expect(pendingReplay.json().data.id).toBe(settlementId);
     expect((await store.collection(`trips/${tripId}/settlements`).get()).size).toBe(1);
+    expect((await store.collection(`trips/${tripId}/auditEvents`).get()).size).toBe(4);
     const secondExpense = await app.inject({ method: 'POST', url: expenseUrl,
       headers: { authorization, 'idempotency-key': randomUUID() }, payload: expensePayload(20) });
     expect(secondExpense.statusCode).toBe(200);
@@ -307,6 +312,7 @@ describe.skipIf(!enabled)('Firebase emulator API flow', () => {
     expect(confirmReplay.json().meta.replayed).toBe(true);
     expect((await store.doc(`trips/${tripId}`).get()).get('ledgerVersion')).toBe(3);
     expect((await store.doc(`trips/${tripId}/balances/${guestId}`).get()).get('sentMinor')).toBe(10);
+    expect((await store.collection(`trips/${tripId}/auditEvents`).get()).size).toBe(6);
     await app.close();
   }, 30_000);
 
@@ -357,6 +363,7 @@ describe.skipIf(!enabled)('Firebase emulator API flow', () => {
     const ownerUid = ownerIdentity.uid;
     expect([tripDoc, ownerDoc, participantDoc, linkDoc, balanceDoc, signalDoc, refDoc, operationDoc].every(doc => doc.exists)).toBe(true);
     expect(auditQuery.size).toBe(1);
+    expect(auditEventSchema.safeParse(auditQuery.docs[0]?.data()).success).toBe(true);
     expect(tripDoc.data()).toMatchObject({ schemaVersion: 1, ownerUid, createdBy: ownerUid, name: 'Đà Lạt',
       timezone: 'Asia/Ho_Chi_Minh', currency: 'VND', currencyExponent: 0, inviteEpoch: 1,
       moderationVersion: 1, participantCount: 1, membershipCountAllTime: 1,
@@ -384,6 +391,11 @@ describe.skipIf(!enabled)('Firebase emulator API flow', () => {
     const member = await app.inject({ method: 'POST', url: `/api/v1/trips/${tripId}/participants`, headers: { ...headers, 'idempotency-key': randomUUID() }, payload: { displayName: 'Bình' } });
     expect(member.statusCode).toBe(200);
     const secondParticipantId = member.json().data.id;
+    const participantAudit = await store.collection(`trips/${tripId}/auditEvents`).get();
+    expect(participantAudit.size).toBe(2);
+    expect(participantAudit.docs.find(doc => doc.get('action') === 'participant.created')?.get('after')).toMatchObject({
+      id: secondParticipantId, displayName: 'Bình', linkedUid: null, status: 'active', version: 1,
+    });
     const expenseHeaders = { ...headers, 'idempotency-key': randomUUID() };
     const expensePayload = { title: 'Khách sạn', amountMinor: 101, payerParticipantId: ownerParticipantId, splitMethod: 'equal', split: { participantIds: [secondParticipantId, ownerParticipantId] }, occurredOn: '2026-12-20', category: 'stay', note: null };
     const expense = await app.inject({ method: 'POST', url: `/api/v1/trips/${tripId}/expenses`, headers: expenseHeaders, payload: expensePayload });
@@ -403,6 +415,7 @@ describe.skipIf(!enabled)('Firebase emulator API flow', () => {
     expect(expenseDetail.json().data.splitInput).toEqual(expensePayload.split);
     const expenseList = await app.inject({ method: 'GET', url: `/api/v1/trips/${tripId}/expenses`, headers: { authorization: `Bearer ${idToken}` } });
     expect(expenseList.json().data.items).toHaveLength(1);
+    expect((await store.collection(`trips/${tripId}/auditEvents`).get()).size).toBe(3);
     await assertProjection(101, 'stay', 1, 1);
     const [ownerAfterExpense, secondAfterExpense] = await Promise.all([
       store.doc(`trips/${tripId}/participants/${ownerParticipantId}`).get(),
@@ -463,6 +476,32 @@ describe.skipIf(!enabled)('Firebase emulator API flow', () => {
     expect(exactDoc.get('splitInput')).toEqual(exactPayload.split);
     expect(exactDoc.get('shares').reduce((sum: number, share: { amountMinor: number }) => sum + share.amountMinor, 0)).toBe(101);
     await assertProjection(101, 'tickets', 1, 4);
+    const auditEvents = await store.collection(`trips/${tripId}/auditEvents`).get();
+    expect(auditEvents.size).toBe(7);
+    expect(auditEvents.docs.map(doc => doc.get('action')).sort()).toEqual([
+      'trip.created', 'participant.created', 'expense.created', 'expense.created',
+      'expense.voided', 'settlement.created', 'settlement.confirmed',
+    ].sort());
+    for (const event of auditEvents.docs) {
+      expect(event.id).toBe(event.get('eventId'));
+      expect(event.get('actorUid')).toBe(ownerUid);
+      expect(auditEventSchema.safeParse(event.data()).success).toBe(true);
+      expect(event.get('operationKey')).toMatch(/^[0-9a-f-]{36}$/);
+      expect(Number.isSafeInteger(event.get('revision'))).toBe(true);
+      expect(Number.isSafeInteger(event.get('ledgerVersion'))).toBe(true);
+    }
+    const voidAudit = auditEvents.docs.find(doc => doc.get('action') === 'expense.voided');
+    expect(voidAudit?.get('before')).toMatchObject({ id: expenseId, amountMinor: 101, status: 'active', version: 1 });
+    expect(voidAudit?.get('after')).toMatchObject({ id: expenseId, amountMinor: 101, status: 'void', version: 2 });
+    expect(voidAudit?.get('reason')).toBe('Nhập nhầm khoản chi');
+    const confirmAudit = auditEvents.docs.find(doc => doc.get('action') === 'settlement.confirmed');
+    expect(confirmAudit?.get('before')).toMatchObject({ id: settlementId, status: 'pending', version: 1 });
+    expect(confirmAudit?.get('after')).toMatchObject({ id: settlementId, status: 'confirmed', version: 2,
+      confirmationMode: 'owner_on_behalf' });
+    const serializedAudit = JSON.stringify(auditEvents.docs.map(doc => doc.data()));
+    expect(serializedAudit).not.toContain(email);
+    expect(serializedAudit).not.toContain(idToken);
+    expect(serializedAudit).not.toContain('refreshToken');
     const receiptAttempt = await app.inject({ method: 'POST', url: `/api/v1/trips/${tripId}/expenses`,
       headers: { ...headers, 'idempotency-key': randomUUID() },
       payload: { ...exactPayload, receiptIds: [randomUUID()] } });
@@ -495,6 +534,7 @@ describe.skipIf(!enabled)('Firebase emulator API flow', () => {
     expect((await store.collection(`trips/${tripId}/expenses`).get()).size).toBe(3);
     expect((await store.doc(`trips/${tripId}`).get()).get('revision')).toBe(revisionBeforeFailure);
     expect((await store.doc(`users/${ownerUid}/operations/${missingBalanceKey}`).get()).exists).toBe(false);
+    expect((await store.collection(`trips/${tripId}/auditEvents`).get()).size).toBe(7);
     const unauthorized = await app.inject({ method: 'GET', url: `/api/v1/trips/${tripId}/overview` });
     expect(unauthorized.statusCode).toBe(401);
     const outsiderEmail = `sharebill-outsider-${suffix}@example.test`;
