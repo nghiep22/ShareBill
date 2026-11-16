@@ -22,6 +22,7 @@ export const expenseInput = z.discriminatedUnion('splitMethod', [
     occurredOn: z.iso.date(),
     category: z.enum(['food', 'transport', 'stay', 'tickets', 'shopping', 'other']),
     note: z.string().trim().max(1000).nullable().default(null),
+    receiptIds: z.array(z.uuid()).max(3).default([]),
   }),
   z.strictObject({
     title: z.string().trim().min(1).max(120),
@@ -32,5 +33,6 @@ export const expenseInput = z.discriminatedUnion('splitMethod', [
     occurredOn: z.iso.date(),
     category: z.enum(['food', 'transport', 'stay', 'tickets', 'shopping', 'other']),
     note: z.string().trim().max(1000).nullable().default(null),
+    receiptIds: z.array(z.uuid()).max(3).default([]),
   }),
 ]);

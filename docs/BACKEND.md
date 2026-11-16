@@ -441,6 +441,8 @@ Không có DELETE sổ tiền hay participant P0. Không có `/balance/update` t
 
 Response minh họa rút gọn; DTO thật còn các trường metadata theo schema. Client không truyền computed shares trong chế độ equal.
 
+API hiện nhận `split` trong payload tạo khoản chi; document mới lưu dạng chuẩn `splitInput`. GET danh sách/chi tiết trả `splitInput` cả với bản ghi legacy chỉ có `split`. Có thể gửi `receiptIds: []`; receipt ID khác rỗng trả 422 cho tới khi luồng upload/finalize/claim ảnh được triển khai.
+
 Chia exact thay `splitMethod` bằng `exact`, `split` bằng:
 
 ```json

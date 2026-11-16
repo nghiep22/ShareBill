@@ -2,6 +2,7 @@ import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import { db } from './firebase.js';
 import { ApiError, requireUser } from './http.js';
+import { expenseReadData } from './database/expense.js';
 
 function idParams(value: unknown): { tripId: string; id?: string } {
   const result = z.strictObject({ tripId: z.uuid(), id: z.uuid().optional() }).safeParse(value);
@@ -41,7 +42,7 @@ export async function registerReadRoutes(app: FastifyInstance): Promise<void> {
     const uid = await requireUser(request), { tripId } = idParams(request.params), store = db();
     await membership(uid, tripId);
     const result = await store.collection(`trips/${tripId}/expenses`).orderBy('createdAt', 'desc').limit(30).get();
-    return { data: { items: result.docs.map(doc => dto(doc)!), nextCursor: null } };
+    return { data: { items: result.docs.map(doc => expenseReadData(dto(doc)!)), nextCursor: null } };
   });
 
   app.get('/api/v1/trips/:tripId/expenses/:id', async request => {
@@ -49,7 +50,7 @@ export async function registerReadRoutes(app: FastifyInstance): Promise<void> {
     await membership(uid, tripId);
     const expense = await store.doc(`trips/${tripId}/expenses/${id}`).get();
     if (!expense.exists) throw new ApiError(404, 'NOT_FOUND', 'Không tìm thấy khoản chi.');
-    return { data: dto(expense) };
+    return { data: expenseReadData(dto(expense)!) };
   });
 
   app.get('/api/v1/trips/:tripId/settlements', async request => {

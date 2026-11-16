@@ -1,9 +1,10 @@
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import { describe, expect, it } from 'vitest';
 import { buildApp } from '../src/app.js';
 import { auth, db } from '../src/firebase.js';
 import { userDocumentSchema } from '../src/database/user.js';
 import { createTripDocuments } from '../src/database/trip.js';
+import { expenseDocumentSchema } from '../src/database/expense.js';
 import { Timestamp } from 'firebase-admin/firestore';
 
 const enabled = Boolean(process.env.FIRESTORE_EMULATOR_HOST && process.env.FIREBASE_AUTH_EMULATOR_HOST);
@@ -273,6 +274,18 @@ describe.skipIf(!enabled)('Firebase emulator API flow', () => {
     const expense = await app.inject({ method: 'POST', url: `/api/v1/trips/${tripId}/expenses`, headers: expenseHeaders, payload: expensePayload });
     expect(expense.statusCode).toBe(200);
     expect(expense.json().data.shares.reduce((sum: number, s: { amountMinor: number }) => sum + s.amountMinor, 0)).toBe(101);
+    const expenseId = expense.json().data.id as string;
+    const storedExpense = await store.doc(`trips/${tripId}/expenses/${expenseId}`).get();
+    const expenseOperation = await store.doc(`users/${ownerUid}/operations/${expenseHeaders['idempotency-key']}`).get();
+    expect(expenseOperation.get('requestHash')).toBe(createHash('sha256').update(JSON.stringify(expensePayload)).digest('hex'));
+    expect(expenseDocumentSchema.safeParse(storedExpense.data()).success).toBe(true);
+    expect(storedExpense.data()).toMatchObject({ schemaVersion: 1, currency: 'VND', splitInput: expensePayload.split,
+      receiptIds: [], createdBy: ownerUid, updatedBy: ownerUid,
+      voidedAt: null, voidedBy: null, voidReason: null });
+    expect(storedExpense.get('split')).toBeUndefined();
+    const expenseDetail = await app.inject({ method: 'GET', url: `/api/v1/trips/${tripId}/expenses/${expenseId}`,
+      headers: { authorization: `Bearer ${idToken}` } });
+    expect(expenseDetail.json().data.splitInput).toEqual(expensePayload.split);
     const expenseList = await app.inject({ method: 'GET', url: `/api/v1/trips/${tripId}/expenses`, headers: { authorization: `Bearer ${idToken}` } });
     expect(expenseList.json().data.items).toHaveLength(1);
     const duplicate = await app.inject({ method: 'POST', url: `/api/v1/trips/${tripId}/expenses`, headers: expenseHeaders, payload: expensePayload });
@@ -299,9 +312,45 @@ describe.skipIf(!enabled)('Firebase emulator API flow', () => {
     expect(settled.json().data.balances.every((b: { netMinor: number }) => b.netMinor === 0)).toBe(true);
     const voided = await app.inject({ method: 'POST', url: `/api/v1/trips/${tripId}/expenses/${expense.json().data.id}/void`, headers: { ...headers, 'idempotency-key': randomUUID(), 'if-match': '"1"' }, payload: { reason: 'Nhập nhầm khoản chi' } });
     expect(voided.statusCode).toBe(200);
+    const voidedExpense = await store.doc(`trips/${tripId}/expenses/${expenseId}`).get();
+    expect(expenseDocumentSchema.safeParse(voidedExpense.data()).success).toBe(true);
+    expect(voidedExpense.data()).toMatchObject({ status: 'void', version: 2, voidedBy: ownerUid,
+      updatedBy: ownerUid, voidReason: 'Nhập nhầm khoản chi', splitInput: expensePayload.split });
     const afterVoid = await app.inject({ method: 'GET', url: `/api/v1/trips/${tripId}/overview`, headers: { authorization: `Bearer ${idToken}` } });
     expect(afterVoid.json().data.trip.totalExpenseMinor).toBe(0);
     expect(afterVoid.json().data.balances.reduce((sum: number, b: { netMinor: number }) => sum + b.netMinor, 0)).toBe(0);
+    const exactPayload = { ...expensePayload, title: 'Vé', splitMethod: 'exact',
+      split: { shares: [{ participantId: ownerParticipantId, amountMinor: 1 },
+        { participantId: secondParticipantId, amountMinor: 100 }] }, category: 'tickets', receiptIds: [] };
+    const exact = await app.inject({ method: 'POST', url: `/api/v1/trips/${tripId}/expenses`,
+      headers: { ...headers, 'idempotency-key': randomUUID() }, payload: exactPayload });
+    expect(exact.statusCode).toBe(200);
+    const exactDoc = await store.doc(`trips/${tripId}/expenses/${exact.json().data.id}`).get();
+    expect(expenseDocumentSchema.safeParse(exactDoc.data()).success).toBe(true);
+    expect(exactDoc.get('splitInput')).toEqual(exactPayload.split);
+    expect(exactDoc.get('shares').reduce((sum: number, share: { amountMinor: number }) => sum + share.amountMinor, 0)).toBe(101);
+    const receiptAttempt = await app.inject({ method: 'POST', url: `/api/v1/trips/${tripId}/expenses`,
+      headers: { ...headers, 'idempotency-key': randomUUID() },
+      payload: { ...exactPayload, receiptIds: [randomUUID()] } });
+    expect(receiptAttempt.statusCode).toBe(422);
+    expect(receiptAttempt.json().error.code).toBe('RECEIPTS_UNAVAILABLE');
+    const legacyId = randomUUID();
+    const legacyTime = Timestamp.now();
+    const legacySplit = { participantIds: [ownerParticipantId] };
+    await store.doc(`trips/${tripId}/expenses/${legacyId}`).create({ id: legacyId, title: 'Khoản chi cũ',
+      amountMinor: 25, payerParticipantId: ownerParticipantId, splitMethod: 'equal', split: legacySplit,
+      shares: [{ participantId: ownerParticipantId, amountMinor: 25 }], occurredOn: '2026-12-19',
+      category: 'food', note: null, status: 'active', version: 1, createdBy: ownerUid,
+      createdAt: legacyTime, updatedAt: legacyTime });
+    const legacyDetail = await app.inject({ method: 'GET', url: `/api/v1/trips/${tripId}/expenses/${legacyId}`,
+      headers: { authorization: `Bearer ${idToken}` } });
+    expect(legacyDetail.statusCode).toBe(200);
+    expect(legacyDetail.json().data).toMatchObject({ split: legacySplit, splitInput: legacySplit,
+      shares: [{ participantId: ownerParticipantId, amountMinor: 25 }] });
+    const mixedList = await app.inject({ method: 'GET', url: `/api/v1/trips/${tripId}/expenses`,
+      headers: { authorization: `Bearer ${idToken}` } });
+    expect(mixedList.json().data.items).toHaveLength(3);
+    expect(mixedList.json().data.items.find((item: { id: string }) => item.id === legacyId).splitInput).toEqual(legacySplit);
     const unauthorized = await app.inject({ method: 'GET', url: `/api/v1/trips/${tripId}/overview` });
     expect(unauthorized.statusCode).toBe(401);
     const outsiderEmail = `sharebill-outsider-${suffix}@example.test`;

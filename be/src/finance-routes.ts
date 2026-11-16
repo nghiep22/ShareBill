@@ -161,7 +161,7 @@ export async function registerFinanceRoutes(app: FastifyInstance): Promise<void>
       const now = FieldValue.serverTimestamp(), revision = trip.get('revision') + 1, ledgerVersion = trip.get('ledgerVersion') + 1;
       const response = { id, status: 'void', version: expectedVersion + 1 };
       [...deltas].forEach(([pid, delta], index) => tx.set(store.doc(`trips/${tripId}/balances/${pid}`), applyBalanceDelta(balances[index]!, delta)));
-      tx.update(expenseRef, { status: 'void', version: expectedVersion + 1, voidReason: body.reason, voidedBy: uid, voidedAt: now, updatedAt: now });
+      tx.update(expenseRef, { status: 'void', version: expectedVersion + 1, voidReason: body.reason, voidedBy: uid, voidedAt: now, updatedBy: uid, updatedAt: now });
       tx.update(tripRef, { activeExpenseCount: FieldValue.increment(-1), totalExpenseMinor: FieldValue.increment(-amount), revision, ledgerVersion, updatedAt: now });
       tx.set(store.doc(`trips/${tripId}/signals/current`), { revision, ledgerVersion, updatedAt: now });
       tx.set(store.doc(`trips/${tripId}/auditEvents/${randomUUID()}`), { actorUid: uid, action: 'expense.voided', entityId: id, amountMinor: amount, reason: body.reason, createdAt: now });

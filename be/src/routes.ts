@@ -10,6 +10,7 @@ import { auth } from './firebase.js';
 import { bootstrapUserProfile } from './services/user-profile.js';
 import { createTripDocuments } from './database/trip.js';
 import { createParticipantDocuments } from './database/participant.js';
+import { createExpenseDocument } from './database/expense.js';
 
 function parse<T>(schema: { safeParse: (value: unknown) => { success: true; data: T } | { success: false } }, body: unknown): T {
   const result = schema.safeParse(body);
@@ -136,11 +137,13 @@ export async function registerRoutes(app: FastifyInstance): Promise<void> {
     const key = operationKey(request);
     const { tripId } = params(request.params);
     const body = parse(expenseInput, request.body);
+    if (body.receiptIds.length) throw new ApiError(422, 'RECEIPTS_UNAVAILABLE', 'Chưa thể đính kèm ảnh hóa đơn.');
     let shares;
     try { shares = body.splitMethod === 'equal' ? splitEqual(body.amountMinor, body.split.participantIds) : validateExact(body.amountMinor, body.split.shares); }
     catch (error) { throw new ApiError(422, error instanceof Error ? error.message : 'INVALID_SPLIT', 'Cách chia tiền chưa hợp lệ.'); }
     const path = `/api/v1/trips/${tripId}/expenses`;
-    const requestHash = hash(body);
+    // Empty receiptIds was absent from requests before D05; preserve their operation hash.
+    const requestHash = hash({ ...body, receiptIds: undefined });
     const expenseId = randomUUID();
     const store = db();
     return store.runTransaction(async tx => {
@@ -164,14 +167,15 @@ export async function registerRoutes(app: FastifyInstance): Promise<void> {
       const balanceSnaps = await Promise.all([...deltas.keys()].map(id => tx.get(store.doc(`trips/${tripId}/balances/${id}`))));
       const nextBalances = [...deltas].map(([id, delta], index) => applyBalanceDelta((balanceSnaps[index]?.data() as Balance | undefined) ?? zeroBalance(id), delta));
       if (!Number.isSafeInteger(trip.get('totalExpenseMinor') + body.amountMinor)) throw new ApiError(422, 'UNSAFE_AMOUNT', 'Tổng tiền vượt giới hạn.');
-      const now = FieldValue.serverTimestamp();
+      const now = Timestamp.now();
       const revision = trip.get('revision') + 1;
       const ledgerVersion = trip.get('ledgerVersion') + 1;
-      const response = { id: expenseId, ...body, shares, status: 'active', version: 1 };
-      tx.set(store.doc(`trips/${tripId}/expenses/${expenseId}`), { ...response, createdBy: uid, createdAt: now, updatedAt: now });
+      const document = createExpenseDocument({ id: expenseId, body, shares, actorUid: uid, now });
+      const response = { id: expenseId, ...body, currency: 'VND', splitInput: body.split, shares, status: 'active', version: 1 };
+      tx.create(store.doc(`trips/${tripId}/expenses/${expenseId}`), document);
       nextBalances.forEach(b => tx.set(store.doc(`trips/${tripId}/balances/${b.participantId}`), b));
       tx.update(tripRef, { expenseCountAllTime: FieldValue.increment(1), activeExpenseCount: FieldValue.increment(1), totalExpenseMinor: FieldValue.increment(body.amountMinor), revision, ledgerVersion, updatedAt: now });
-      tx.set(store.doc(`trips/${tripId}/signals/current`), { revision, ledgerVersion, updatedAt: now });
+      tx.update(store.doc(`trips/${tripId}/signals/current`), { revision, ledgerVersion, updatedAt: now });
       tx.set(store.doc(`trips/${tripId}/auditEvents/${expenseId}`), { actorUid: uid, action: 'expense.created', expenseId, amountMinor: body.amountMinor, shares, createdAt: now });
       tx.set(opRef, { path, requestHash, response, tripId, committedAt: now });
       return { data: response, meta: { revision, ledgerVersion, replayed: false } };

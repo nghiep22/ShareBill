@@ -2,9 +2,9 @@
 
 [Danh mục và thứ tự thực hiện](README.md) · [Thiết kế CSDL](../DATABASE.md) · [Hợp đồng API](../BACKEND.md)
 
-Hoàn thiện dữ liệu được các API hiện có ghi ra trước khi bổ sung thêm chức năng. D01–D04 đã hoàn tất; D05–D22 còn lại. Schema/index/seed đã có là đầu vào.
+Hoàn thiện dữ liệu được các API hiện có ghi ra trước khi bổ sung thêm chức năng. D01–D05 đã hoàn tất; D06–D22 còn lại. Schema/index/seed đã có là đầu vào.
 
-**Số lát cắt: 22; đã xong: 4; còn lại: 18.** File hiện có là điểm sửa; đường dẫn ghi “mới” hoặc tên module chưa tồn tại là vị trí dự kiến. Mỗi lát cập nhật hợp đồng API/schema liên quan nếu có thay đổi.
+**Số lát cắt: 22; đã xong: 5; còn lại: 17.** File hiện có là điểm sửa; đường dẫn ghi “mới” hoặc tên module chưa tồn tại là vị trí dự kiến. Mỗi lát cập nhật hợp đồng API/schema liên quan nếu có thay đổi.
 
 ## Danh sách nhanh
 
@@ -14,7 +14,7 @@ Hoàn thiện dữ liệu được các API hiện có ghi ra trước khi bổ 
 | [D02](#d02) | ✅ Dùng chung một luồng bootstrap hồ sơ | [D01](#d01) |
 | [D03](#d03) | ✅ Tạo chuyến với đủ liên kết của owner | [D02](#d02) |
 | [D04](#d04) | ✅ Người tham gia và balance zero đủ metadata | [D03](#d03) |
-| [D05](#d05) | Chuẩn hóa document khoản chi | [D04](#d04) |
+| [D05](#d05) | ✅ Chuẩn hóa document khoản chi | [D04](#d04) |
 | [D06](#d06) | Đồng bộ thống kê và số dư khi ghi tiền | [D05](#d05) |
 | [D07](#d07) | Chuẩn hóa document trả nợ | [D06](#d06) |
 | [D08](#d08) | Audit thống nhất cho mutation hiện có | [D03](#d03), [D04](#d04), [D05](#d05), [D07](#d07) |
@@ -113,23 +113,27 @@ Hoàn thiện dữ liệu được các API hiện có ghi ra trước khi bổ 
 
 **Đã làm:** Factory dùng chung cho owner và người thêm sau tạo ParticipantDoc v1 và balance zero với cùng `Timestamp`. Người chưa có tài khoản có `linkedUid=null`, `createdBy`, `updatedAt` và `hasLedgerReferences=false`; balance có `schemaVersion` và `updatedAt`. Transaction dùng `create` cho participant, balance, operation; cập nhật root trip và signal nhưng giữ `schemaVersion` hiện có. Giới hạn 50 người tính cả owner và người từng tạo, không tăng lại khi retry.
 
-**Bằng chứng:** TypeScript check, unit/HTTP tests, build và Firebase Emulator đạt. Integration test kiểm metadata, timestamp, retry trước và tại giới hạn, key dùng lại sai nội dung trả 409; tạo đủ 50 participant có đúng 50 balance, đúng một membership/link owner, lần thêm thứ 51 trả 422 và không ghi operation hay document mồ côi. D05 tiếp tục chuẩn hóa expense; D08/D09 chuẩn hóa audit/operation cho các mutation.
+**Bằng chứng:** TypeScript check, unit/HTTP tests, build và Firebase Emulator đạt. Integration test kiểm metadata, timestamp, retry trước và tại giới hạn, key dùng lại sai nội dung trả 409; tạo đủ 50 participant có đúng 50 balance, đúng một membership/link owner, lần thêm thứ 51 trả 422 và không ghi operation hay document mồ côi. D05 đã chuẩn hóa expense; D08/D09 chuẩn hóa audit/operation cho các mutation.
 
 ### D05
 
 **Chuẩn hóa document khoản chi**
 
-**Trạng thái:** Chưa làm. **Phụ thuộc:** [D04](#d04).
+**Trạng thái:** Hoàn tất. **Phụ thuộc:** [D04](#d04).
 
 **Kết quả:** Expense mới có đủ trường v1; expense cũ vẫn đọc được.
 
-**Phạm vi file/module:** `be/src/routes.ts`, `be/src/database/expense.ts` (mới), `be/src/read-routes.ts`.
+**Phạm vi file/module:** `be/src/routes.ts`, `be/src/database/expense.ts`, `be/src/read-routes.ts`, `be/src/finance-routes.ts`, `be/src/schemas.ts`, `be/test/database-expense.test.ts`, `be/test/emulator.test.ts`.
 
 **Việc làm:** Factory currency/splitInput/receiptIds/update/void metadata; reader tương thích legacy split; không thay công thức shares hiện có.
 
 **Kiểm thử:** Schema test và emulator: equal/exact, shares lẻ, đọc bản ghi legacy.
 
 **Hoàn tất khi:** Writer mới dùng splitInput; không mất shares, amount hoặc lịch sử của bản ghi cũ.
+
+**Đã làm:** Factory và schema v1 tạo expense có `currency=VND`, `splitInput`, shares được kiểm theo cách chia, `receiptIds=[]`, actor/timestamps và void metadata nullable. API POST vẫn nhận `split` để tương thích payload hiện có; document mới chỉ lưu `splitInput`. Hash operation giữ định dạng cũ khi `receiptIds` rỗng để retry trước D05 vẫn nhận đúng kết quả. Reader list/detail bổ sung `splitInput` cho document legacy chỉ có `split`, không sửa bản gốc. Void cập nhật `updatedBy`; receipt ID khác rỗng trả 422 cho tới khi có luồng xác thực ảnh I01–I07.
+
+**Bằng chứng:** TypeScript check, unit/HTTP tests, build, Firebase Emulator và seed local đạt. Unit test kiểm schema/factory và đọc legacy; integration test kiểm equal chia lẻ 101, exact 1+100, document mới/void hợp schema, đọc legacy qua list/detail và không nhận receipt chưa có lifecycle. Seed xác nhận tổng chi 1.200.000đ và net 500.000đ/-100.000đ/-400.000đ. D06 tiếp tục đồng bộ category totals, balance timestamps, hasLedgerReferences và signal khi ghi tiền; D15 migration expense legacy.
 
 ### D06
 
