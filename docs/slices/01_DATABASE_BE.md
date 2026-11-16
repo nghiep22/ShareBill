@@ -2,9 +2,9 @@
 
 [Danh mục và thứ tự thực hiện](README.md) · [Thiết kế CSDL](../DATABASE.md) · [Hợp đồng API](../BACKEND.md)
 
-Hoàn thiện dữ liệu được các API hiện có ghi ra trước khi bổ sung thêm chức năng. D01–D02 đã hoàn tất; D03–D22 còn lại. Schema/index/seed đã có là đầu vào.
+Hoàn thiện dữ liệu được các API hiện có ghi ra trước khi bổ sung thêm chức năng. D01–D03 đã hoàn tất; D04–D22 còn lại. Schema/index/seed đã có là đầu vào.
 
-**Số lát cắt: 22; đã xong: 2; còn lại: 20.** File hiện có là điểm sửa; đường dẫn ghi “mới” hoặc tên module chưa tồn tại là vị trí dự kiến. Mỗi lát cập nhật hợp đồng API/schema liên quan nếu có thay đổi.
+**Số lát cắt: 22; đã xong: 3; còn lại: 19.** File hiện có là điểm sửa; đường dẫn ghi “mới” hoặc tên module chưa tồn tại là vị trí dự kiến. Mỗi lát cập nhật hợp đồng API/schema liên quan nếu có thay đổi.
 
 ## Danh sách nhanh
 
@@ -12,7 +12,7 @@ Hoàn thiện dữ liệu được các API hiện có ghi ra trước khi bổ 
 | --- | --- | --- |
 | [D01](#d01) | ✅ Schema và factory hồ sơ người dùng | Nền dự án đã có |
 | [D02](#d02) | ✅ Dùng chung một luồng bootstrap hồ sơ | [D01](#d01) |
-| [D03](#d03) | Tạo chuyến với đủ liên kết của owner | [D02](#d02) |
+| [D03](#d03) | ✅ Tạo chuyến với đủ liên kết của owner | [D02](#d02) |
 | [D04](#d04) | Người tham gia và balance zero đủ metadata | [D03](#d03) |
 | [D05](#d05) | Chuẩn hóa document khoản chi | [D04](#d04) |
 | [D06](#d06) | Đồng bộ thống kê và số dư khi ghi tiền | [D05](#d05) |
@@ -73,23 +73,27 @@ Hoàn thiện dữ liệu được các API hiện có ghi ra trước khi bổ 
 
 **Đã làm:** Register/login/refresh và tạo chuyến gọi chung `bootstrapUserProfile`. Chỉ khi thiếu document mới tạo `UserDoc` v1 qua factory D01. Profile cũ được đọc mà không ghi đè; người bị khóa nhận 403. `GET /api/v1/me` đọc hồ sơ và trả 404 nếu chưa có; `POST /api/v1/me/bootstrap` dùng Bearer JWT cùng danh tính lấy từ Firebase Auth, từ chối body tự gán role/status.
 
-**Bằng chứng:** `pnpm check:be`, `pnpm test:be`, `pnpm --dir be build` và integration test Firebase Emulator đạt. Test bao gồm register→login→create trip, SDK user bootstrap, Auth user tạo trip trực tiếp, profile legacy không bị viết đè, disabled giữ moderationVersion, body giả quyền bị từ chối. D03 tiếp tục bổ sung dữ liệu gốc chuyến và liên kết owner; migration profile legacy thuộc D13.
+**Bằng chứng:** `pnpm check:be`, `pnpm test:be`, `pnpm --dir be build` và integration test Firebase Emulator đạt. Test bao gồm register→login→create trip, SDK user bootstrap, Auth user tạo trip trực tiếp, profile legacy không bị viết đè, disabled giữ moderationVersion, body giả quyền bị từ chối. D03 đã bổ sung dữ liệu gốc chuyến và liên kết owner; migration profile legacy thuộc D13.
 
 ### D03
 
 **Tạo chuyến với đủ liên kết của owner**
 
-**Trạng thái:** Chưa làm. **Phụ thuộc:** [D02](#d02).
+**Trạng thái:** Hoàn tất. **Phụ thuộc:** [D02](#d02).
 
 **Kết quả:** Một lần tạo chuyến sinh đầy đủ dữ liệu gốc v1.
 
-**Phạm vi file/module:** `be/src/routes.ts`, `be/src/database/trip.ts` (mới), `be/test/emulator.test.ts`.
+**Phạm vi file/module:** `be/src/routes.ts`, `be/src/database/trip.ts`, `be/test/emulator.test.ts`.
 
 **Việc làm:** Bổ sung metadata/defaults, participantLinks của owner, membership timestamps, tripRef; tạo audit/operation dùng adapter hiện có và nâng chuẩn ở D08/D09.
 
 **Kiểm thử:** Emulator: kiểm 9 loại document, link ba chiều, retry cùng key và rollback khi ghi lỗi.
 
 **Hoàn tất khi:** Owner/membership/participant/link/balance nhất quán; không tạo chuyến thứ hai khi retry.
+
+**Đã làm:** Factory tạo TripDoc v1 với metadata, số đếm và tổng sáu nhóm chi đều bằng 0. Route tạo trong cùng Firestore transaction owner membership, participant, participantLink, balance, signal, tripRef, audit `trip.created` và operation. Một `Timestamp` dùng cho toàn bộ dữ liệu gốc; `tx.create` tránh ghi đè document đã tồn tại. Retry cùng key trả lại kết quả cũ; dùng key đó cho nội dung khác trả 409.
+
+**Bằng chứng:** `pnpm check:be`, `pnpm test:be`, `pnpm --dir be build` và Firebase Emulator đạt. Integration test đọc đủ chín loại document, kiểm liên kết UID/participant, metadata và timestamps; kiểm retry không tạo chuyến/audit thứ hai và transaction lỗi không để lại document nào. D04 tiếp tục chuẩn hóa participant được thêm sau; D06 đồng bộ category totals khi ghi chi; D08/D09 chuẩn hóa audit/operation cho mọi mutation.
 
 ### D04
 

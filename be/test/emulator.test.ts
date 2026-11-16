@@ -3,10 +3,40 @@ import { describe, expect, it } from 'vitest';
 import { buildApp } from '../src/app.js';
 import { auth, db } from '../src/firebase.js';
 import { userDocumentSchema } from '../src/database/user.js';
+import { createTripDocuments } from '../src/database/trip.js';
+import { Timestamp } from 'firebase-admin/firestore';
 
 const enabled = Boolean(process.env.FIRESTORE_EMULATOR_HOST && process.env.FIREBASE_AUTH_EMULATOR_HOST);
 
 describe.skipIf(!enabled)('Firebase emulator API flow', () => {
+  it('rolls back every initial trip document when its transaction fails', async () => {
+    const tripId = randomUUID();
+    const participantId = randomUUID();
+    const auditEventId = randomUUID();
+    const ownerUid = randomUUID();
+    const key = randomUUID();
+    const store = db();
+    const initial = createTripDocuments({ tripId, participantId, auditEventId, ownerUid,
+      ownerName: 'An', name: 'Chuyến lỗi', operationKey: key, now: Timestamp.now() });
+    const entries = [
+      [`trips/${tripId}`, initial.trip],
+      [`trips/${tripId}/memberships/${ownerUid}`, initial.membership],
+      [`trips/${tripId}/participants/${participantId}`, initial.participant],
+      [`trips/${tripId}/participantLinks/${ownerUid}`, initial.participantLink],
+      [`trips/${tripId}/balances/${participantId}`, initial.balance],
+      [`trips/${tripId}/signals/current`, initial.signal],
+      [`users/${ownerUid}/tripRefs/${tripId}`, initial.tripRef],
+      [`trips/${tripId}/auditEvents/${auditEventId}`, initial.audit],
+      [`users/${ownerUid}/operations/${key}`, { response: { id: tripId } }],
+    ] as const;
+    await expect(store.runTransaction(async tx => {
+      for (const [path, document] of entries) tx.create(store.doc(path), document);
+      throw new Error('simulated write failure');
+    })).rejects.toThrow('simulated write failure');
+    const snapshots = await Promise.all(entries.map(([path]) => store.doc(path).get()));
+    expect(snapshots.every(snapshot => !snapshot.exists)).toBe(true);
+  }, 30_000);
+
   it('registers, logs in, refreshes JWT, and rejects invalid or disabled sessions', async () => {
     process.env.FIREBASE_WEB_API_KEY = 'demo';
     const app = await buildApp();
@@ -104,7 +134,7 @@ describe.skipIf(!enabled)('Firebase emulator API flow', () => {
     const suffix = randomUUID();
     const email = `sharebill-${suffix}@example.test`;
     const password = `LocalTest-${suffix}!`;
-    await auth().createUser({ email, password });
+    const ownerIdentity = await auth().createUser({ email, password });
     const signIn = await fetch(`http://${process.env.FIREBASE_AUTH_EMULATOR_HOST}/identitytoolkit.googleapis.com/v1/accounts:signInWithPassword?key=demo`, {
       method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ email, password, returnSecureToken: true }),
     });
@@ -114,11 +144,43 @@ describe.skipIf(!enabled)('Firebase emulator API flow', () => {
     const created = await app.inject({ method: 'POST', url: '/api/v1/trips', headers, payload: { name: 'Đà Lạt', ownerName: 'An' } });
     expect(created.statusCode).toBe(200);
     const { id: tripId, ownerParticipantId } = created.json().data;
+    const store = db();
+    const [tripDoc, ownerDoc, participantDoc, linkDoc, balanceDoc, signalDoc, refDoc, auditQuery, operationDoc] = await Promise.all([
+      store.doc(`trips/${tripId}`).get(), store.doc(`trips/${tripId}/memberships/${ownerIdentity.uid}`).get(),
+      store.doc(`trips/${tripId}/participants/${ownerParticipantId}`).get(),
+      store.doc(`trips/${tripId}/participantLinks/${ownerIdentity.uid}`).get(),
+      store.doc(`trips/${tripId}/balances/${ownerParticipantId}`).get(), store.doc(`trips/${tripId}/signals/current`).get(),
+      store.doc(`users/${ownerIdentity.uid}/tripRefs/${tripId}`).get(),
+      store.collection(`trips/${tripId}/auditEvents`).get(),
+      store.doc(`users/${ownerIdentity.uid}/operations/${headers['idempotency-key']}`).get(),
+    ]);
+    const ownerUid = ownerIdentity.uid;
+    expect([tripDoc, ownerDoc, participantDoc, linkDoc, balanceDoc, signalDoc, refDoc, operationDoc].every(doc => doc.exists)).toBe(true);
+    expect(auditQuery.size).toBe(1);
+    expect(tripDoc.data()).toMatchObject({ schemaVersion: 1, ownerUid, createdBy: ownerUid, name: 'Đà Lạt',
+      timezone: 'Asia/Ho_Chi_Minh', currency: 'VND', currencyExponent: 0, inviteEpoch: 1,
+      moderationVersion: 1, participantCount: 1, membershipCountAllTime: 1,
+      categoryTotalsMinor: { food: 0, transport: 0, stay: 0, tickets: 0, shopping: 0, other: 0 },
+      totalExpenseMinor: 0, revision: 1, ledgerVersion: 0, archivedAt: null });
+    expect(ownerDoc.data()).toMatchObject({ schemaVersion: 1, uid: ownerUid, role: 'owner', status: 'active', participantId: ownerParticipantId, removedAt: null });
+    expect(participantDoc.data()).toMatchObject({ schemaVersion: 1, id: ownerParticipantId, linkedUid: ownerUid, createdBy: ownerUid, hasLedgerReferences: false });
+    expect(linkDoc.data()).toMatchObject({ schemaVersion: 1, uid: ownerUid, participantId: ownerParticipantId });
+    expect(balanceDoc.data()).toMatchObject({ schemaVersion: 1, participantId: ownerParticipantId, netMinor: 0 });
+    expect(signalDoc.data()).toMatchObject({ revision: 1, ledgerVersion: 0 });
+    expect(refDoc.data()).toMatchObject({ tripId, status: 'active' });
+    expect(auditQuery.docs[0]?.data()).toMatchObject({ action: 'trip.created', actorUid: ownerUid, entityId: tripId, operationKey: headers['idempotency-key'] });
+    const createdAt = tripDoc.get('createdAt').toMillis();
+    for (const doc of [ownerDoc, participantDoc, refDoc, auditQuery.docs[0]!]) expect(doc.get('createdAt')?.toMillis?.() ?? doc.get('joinedAt')?.toMillis()).toBe(createdAt);
+    const tripCountBeforeReplay = (await store.collection('trips').get()).size;
     const tripList = await app.inject({ method: 'GET', url: '/api/v1/trips', headers: { authorization: `Bearer ${idToken}` } });
     expect(tripList.json().data.items.some((trip: { id: string }) => trip.id === tripId)).toBe(true);
     const replay = await app.inject({ method: 'POST', url: '/api/v1/trips', headers, payload: { name: 'Đà Lạt', ownerName: 'An' } });
     expect(replay.json().data.id).toBe(tripId);
     expect(replay.json().meta.replayed).toBe(true);
+    const reused = await app.inject({ method: 'POST', url: '/api/v1/trips', headers, payload: { name: 'Chuyến khác', ownerName: 'An' } });
+    expect(reused.statusCode).toBe(409);
+    expect((await store.collection('trips').get()).size).toBe(tripCountBeforeReplay);
+    expect((await store.collection(`trips/${tripId}/auditEvents`).get()).size).toBe(1);
     const member = await app.inject({ method: 'POST', url: `/api/v1/trips/${tripId}/participants`, headers: { ...headers, 'idempotency-key': randomUUID() }, payload: { displayName: 'Bình' } });
     expect(member.statusCode).toBe(200);
     const secondParticipantId = member.json().data.id;

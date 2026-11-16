@@ -1,6 +1,6 @@
 import type { FastifyInstance } from 'fastify';
 import { randomUUID, createHash } from 'node:crypto';
-import { FieldValue } from 'firebase-admin/firestore';
+import { FieldValue, Timestamp } from 'firebase-admin/firestore';
 import { z } from 'zod';
 import { db } from './firebase.js';
 import { ApiError, operationKey, requireUser } from './http.js';
@@ -8,6 +8,7 @@ import { tripInput, participantInput, expenseInput } from './schemas.js';
 import { splitEqual, validateExact, expenseDelta, applyBalanceDelta, type Balance } from './domain/money.js';
 import { auth } from './firebase.js';
 import { bootstrapUserProfile } from './services/user-profile.js';
+import { createTripDocuments } from './database/trip.js';
 
 function parse<T>(schema: { safeParse: (value: unknown) => { success: true; data: T } | { success: false } }, body: unknown): T {
   const result = schema.safeParse(body);
@@ -36,6 +37,7 @@ export async function registerRoutes(app: FastifyInstance): Promise<void> {
     const requestHash = hash(body);
     const tripId = randomUUID();
     const participantId = randomUUID();
+    const auditEventId = randomUUID();
     const store = db();
     const opRef = store.doc(`users/${uid}/operations/${key}`);
     return store.runTransaction(async tx => {
@@ -48,21 +50,21 @@ export async function registerRoutes(app: FastifyInstance): Promise<void> {
       const userSnap = await tx.get(userRef);
       if (!userSnap.exists) throw new ApiError(409, 'PROFILE_NOT_FOUND', 'Hồ sơ chưa sẵn sàng. Hãy thử lại.');
       if (userSnap.get('status') !== 'active') throw new ApiError(403, 'ACCOUNT_DISABLED', 'Tài khoản đang tạm khóa.');
-      const now = FieldValue.serverTimestamp();
-      const trip = {
-        id: tripId, name: body.name, ownerUid: uid, status: 'active', moderationStatus: 'normal', currency: 'VND',
-        version: 1, revision: 1, ledgerVersion: 0, participantCount: 1, membershipCountAllTime: 1,
-        expenseCountAllTime: 0, activeExpenseCount: 0, settlementCountAllTime: 0, pendingSettlementCount: 0,
-        totalExpenseMinor: 0, createdAt: now, updatedAt: now,
-      };
-      tx.set(store.doc(`trips/${tripId}`), trip);
-      tx.set(store.doc(`trips/${tripId}/memberships/${uid}`), { uid, role: 'owner', status: 'active', participantId, version: 1, joinedAt: now });
-      tx.set(store.doc(`trips/${tripId}/participants/${participantId}`), { id: participantId, displayName: body.ownerName, linkedUid: uid, status: 'active', version: 1, createdAt: now });
-      tx.set(store.doc(`trips/${tripId}/balances/${participantId}`), zeroBalance(participantId));
-      tx.set(store.doc(`trips/${tripId}/signals/current`), { revision: 1, ledgerVersion: 0, updatedAt: now });
-      tx.set(store.doc(`users/${uid}/tripRefs/${tripId}`), { tripId, status: 'active', joinedAt: now });
+      const now = Timestamp.now();
+      const initial = createTripDocuments({
+        tripId, participantId, auditEventId, ownerUid: uid, ownerName: body.ownerName,
+        name: body.name, operationKey: key, now,
+      });
+      tx.create(store.doc(`trips/${tripId}`), initial.trip);
+      tx.create(store.doc(`trips/${tripId}/memberships/${uid}`), initial.membership);
+      tx.create(store.doc(`trips/${tripId}/participants/${participantId}`), initial.participant);
+      tx.create(store.doc(`trips/${tripId}/participantLinks/${uid}`), initial.participantLink);
+      tx.create(store.doc(`trips/${tripId}/balances/${participantId}`), initial.balance);
+      tx.create(store.doc(`trips/${tripId}/signals/current`), initial.signal);
+      tx.create(store.doc(`users/${uid}/tripRefs/${tripId}`), initial.tripRef);
+      tx.create(store.doc(`trips/${tripId}/auditEvents/${auditEventId}`), initial.audit);
       const response = { id: tripId, name: body.name, ownerParticipantId: participantId, currency: 'VND', version: 1 };
-      tx.set(opRef, { requestHash, path: '/api/v1/trips', response, committedAt: now });
+      tx.create(opRef, { requestHash, path: '/api/v1/trips', response, committedAt: now });
       return { data: response, meta: { replayed: false } };
     });
   });

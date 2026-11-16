@@ -24,14 +24,14 @@ Node API xác minh JWT rồi kiểm quyền trên dữ liệu. Mọi lệnh ghi 
 
 | Nhóm | Có trong code | Cần hoàn thiện |
 | --- | --- | --- |
-| Auth/user | Register, login, refresh JWT; bootstrap hồ sơ | Chuẩn hóa bootstrap duy nhất; user cũ được tạo từ trip có thể thiếu tên/email/moderation; chưa có `schemaVersion` |
-| Trip | Tạo chuyến, counters cơ bản, VND, version/revision/ledgerVersion | Metadata ngày/địa điểm, moderation đầy đủ, category totals, archive/reopen |
-| Membership | Tạo owner membership và tripRef | Trường cập nhật/xóa mềm đầy đủ; invite/join/remove/restore; API phân trang |
-| Participant | Tạo owner/người chưa có tài khoản; balance zero | `participantLinks` cho owner chưa được ghi; `createdBy`, `updatedAt`, `hasLedgerReferences`; link/unlink/inactive |
+| Auth/user | Register, login, refresh JWT; bootstrap hồ sơ v1 dùng chung | Migration hồ sơ legacy D13; quyền và lifecycle còn trong backlog |
+| Trip | Tạo chuyến v1 với metadata, moderation mặc định, counters và category totals bằng 0 | Cập nhật category totals khi ghi tiền D06; archive/reopen |
+| Membership | Owner membership đủ timestamps và tripRef trong cùng transaction | Invite/join/remove/restore; API phân trang |
+| Participant | Owner có participant, participantLink, balance zero và metadata v1 | Người thêm sau cần metadata D04; link/unlink/inactive |
 | Expense | Equal/exact, lưu shares, hủy khoản chi | Chuẩn hóa `splitInput` thay trường legacy `split`; currency/receiptIds/update/void metadata; sửa khoản chi |
 | Settlement | Tạo pending, confirm | Khởi tạo đủ trường nullable; cancel/void; currency; history |
-| Balance/signal | Cập nhật trong transaction, signal có version | Balance thiếu `updatedAt`; checker/reconciler và repair có kiểm soát |
-| Audit/operation | Có một số sự kiện tiền và key chống trùng | Audit trước/sau đầy đủ, audit tạo chuyến/thêm người; chuẩn hóa operation; endpoint tra outcome |
+| Balance/signal | Balance owner và signal tạo cùng trip với `updatedAt`; cập nhật tiền trong transaction | Balance người thêm sau cần `updatedAt` D04; checker/reconciler và repair có kiểm soát |
+| Audit/operation | Tạo chuyến có `trip.created` audit và key chống trùng cùng transaction; có một số sự kiện tiền | Audit thống nhất cho mutation khác D08; chuẩn hóa operation D09; endpoint tra outcome |
 | Receipt/invite/admin/support/jobs | Đã có mô tả trong tài liệu | Chưa có lifecycle/API/worker hoàn chỉnh |
 | Index | Đã bổ sung file cấu hình trong lần cập nhật này | Deploy staging, đợi index ready và chạy query thật; API hiện vẫn chỉ lấy 20/30 bản gần nhất |
 | Dữ liệu mẫu | Đã bổ sung `pnpm --dir be db:seed` | Seed chỉ chạy emulator và đi qua API hiện có; không thay migration |
