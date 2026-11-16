@@ -496,6 +496,8 @@ TTL không xóa subcollections và không bảo đảm xóa ngay khi hết hạn
 
 ## 11. Kế hoạch thực hiện để CSDL đạt v1
 
+Các mã DB-01..09 là nhóm công việc lớn. Dùng [các lát cắt nhỏ](slices/README.md) để thực hiện: D01..D22 chuẩn hóa/migration/query, B01..B19 nghiệp vụ, I01..I08 ảnh, A01..A17 quản trị và O06..O14 staging/vận hành. Mỗi lát có dependency và cổng nghiệm thu; bắt đầu D01 thay vì nhận cả nhóm DB-02 trong một thay đổi.
+
 Ước lượng cho một người làm BE, chưa tính thời gian xây toàn bộ FE hay mua/cấu hình cloud. Các collection cho tính năng chưa code chỉ hoàn thành khi có writer/reader/worker và test tương ứng.
 
 | Thứ tự | Hạng mục | Đầu ra phải có | Tham khảo |

@@ -531,6 +531,8 @@ Không cam kết mã hóa cache local bằng một key cũng lưu trong cùng tr
 
 ## 11. Kế hoạch triển khai FE
 
+Đơn vị triển khai nhỏ nằm ở [F01..F25](slices/04_FRONTEND_APP.md), [I08 cho ảnh hóa đơn](slices/03_HOA_DON.md#i08) và [O01..O05 cho CI/realtime/PWA/offline](slices/06_VAN_HANH.md). Các chặng FE bên dưới là mốc tổng quan; mỗi màn hình/hành động phải đạt tiêu chí của lát tương ứng.
+
 | Chặng | Công việc | Đầu ra nghiệm thu |
 | --- | --- | --- |
 | FE-01 | Bootstrap, tokens, shell, responsive nav, providers | Chạy local/CI build; dùng được 360px |
