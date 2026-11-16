@@ -45,8 +45,8 @@ Hướng dẫn nền tảng cho build/deploy CLI: [Vercel và GitHub Actions](ht
 - Cấu hình website/app/API trong cùng một environment phải trỏ cùng Firebase project/bucket.
 - Không bật emulator flag ở staging/prod; startup fail rõ nếu phát hiện cấu hình lẫn.
 - Preview không được dùng Firebase prod, kể cả khi URL được bảo vệ.
-- OAuth thật kiểm trên domain staging ổn định và production domain. Không thêm wildcard mọi PR hostname vào Authorized Domains.
-- Candidate deployment dùng production config nhưng Google OAuth smoke có thể thực hiện trên canonical domain; trước promote kiểm token/API bằng test account, sau promote kiểm OAuth thật. Không coi OAuth đã test chỉ vì trang login tải được.
+- Đăng ký/đăng nhập Email/Password thật phải được kiểm trên domain staging ổn định và production domain. Nếu bật Google OAuth cho admin, kiểm thêm trên canonical domain; không thêm wildcard mọi PR hostname vào Authorized Domains.
+- Candidate deployment dùng production config; trước promote kiểm token/API bằng test account, sau promote kiểm đăng nhập thật trên canonical domain. Không coi auth đã test chỉ vì trang login tải được.
 - Protection preview phụ thuộc gói và cấu hình. [Vercel Deployment Protection](https://vercel.com/docs/deployment-protection).
 
 ## 3. Bootstrap từ thư mục trống
@@ -89,11 +89,11 @@ Integration/Rules/E2E scripts được bao bằng `firebase emulators:exec` đ�
 
 ### 3.3. Tạo cloud staging trước
 
-- Tạo Firebase staging, bật Google Auth, Firestore, bucket private và billing cần thiết cho Storage.
+- Tạo Firebase staging, bật Email/Password Auth, Firestore, bucket private và billing cần thiết cho Storage. Chỉ bật Google provider nếu triển khai admin Google OAuth.
 - Deploy deny-by-default Rules trước khi public app; không dùng test mode.
 - Tạo service account runtime có quyền tối thiểu cho Auth/Firestore/Storage và khả năng ký URL; tách deploy identity nếu khả thi.
 - Tạo Vercel staging project, thiết lập Node/runtime/build/install commands, env config, canonical staging domain.
-- Thêm đúng staging domain vào Firebase Auth Authorized Domains; cấu hình OAuth consent/provider theo project.
+- Thêm đúng staging domain vào Firebase Auth Authorized Domains; cấu hình OAuth consent/provider nếu bật đăng nhập Google cho admin.
 - Bootstrap platform admin staging bằng UID đã xác minh; không seed admin production từ email fixture.
 - Chạy đầy đủ release rehearsal trên staging rồi lặp cấu hình production riêng biệt.
 
@@ -204,7 +204,7 @@ vercel build --prod
 vercel deploy --prebuilt --prod --skip-domain
 smoke test candidate URL bằng synthetic account
 vercel promote <candidate-deployment-url>
-smoke canonical production domain + OAuth + admin route guard
+smoke canonical production domain + Email/Password auth + admin route guard
 ```
 
 CLI lấy auth từ secret context, không đưa secret vào lệnh được echo. Commands trên là mô tả, không chạy trong bước tạo tài liệu.
@@ -305,7 +305,7 @@ Admin system page chỉ đọc summaries an toàn; có link sang observability c
 | Sai số dư | Suspend trip bị ảnh hưởng; giữ read/audit | Reconcile dry-run, operation/audit và release |
 | Mất quyền bất thường | Verify project/token/membership/user.status | Admin grant/revoke logs, không mở Rules rộng |
 | Storage403 | Intent/membership/expiry, signed policy và signing credential | Bucket IAM/CORS, MIME, size; không bật public bucket |
-| Auth popup/redirect lỗi | Domain/provider/config browser | Staging OAuth thật, third-party storage restrictions |
+| Auth email/password lỗi | Provider, project/API key, domain, cấu hình browser | Staging đăng ký/đăng nhập thật, JWT và refresh |
 | Credential lộ | Revoke/rotate ngay, redeploy config | Audit access, log/artifact exposure |
 | Function timeout | Tra operation key trước retry | DB commit outcome, cold start, dependency latency |
 | Auth job lỗi | Giữ user app status an toàn, retry current desired version | Auth permission, worker lease, stale jobs |
@@ -323,5 +323,5 @@ Admin system page chỉ đọc summaries an toàn; có link sang observability c
 - [ ] Usability với người mới đạt, Android/iOS luồng chính chạy thật.
 - [ ] Backup/restore rehearsal và reconciliation đạt trên staging.
 - [ ] Candidate production smoke đạt trước promote.
-- [ ] OAuth canonical domain và private receipt smoke sau promote đạt.
+- [ ] Email/Password auth canonical domain và private receipt smoke sau promote đạt.
 - [ ] Có release record, deployment rollback target và người vận hành biết runbook.

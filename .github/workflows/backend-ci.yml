@@ -32,5 +32,6 @@ jobs:
       - run: pnpm --dir be exec firebase emulators:exec --project demo-sharebill --only auth,firestore "pnpm test:emulator"
         env:
           FIREBASE_PROJECT_ID: demo-sharebill
+          FIREBASE_WEB_API_KEY: demo
           FIREBASE_AUTH_EMULATOR_HOST: 127.0.0.1:9099
           FIRESTORE_EMULATOR_HOST: 127.0.0.1:8080

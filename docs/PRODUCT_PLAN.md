@@ -43,7 +43,7 @@ Các mục tiêu đo sau khi có người dùng: thời gian nhập một khoả
 
 | Mức | Tính năng | Kết quả cần đạt |
 | --- | --- | --- |
-| P0 | Đăng nhập Google, đăng xuất | Nhận diện người dùng, giữ phiên phù hợp với thiết bị |
+| P0 | Đăng ký/đăng nhập email và mật khẩu, đăng xuất | Firebase ID token JWT; giữ phiên phù hợp với thiết bị |
 | P0 | Tạo/sửa chuyến đi | Tên, địa điểm, ngày, múi giờ, VND |
 | P0 | Thêm người chưa có tài khoản | Chủ nhóm ghi chi tiêu cho cả nhóm ngay |
 | P0 | Mời cộng tác qua link có hạn | Người nhận đăng nhập; không tự chiếm danh tính người có sẵn |
@@ -61,7 +61,7 @@ Các mục tiêu đo sau khi có người dùng: thời gian nhập một khoả
 | P0 | Báo lỗi đơn giản trong app | User gửi mô tả theo ngữ cảnh, admin xử lý trạng thái qua website |
 | P1 | Chia theo phần trăm và trọng số | Dùng chung thuật toán phần dư lớn nhất |
 | P1 | CSV export | Tổng hợp chi tiêu, số dư và thanh toán, bảo vệ CSV injection |
-| P1 | Email/password hoặc provider bổ sung | Google OAuth vẫn là luồng P0 |
+| P1 | Google OAuth hoặc provider bổ sung | Email/password là luồng P0 |
 | P1 | Đa tiền tệ trong một chuyến | Cần đặc tả tỷ giá và rounding độc lập trước khi làm |
 | P1 | OCR hóa đơn có người xác nhận | OCR chỉ điền gợi ý; không tự tạo khoản chi |
 | P2 | Nhiều người trả một khoản | Bổ sung payment contributions, sửa kiểm tra tiền và UI |

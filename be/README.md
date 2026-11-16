@@ -1,6 +1,6 @@
 # ShareBill backend
 
-Backend Node.js/Fastify + TypeScript, dùng Firebase Authentication và Cloud Firestore. Đây là **lát cắt backend đầu tiên**: tạo chuyến, thêm người tham gia, tạo/hủy khoản chi chia đều/chia số tiền riêng, xem tổng quan và gợi ý trả nợ, tạo và xác nhận trả nợ. Chưa có API sửa khoản chi, mời thành viên, hủy lượt trả nợ, upload hóa đơn hay quản trị app. Đặc tả đầy đủ nằm trong [BACKEND.md](../docs/BACKEND.md).
+Backend Node.js/Fastify + TypeScript, dùng Firebase Authentication và Cloud Firestore. Đã có đăng ký/đăng nhập email và mật khẩu, làm mới phiên bằng Firebase ID token (JWT), tạo chuyến, thêm người tham gia, tạo/hủy khoản chi chia đều/chia số tiền riêng, xem tổng quan và gợi ý trả nợ, tạo và xác nhận trả nợ. Chưa có API sửa khoản chi, mời thành viên, hủy lượt trả nợ, upload hóa đơn hay quản trị app. Đặc tả đầy đủ nằm trong [BACKEND.md](../docs/BACKEND.md).
 
 ## Yêu cầu máy
 
@@ -26,13 +26,36 @@ pnpm dev:be
 
 API: `http://localhost:3001/health`. Emulator UI: `http://localhost:4000`. Nếu lệnh `java` chưa nhận sau khi vừa cài JDK trên Windows, mở terminal mới hoặc thêm thư mục `C:\Program Files\Eclipse Adoptium\jdk-21.0.13.9-hotspot\bin` vào PATH của terminal đó.
 
-Backend đọc `be/.env` khi chạy từ thư mục `be`. Đừng commit file này. Trên production, cấu hình `FIREBASE_PROJECT_ID`, `APP_ORIGIN` và server credentials ở host secret store; tuyệt đối không đặt private key trong `fe/` hay biến `NEXT_PUBLIC_*`.
+Backend đọc `be/.env` khi chạy từ thư mục `be`. Đừng commit file này. Trên production, cấu hình `FIREBASE_PROJECT_ID`, `FIREBASE_WEB_API_KEY` (Web API key của cùng Firebase project), `APP_ORIGIN` và server credentials ở host secret store. Bật phương thức **Email/Password** trong Firebase Authentication trước khi dùng tài khoản thật. Tuyệt đối không đặt private key trong `fe/` hay biến `NEXT_PUBLIC_*`.
+
+## Đăng ký, đăng nhập và JWT
+
+| Method | Path | Body | Kết quả |
+| --- | --- | --- | --- |
+| POST | `/api/v1/auth/register` | `{ "email", "password", "displayName" }` | 201; tạo Firebase Auth user và hồ sơ Firestore |
+| POST | `/api/v1/auth/login` | `{ "email", "password" }` | 200; lấy phiên hiện tại |
+| POST | `/api/v1/auth/refresh` | `{ "refreshToken" }` | 200; lấy ID token mới |
+
+Mật khẩu cần 8–128 ký tự; tên hiển thị 1–80 ký tự. Cả ba API trả `Cache-Control: no-store` và `data` gồm `tokenType`, `accessToken`, `refreshToken`, `expiresIn` (giây), `user` (`uid`, `email`, `displayName`). `accessToken` là **Firebase ID token dạng JWT**, gửi trong header `Authorization: Bearer <accessToken>` cho các API chuyến đi. API kiểm chữ ký, project, hạn token, revoke và trạng thái tài khoản. Refresh token là bí mật dài hạn; không ghi log, không gắn vào URL. Với React web, nên dùng Firebase Web SDK để quản lý phiên và tự làm mới token; ba endpoint này hữu ích cho client dùng REST. Đăng xuất một thiết bị là xóa phiên phía client; chức năng thu hồi mọi phiên chưa được triển khai.
+
+Ví dụ PowerShell sau khi emulator và API đã chạy:
+
+```powershell
+$session = Invoke-RestMethod -Method Post -Uri http://localhost:3001/api/v1/auth/register -ContentType 'application/json' -Body '{"email":"an@example.test","password":"ExamplePass123!","displayName":"An"}'
+$token = $session.data.accessToken
+Invoke-RestMethod -Uri http://localhost:3001/api/v1/trips -Headers @{ Authorization = "Bearer $token" }
+```
+
+Đăng ký có thể tạo tài khoản Auth thành công trước khi ghi hồ sơ Firestore. Nếu Firestore tạm lỗi, đăng nhập lại sẽ hoàn tất hồ sơ; không tạo tài khoản thứ hai. Trên production cần đặt rate limit tại ingress cho các endpoint đăng ký/đăng nhập/làm mới phiên.
 
 ## API đã làm
 
 | Method | Path | Yêu cầu |
 | --- | --- | --- |
 | GET | `/health` | Public |
+| POST | `/api/v1/auth/register` | Public; email, password, displayName |
+| POST | `/api/v1/auth/login` | Public; email, password |
+| POST | `/api/v1/auth/refresh` | Public; refreshToken |
 | POST | `/api/v1/trips` | Firebase ID token, Idempotency-Key, body `{name, ownerName}` |
 | GET | `/api/v1/trips` | Danh sách tối đa 20 chuyến gần đây của tài khoản |
 | GET | `/api/v1/trips/:tripId/overview` | ID token, membership active |
@@ -79,7 +102,7 @@ pnpm test:be
 pnpm --dir be build
 ```
 
-Unit tests hiện có kiểm hàm chia tiền, delta số dư và health endpoint. Integration test emulator kiểm luồng đầu tiên, nhưng chưa bao phủ đầy đủ quyền, concurrency và tình huống lỗi; chưa coi API nghiệp vụ đã nghiệm thu cho production.
+Unit tests hiện có kiểm hàm chia tiền, delta số dư và health endpoint. Integration test emulator kiểm đăng ký/đăng nhập/JWT/refresh, tài khoản bị khóa và luồng nghiệp vụ đầu tiên, nhưng chưa bao phủ đầy đủ quyền, concurrency và tình huống lỗi; chưa coi API nghiệp vụ đã nghiệm thu cho production.
 
 Test emulator tạo tài khoản giả, đi qua API tạo chuyến/người/khoản chi, retry cùng key và kiểm số dư. Khi hai emulator đang chạy, dùng:
 

@@ -4,6 +4,8 @@ Phiên bản 1.0 · 16/11/2026 · Phương án chính: Next.js API trên Vercel 
 
 **Cập nhật implementation:** theo yêu cầu tách `fe/` và `be/`, backend thực tế dùng Fastify/Node.js trong `be/` và có thể deploy Vercel như một project riêng. Những đường `src/app/api/...` và đoạn nói Route Handlers bên dưới là thiết kế ban đầu; hợp đồng `/api/v1` và quy tắc tiền/quyền vẫn áp dụng. Xem [BE hiện có](../be/README.md) để biết endpoints đã code.
 
+**Cập nhật auth:** P0 hiện dùng email/password. `POST /api/v1/auth/register`, `/login`, `/refresh` trả Firebase ID token dạng JWT và refresh token; các API protected dùng `verifyIdToken(token, true)`. Web API key chọn Firebase project, không phải bằng chứng xác thực. Google OAuth trong bản thiết kế cũ là tùy chọn sau này hoặc dành riêng cho admin nếu triển khai.
+
 Các quy tắc trong [Product](PRODUCT_PLAN.md) là chuẩn nghiệp vụ. Các schema, endpoint và mã lỗi dưới đây là hợp đồng để FE/BE cùng triển khai. Code mẫu minh họa cấu trúc, chưa thay thế implementation và test.
 
 Tra nhanh: [Dữ liệu](#3-mô-hình-firestore) · [API](#4-api-conventions) · [Tính tiền](#5-thuật-toán-tiền) · [Transaction/retry](#6-transaction-concurrency-và-idempotency) · [Phân quyền](#7-auth-authorization-và-rules) · [Ảnh hóa đơn](#8-ảnh-hóa-đơn-private-upload-và-lifecycle) · [SQLite](#12-phương-án-thay-thế-sqlite-có-backend-riêng).
@@ -18,7 +20,7 @@ Backend chịu trách nhiệm xác thực, phân quyền theo chuyến, chuẩn 
 - TypeScript strict, Zod cho input và DTO; hàm tiền thuần dùng chung FE/BE.
 - Firebase Admin SDK cho Auth/Firestore/Storage ở server.
 - Cloud Firestore Standard edition cho dữ liệu, default database để đơn giản hóa môi trường và tooling.
-- Firebase Auth Google provider P0.
+- Firebase Auth Email/Password provider P0; Google OAuth tùy chọn P1.
 - Cloud Storage for Firebase cho staging ảnh và ảnh đã chuẩn hóa.
 - `sharp` hoặc thư viện xử lý ảnh server tương đương đã kiểm tra tương thích runtime.
 - Emulator Suite cho auth/data/rules tests; Vitest, property-based tests cho domain.

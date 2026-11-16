@@ -29,7 +29,7 @@ Frontend phải giúp người dùng nhập khoản chi nhanh trên điện tho�
 | Icon | Lucide hoặc bộ SVG thống nhất | Không phụ thuộc icon font tải ngoài |
 | Form | React Hook Form + Zod | Form state và validation |
 | Server state | TanStack Query | Fetch, invalidation, mutation status |
-| Auth client | Firebase Web SDK modular | Google sign-in, ID token, auth state |
+| Auth client | Firebase Web SDK modular | Email/password, ID token JWT, auth state |
 | Realtime | Firestore SDK, listener giới hạn | Signal revision và membership của chính mình |
 | Local persistence | IndexedDB qua Dexie | Snapshot/draft tùy chọn thiết bị tin cậy |
 | Tests | Vitest + Testing Library + Playwright | Domain, components trọng yếu, luồng thực tế |
@@ -107,7 +107,8 @@ Domain functions là hàm thuần không import React, Firebase hay `server/`. M
 | Route | Nội dung | Điều kiện |
 | --- | --- | --- |
 | `/` | Giới thiệu ngắn + “Bắt đầu” | Public |
-| `/login` | Google sign-in, lỗi provider, returnTo | Public |
+| `/login` | Email/mật khẩu, lỗi đăng nhập, returnTo | Public |
+| `/register` | Email, mật khẩu, tên hiển thị; dẫn sang chuyến | Public |
 | `/join#token=...` | Đọc invite token từ fragment, đăng nhập, preview, join | Token không được log |
 | `/trips` | Chuyến của tôi, tạo mới | Đăng nhập |
 | `/trips/new` | Form tạo chuyến | Đăng nhập |
@@ -194,13 +195,13 @@ Số trong wireframe là minh họa theo fixture; hiển thị chính thức l�
 
 ### 5.1. Đăng nhập
 
-- Một CTA Google; nêu dữ liệu dùng để nhận diện tài khoản.
-- P0 dùng popup được mở từ thao tác người dùng; có xử lý popup bị chặn/đóng, provider lỗi, mạng yếu, tài khoản disabled.
+- Hai form đơn giản: đăng nhập bằng email/mật khẩu; đăng ký thêm tên hiển thị. Nút chính ghi rõ “Đăng nhập” hoặc “Tạo tài khoản”; có liên kết chuyển form.
+- Kiểm tra email và mật khẩu tối thiểu 8 ký tự ở đăng ký; báo lỗi ngay dưới trường, không xóa dữ liệu đã nhập khi thất bại. Phân biệt trùng email, sai thông tin đăng nhập, mạng yếu và tài khoản disabled.
 - `returnTo` chỉ nhận đường dẫn nội bộ trong allowlist; chặn URL ngoài và `//evil.example`.
 - Auth có ba trạng thái riêng: `initializing`, `authenticated`, `unauthenticated`; không redirect trước khi khởi tạo xong.
 - Mặc định session persistence. Nếu người dùng chọn “Thiết bị cá nhân”, có thể dùng local auth persistence và cache bền vững; hai lựa chọn phải giải thích rõ.
-- Không lưu ID token thủ công vào localStorage/IndexedDB. Để SDK quản lý và lấy token trước khi gọi API.
-- PWA standalone/iOS phải test OAuth thực tế. Nếu cần redirect thay popup, thực hiện cấu hình helper/auth domain theo tài liệu Firebase, không chỉ thay tên hàm. [OAuth redirect best practices](https://firebase.google.com/docs/auth/web/redirect-best-practices).
+- Không lưu ID token hoặc refresh token thủ công vào localStorage/IndexedDB. Để Firebase Web SDK quản lý và lấy ID token trước khi gọi API. Backend có thêm REST register/login/refresh cho client không dùng SDK.
+- PWA standalone/iOS kiểm tra giữ phiên và đăng nhập lại sau khi app được mở từ màn hình chính.
 
 ### 5.2. Danh sách chuyến
 
@@ -533,7 +534,7 @@ Không cam kết mã hóa cache local bằng một key cũng lưu trong cùng tr
 | Chặng | Công việc | Đầu ra nghiệm thu |
 | --- | --- | --- |
 | FE-01 | Bootstrap, tokens, shell, responsive nav, providers | Chạy local/CI build; dùng được 360px |
-| FE-02 | Auth, API client, errors, returnTo | Google login/logout; token refresh; tài khoản tách cache |
+| FE-02 | Auth, API client, errors, returnTo | Email/password register/login/logout; token refresh; tài khoản tách cache |
 | FE-03 | Trip list/create/detail và participants | Tạo chuyến rồi thêm 3 người được |
 | FE-04 | MoneyInput, split editor, expense form/list/detail | Fixture chia đều/exact đúng, không floating point |
 | FE-05 | Version conflict và unknown outcome | Double tap/mất response không sinh bản thứ hai |

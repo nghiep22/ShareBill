@@ -1,6 +1,6 @@
 # ShareBill — Kế hoạch xây dựng app chia tiền du lịch
 
-**Trạng thái triển khai:** monorepo có `fe/` và `be/`; đang làm backend trước. [Chạy backend local](be/README.md). Tài liệu dưới đây là thiết kế đích, một số API/tính năng vẫn chưa được code.
+**Trạng thái triển khai:** monorepo có `fe/` và `be/`; đang làm backend trước. Đã có đăng ký/đăng nhập email và mật khẩu, làm mới Firebase ID token (JWT) cùng các API chia tiền đầu tiên. [Chạy backend local](be/README.md). Tài liệu dưới đây là thiết kế đích, một số API/tính năng vẫn chưa được code.
 
 Tài liệu thiết kế và triển khai, cập nhật ngày **16/11/2026**. Ngôn ngữ sản phẩm: tiếng Việt. Mục tiêu: một người có thể đi từ phân tích bài toán, làm frontend/backend, kiểm thử đến vận hành bản thật.
 

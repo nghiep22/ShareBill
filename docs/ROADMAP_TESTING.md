@@ -16,7 +16,7 @@ Muốn ra bản thử sớm: hoàn thành giai đoạn0–4, deploy staging khô
 | --- | --- | --- | --- | --- |
 | 0. Chốt trải nghiệm | 2–3 ngày | Prototype form đơn giản, thử từ ngữ | Chốt phạm vi P0, tiền và quyền | Người mới hiểu tạo chuyến/nhập chi/đọc nợ |
 | 1. Nền dự án | 3–5 ngày | Shell React mobile + admin, tokens | Node API skeleton, emulator, CI checks | App local chạy, pipeline xanh |
-| 2. Auth và quyền | 3–5 ngày | Google login, session states | Verify token, user bootstrap, admin guard | User thường bị chặn admin |
+| 2. Auth và quyền | 3–5 ngày | Email/password, session states | Register/login/refresh JWT, verify token, user bootstrap, admin guard | User thường bị chặn admin |
 | 3. Trip và participants | 4–6 ngày | Tạo chuyến, thêm người, danh sách | Schema, owner/membership/link | Chủ nhóm thêm người chưa có tài khoản |
 | 4. Expense và balances | 7–10 ngày | Form một màn hình, equal/exact, detail | Domain money, transaction, audit/op | Fixture tiền khớp và retry không trùng |
 | 5. Trả nợ và chốt | 4–6 ngày | Suggestions, pending/confirm/void | Settlement state machine, archive/reopen | Partial payment rồi chốt đúng |
@@ -60,7 +60,7 @@ Không làm OCR/đa tiền tệ trước khi shares, idempotency, membership và
 | BASE-01 | Repo chuẩn | strict TS, scripts, lockfile, env.example, gitignore | — |
 | BASE-02 | CI không secrets | PR chạy lint/types/domain/build với demo config | BASE-01 |
 | BASE-03 | Emulators và seed | Auth/Firestore/Storage local; reset chỉ demo project | BASE-01 |
-| AUTH-01 | Google sign-in | Success/cancel/block/offline đúng UX, returnTo an toàn | BASE-01 |
+| AUTH-01 | Email/password đăng ký/đăng nhập | Validation, trùng email, sai mật khẩu, disabled/offline đúng UX, returnTo an toàn | BASE-01 |
 | AUTH-02 | API verification | Không token401; revoked/disabled bị chặn | AUTH-01 |
 | AUTH-03 | Cache isolation | Logout/đổi user không hiện dữ liệu user cũ | AUTH-01 |
 | TRIP-01 | Tạo trip nguyên tử | Root + owner + participant + balance0 + ref/op tạo một lần | AUTH-02 |
@@ -151,7 +151,7 @@ E4 độc lập: An trả100.000 chia đều An/Bình/Chi. Shares33.334/33.333/3
 - Integration: API + Firestore emulator + transaction, membership, operation; kiểm DB state thực.
 - Rules tests: client SDK cho allow/deny; không dùng Admin SDK để kết luận Rules hoạt động.
 - E2E: hành trình người dùng/admin có giá trị, ít nhưng đủ các nhánh quan trọng.
-- Manual staging: OAuth thật, signed URLs, billing/config, real device, slow/offline network, backup/restore; emulator không chứng minh mọi hành vi production.
+- Manual staging: Email/Password thật, JWT/refresh, signed URLs, billing/config, real device, slow/offline network, backup/restore; emulator không chứng minh mọi hành vi production.
 - Không đặt coverage100% cho component trình bày; bắt buộc cover tất cả invariant và quyền mutation quan trọng.
 
 ## 7. Test matrix bắt buộc
@@ -281,7 +281,7 @@ E4 độc lập: An trả100.000 chia đều An/Bình/Chi. Shares33.334/33.333/3
 9. Trusted-device draft → offline edit → online refresh/review → submit; logout xóa partition.
 10. Các số dư về0 → archive → ghi bị chặn → reopen owner → tiếp tục được.
 
-Không chạy Google OAuth UI automation bằng tài khoản cá nhân trong CI. Emulator/synthetic Auth tạo account fixtures; OAuth thật là smoke staging/thiết bị với tài khoản kiểm thử được chuẩn bị.
+Không chạy đăng nhập bằng tài khoản cá nhân trong CI. Emulator/synthetic Auth tạo account fixtures; đăng ký/đăng nhập thật là smoke staging/thiết bị với tài khoản kiểm thử được chuẩn bị. Nếu bật Google OAuth cho admin, kiểm riêng trên canonical domain.
 
 ## 9. Nghiệm thu từng PR và release
 

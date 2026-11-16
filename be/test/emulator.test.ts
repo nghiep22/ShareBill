@@ -6,6 +6,44 @@ import { auth, db } from '../src/firebase.js';
 const enabled = Boolean(process.env.FIRESTORE_EMULATOR_HOST && process.env.FIREBASE_AUTH_EMULATOR_HOST);
 
 describe.skipIf(!enabled)('Firebase emulator API flow', () => {
+  it('registers, logs in, refreshes JWT, and rejects invalid or disabled sessions', async () => {
+    process.env.FIREBASE_WEB_API_KEY = 'demo';
+    const app = await buildApp();
+    const email = `auth-${randomUUID()}@example.test`;
+    const password = 'TestPassword-123!';
+    const payload = { email, password, displayName: 'An' };
+    const invalid = await app.inject({ method: 'POST', url: '/api/v1/auth/register', payload: { ...payload, password: 'short' } });
+    expect(invalid.statusCode).toBe(422);
+    const registered = await app.inject({ method: 'POST', url: '/api/v1/auth/register', payload });
+    expect(registered.statusCode).toBe(201);
+    expect(registered.headers['cache-control']).toBe('no-store');
+    const session = registered.json().data;
+    expect(session.accessToken.split('.')).toHaveLength(3);
+    expect(session.refreshToken).toBeTruthy();
+    expect(session.user).toMatchObject({ email, displayName: 'An' });
+    expect((await db().doc(`users/${session.user.uid}`).get()).get('status')).toBe('active');
+    const trip = await app.inject({ method: 'POST', url: '/api/v1/trips', headers: { authorization: `Bearer ${session.accessToken}`, 'idempotency-key': randomUUID() }, payload: { name: 'Huế', ownerName: 'An' } });
+    expect(trip.statusCode).toBe(200);
+    const duplicate = await app.inject({ method: 'POST', url: '/api/v1/auth/register', payload });
+    expect(duplicate.statusCode).toBe(409);
+    const wrong = await app.inject({ method: 'POST', url: '/api/v1/auth/login', payload: { email, password: 'wrong-password' } });
+    expect(wrong.statusCode).toBe(401);
+    const loggedIn = await app.inject({ method: 'POST', url: '/api/v1/auth/login', payload: { email: email.toUpperCase(), password } });
+    expect(loggedIn.statusCode).toBe(200);
+    expect(loggedIn.json().data.user.displayName).toBe('An');
+    const refreshed = await app.inject({ method: 'POST', url: '/api/v1/auth/refresh', payload: { refreshToken: session.refreshToken } });
+    expect(refreshed.statusCode).toBe(200);
+    expect(refreshed.json().data.accessToken).toBeTruthy();
+    const badRefresh = await app.inject({ method: 'POST', url: '/api/v1/auth/refresh', payload: { refreshToken: 'invalid' } });
+    expect(badRefresh.statusCode).toBe(401);
+    await db().doc(`users/${session.user.uid}`).update({ status: 'disabled' });
+    const disabledLogin = await app.inject({ method: 'POST', url: '/api/v1/auth/login', payload: { email, password } });
+    expect(disabledLogin.statusCode).toBe(403);
+    const disabledRefresh = await app.inject({ method: 'POST', url: '/api/v1/auth/refresh', payload: { refreshToken: session.refreshToken } });
+    expect(disabledRefresh.statusCode).toBe(403);
+    await app.close();
+  }, 30_000);
+
   it('creates a trip, splits an expense once, and protects it from outsiders', async () => {
     const app = await buildApp();
     const suffix = randomUUID();
