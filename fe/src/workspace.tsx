@@ -123,7 +123,7 @@ export function Workspace() {
         <div className="mobile-brand"><Brand /></div>
         <div className="app-breadcrumb"><span>Chuyến đi</span><span aria-hidden>/</span><strong>{data.trip.name}</strong></div>
         <div className="header-actions">
-          <span className="tag demo-tag">Bản xem thử</span>
+          <a className="tag demo-tag" href="/">Dữ liệu thật</a>
           <a className="icon-button" href="#lich-trinh" aria-label="Lịch trình" aria-current={route === 'lich-trinh' ? 'page' : undefined}><CalendarDays size={21} aria-hidden /></a>
           <a className="icon-button" href="#cai-dat" aria-label="Cài đặt chuyến đi" aria-current={route === 'cai-dat' ? 'page' : undefined}><Settings2 size={22} aria-hidden /></a>
         </div>

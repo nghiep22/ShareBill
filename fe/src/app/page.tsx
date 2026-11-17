@@ -1,5 +1,5 @@
-import { Workspace } from '../workspace';
+import { LiveWorkspace } from '../live';
 
 export default function Page() {
-  return <Workspace />;
+  return <LiveWorkspace />;
 }

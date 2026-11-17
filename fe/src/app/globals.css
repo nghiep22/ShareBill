@@ -282,3 +282,23 @@ input[type="radio"], input[type="checkbox"] { min-height: 0; width: 16px; height
   .main-overview .summary-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .summary-grid .summary-card { align-content: center; }
 }
+
+.live-main { max-width: 760px; padding-bottom: 50px; }
+.live-header { position: sticky; }
+.live-panel { display: grid; gap: 16px; padding: 22px; border-radius: 16px; }
+.live-panel h1, .live-heading h1 { font-size: clamp(23px, 5vw, 30px); line-height: 1.2; letter-spacing: -.04em; }
+.live-panel h2 { display: flex; align-items: center; gap: 8px; font-size: 17px; }
+.live-panel .form-stack { display: grid; gap: 14px; }
+.live-panel .form-stack label { display: grid; gap: 6px; font-weight: 650; }
+.live-panel input:not([type="checkbox"]), .live-panel select, .live-panel textarea { width: 100%; min-height: 45px; padding: 10px 12px; border: 1px solid var(--line); border-radius: 10px; color: var(--ink); background: white; }
+.live-panel .text-button, .live-main > .text-button { justify-self: start; display: inline-flex; align-items: center; gap: 5px; }
+.live-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.live-trip-row { display: grid; gap: 5px; width: 100%; padding: 17px; border-radius: 14px; text-align: left; }
+.live-trip-row:hover { border-color: var(--teal); }
+.live-line { display: flex; justify-content: space-between; align-items: center; gap: 12px; border-top: 1px solid var(--line); padding: 12px 0; }
+.live-line > div { display: grid; gap: 3px; min-width: 0; }
+.live-line .muted { font-size: 12px; }
+.live-line strong:last-child, .live-line > span { white-space: nowrap; }
+.live-fieldset { display: grid; gap: 8px; border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; }
+.live-fieldset label { display: flex !important; align-items: center; gap: 8px; font-weight: 500 !important; }
+.live-fieldset input { width: 18px; height: 18px; }

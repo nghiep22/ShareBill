@@ -1,6 +1,6 @@
 # Frontend ShareBill
 
-Ứng dụng người dùng là Web/PWA mobile-first, viết bằng Next.js và TypeScript. Bản xem thử dựa trên các mẫu trong [GiaoDien](../GiaoDien/GiaoDien) và lưu dữ liệu minh họa trên trình duyệt. Các thao tác thêm khoản chi, quyết toán và mời bạn trong bản xem thử chưa gọi API hoặc đồng bộ với người khác.
+Ứng dụng người dùng là Web/PWA mobile-first, viết bằng Next.js và TypeScript. Trang `/` dùng API cho đăng ký/đăng nhập, tạo chuyến đi, thêm thành viên và khoản chi chia đều; khi chạy ở localhost, trang gọi API local tại cổng 3001. Trang `/demo/` dựa trên các mẫu trong [GiaoDien](../GiaoDien/GiaoDien) và lưu dữ liệu minh họa trên trình duyệt. Các thao tác quyết toán và mời bạn trong bản xem thử chưa gọi API hoặc đồng bộ với người khác.
 
 ## Chạy giao diện
 
@@ -11,20 +11,20 @@ pnpm install
 pnpm --dir fe dev
 ```
 
-Mở `http://localhost:3000` để xem giao diện. Để thử cài PWA và tải lại khi mất mạng, dừng máy chủ dev rồi chạy bản production:
+Chạy Firebase Emulator và backend theo [hướng dẫn backend](../be/README.md#chạy-local), rồi mở `http://localhost:3000` để dùng dữ liệu local. Không dùng tài khoản Firebase staging trên emulator; dữ liệu emulator có thể mất khi dừng. Mở `http://localhost:3000/demo/` để xem bản mẫu mà không cần backend. Để thử cài PWA và tải lại khi mất mạng, dừng máy chủ dev rồi chạy bản production:
 
 ```sh
 pnpm --dir fe build
 pnpm --dir fe start
 ```
 
-Mở ứng dụng một lần khi có mạng để service worker lưu giao diện. Khi thử trên điện thoại, phục vụ thư mục `fe/out` qua HTTPS để trình duyệt có thể cài PWA.
+Mở ứng dụng một lần khi có mạng để service worker lưu phần giao diện. Dữ liệu thật vẫn cần kết nối API; bản `/demo/` chỉ lưu trên thiết bị. Khi thử trên điện thoại, phục vụ thư mục `fe/out` qua HTTPS để trình duyệt có thể cài PWA.
 
 ## Tích hợp backend
 
 Backend nằm trong `../be`. Hợp đồng API của người dùng và quản trị nằm ở [BACKEND.md](../docs/BACKEND.md) và [ADMIN_WEB.md](../docs/ADMIN_WEB.md).
 
-Khi bắt đầu frontend, dùng Firebase Web SDK cho đăng ký/đăng nhập **email và mật khẩu**, quản lý phiên và lấy ID token (JWT), rồi gọi BE với `Authorization: Bearer <token>`. Backend cũng có REST `/api/v1/auth/register`, `/login`, `/refresh` cho client không dùng SDK; hợp đồng và lỗi xem [be/README.md](../be/README.md). Không đặt Firebase Admin SDK hoặc private key trong thư mục này.
+Giao diện hiện dùng REST `/api/v1/auth/register`, `/login`, `/refresh` của backend, lưu phiên trong `sessionStorage` của tab và gửi `Authorization: Bearer <token>` cho thao tác dữ liệu. Trên localhost, yêu cầu đi tới API tại `http://localhost:3001`; trên host khác dùng API staging. Hợp đồng và lỗi xem [be/README.md](../be/README.md). Không đặt Firebase Admin SDK hoặc private key trong thư mục này. Chưa có đặt lại mật khẩu, sửa/hủy khoản chi hoặc quyết toán trong luồng dữ liệu thật.
 
 Sau khi SDK đăng ký/đăng nhập thành công, gọi `POST /api/v1/me/bootstrap` với Bearer ID token và body trống; sau đó dùng `GET /api/v1/me` để đọc hồ sơ. Tên hiển thị ở Firebase Auth được cập nhật trước khi bootstrap. Backend không nhận UID, role hay status từ body của client.
 

@@ -1,6 +1,6 @@
 # ShareBill — Kế hoạch xây dựng app chia tiền du lịch
 
-**Trạng thái triển khai:** đã có Web/PWA mobile-first ở `fe/` và API ở `be/`, cùng môi trường staging Vercel Hobby và Firebase Spark. API có đăng ký/đăng nhập email và mật khẩu, làm mới Firebase ID token (JWT) và các luồng chia tiền đầu tiên. Giao diện hiện dùng dữ liệu mẫu trong trình duyệt. [Mở giao diện](https://sharebill-nghiep22.vercel.app/) · [Tài liệu API staging](https://sharebill-api-staging.vercel.app/docs/) · [Thiết lập staging](docs/CICD_DEPLOY.md).
+**Trạng thái triển khai:** đã có Web/PWA mobile-first ở `fe/` và API ở `be/`, cùng môi trường staging Vercel Hobby và Firebase Spark. Giao diện tại `/` đã nối đăng ký/đăng nhập, chuyến đi và khoản chi với API; `/demo/` vẫn là bản xem thử dùng dữ liệu trên trình duyệt. Thay đổi frontend mới đang được kiểm tra local, chưa triển khai lên Vercel. [Mở bản đang triển khai](https://sharebill-nghiep22.vercel.app/) · [Tài liệu API staging](https://sharebill-api-staging.vercel.app/docs/) · [Thiết lập staging](docs/CICD_DEPLOY.md).
 
 Tài liệu thiết kế và triển khai, cập nhật ngày **16/11/2026**. Ngôn ngữ sản phẩm: tiếng Việt. Mục tiêu: một người có thể đi từ phân tích bài toán, làm frontend/backend, kiểm thử đến vận hành bản thật.
 
