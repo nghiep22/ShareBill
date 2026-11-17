@@ -11,6 +11,10 @@ import { operationDocumentSchema } from '../src/database/operation.js';
 import { Timestamp } from 'firebase-admin/firestore';
 
 const enabled = Boolean(process.env.FIRESTORE_EMULATOR_HOST && process.env.FIREBASE_AUTH_EMULATOR_HOST);
+if (enabled) {
+  process.env.FIREBASE_PROJECT_ID ??= 'demo-sharebill';
+  process.env.FIREBASE_WEB_API_KEY ??= 'demo';
+}
 
 describe.skipIf(!enabled)('Firebase emulator API flow', () => {
   it('rolls back every initial trip document when its transaction fails', async () => {

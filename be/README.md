@@ -6,7 +6,7 @@ Backend Node.js/Fastify + TypeScript, dùng Firebase Authentication và Cloud Fi
 
 Thiết kế lưu trữ và backlog hoàn thiện ở [DATABASE.md](../docs/DATABASE.md). Index P0 đã có trong `firestore.indexes.json` và được nối với `firebase.json`; cần deploy và smoke query trên staging trước release. File index bao gồm cả query của chức năng chưa được code.
 
-Kế hoạch có [20 lát cắt triển khai](../docs/slices/README.md). S01–S03 đã hoàn tất. Backend tiếp tục với [S04 — Kiểm tra CSDL và đối soát ledger](../docs/slices/01_DATABASE_BE.md#s04).
+Kế hoạch có [20 lát cắt triển khai](../docs/slices/README.md). S01–S04 đã hoàn tất. Backend tiếp tục với [S05 — Migration dữ liệu legacy](../docs/slices/01_DATABASE_BE.md#s05).
 
 - Node.js 24 LTS, pnpm 11.25.0; phiên bản lưu trong `.node-version` và `package.json` ở thư mục gốc.
 - Java 21 cho Firebase Emulator Suite.
@@ -44,6 +44,18 @@ Khi cả Emulator và API đã chạy, mở **http://localhost:3001/docs/**. Tra
 Swagger UI chỉ là công cụ thử API; đăng nhập/chuyến đi cần hai Emulator đang chạy. Không chia sẻ accessToken hoặc refreshToken trong ảnh chụp hay issue.
 
 Backend đọc `be/.env` khi chạy từ thư mục `be`. Đừng commit file này. Trên production, cấu hình `FIREBASE_PROJECT_ID`, `FIREBASE_WEB_API_KEY` (Web API key của cùng Firebase project), `APP_ORIGIN` và server credentials ở host secret store. Bật phương thức **Email/Password** trong Firebase Authentication trước khi dùng tài khoản thật. Tuyệt đối không đặt private key trong `fe/` hay biến `NEXT_PUBLIC_*`.
+
+### Kiểm tra CSDL local chỉ đọc
+
+Khi Firebase Emulator đang chạy, mở terminal khác tại thư mục gốc repo:
+
+```powershell
+pnpm --dir be db:check --project demo-sharebill --page-size 25
+# Hoặc chỉ kiểm một chuyến:
+pnpm --dir be db:check --project demo-sharebill --trip <trip-uuid> --page-size 25
+```
+
+Checker xuất JSON với `summary` và các lỗi có mã, đường dẫn, trường và giá trị kỳ vọng/thực tế. Exit code `0` là sạch, `1` là tìm thấy lỗi, `2` là tham số hoặc kết nối sai. Checker không ghi hay sửa document; Emulator không có dữ liệu sẽ báo 0 chuyến đã quét. Chạy bộ test tự khởi động/dừng Emulator bằng `pnpm --dir be exec firebase emulators:exec --project demo-sharebill --only auth,firestore "pnpm test:emulator"`.
 
 ## Đăng ký, đăng nhập và JWT
 

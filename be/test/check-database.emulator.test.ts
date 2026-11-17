@@ -8,6 +8,10 @@ import { checkDatabase } from '../src/database/check-integrity.js';
 import { db } from '../src/firebase.js';
 
 const enabled = Boolean(process.env.FIRESTORE_EMULATOR_HOST && process.env.FIREBASE_AUTH_EMULATOR_HOST);
+if (enabled) {
+  process.env.FIREBASE_PROJECT_ID ??= 'demo-sharebill';
+  process.env.FIREBASE_WEB_API_KEY ??= 'demo';
+}
 const runFile = promisify(execFile);
 
 async function makeLedger() {
@@ -73,6 +77,11 @@ describe.skipIf(!enabled)('read-only database checker', () => {
     expect((await balance.get()).data()).toMatchObject({ receivedMinor: 20, netMinor: 40 });
     expect((await trip.collection('balances').doc(guest).get()).data()).toMatchObject({ sentMinor: 20, netMinor: -40 });
 
+    const command = ['--import', 'tsx', 'scripts/check-database.ts', '--project', process.env.FIREBASE_PROJECT_ID!, '--trip', tripId, '--page-size', '1'];
+    const env = { ...process.env, METADATA_SERVER_DETECTION: 'none' };
+    const cleanOutput = await runFile(process.execPath, command, { env });
+    expect(JSON.parse(cleanOutput.stdout)).toMatchObject({ tripId, target: 'emulator', summary: { issueCount: 0 } });
+
     const batch = store.batch();
     batch.update(balance, { receivedMinor: 30, netMinor: 30 });
     batch.update(trip, { totalExpenseMinor: 150, 'categoryTotalsMinor.food': 150, pendingSettlementCount: 0 });
@@ -90,8 +99,6 @@ describe.skipIf(!enabled)('read-only database checker', () => {
     expect(await fingerprint(trip, user)).toEqual(before);
     expect(JSON.stringify(report)).not.toContain('private-note-checker');
 
-    const command = ['--import', 'tsx', 'scripts/check-database.ts', '--project', process.env.FIREBASE_PROJECT_ID!, '--trip', tripId, '--page-size', '1'];
-    const env = { ...process.env, METADATA_SERVER_DETECTION: 'none' };
     const output = await runFile(process.execPath, command, { env }).catch((error: { code: unknown; stdout: string; stderr: string }) => error);
     expect(output).toMatchObject({ code: 1, stderr: '' });
     expect(JSON.parse(output.stdout)).toMatchObject({ tripId, target: 'emulator', summary: { issueCount: 6 } });
