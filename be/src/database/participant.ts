@@ -1,5 +1,5 @@
 import { Timestamp } from 'firebase-admin/firestore';
-import type { Balance } from '../domain/money.js';
+import { zeroBalance } from '../domain/money.js';
 
 export type ParticipantCreateData = {
   participantId: string;
@@ -17,9 +17,6 @@ export function createParticipantDocuments(input: ParticipantCreateData) {
     status: 'active', version: 1, hasLedgerReferences: false, createdBy,
     createdAt: now, updatedAt: now,
   } as const;
-  const balance: Balance & { schemaVersion: 1; updatedAt: Timestamp } = {
-    schemaVersion: 1, participantId, paidMinor: 0, owedMinor: 0, sentMinor: 0, receivedMinor: 0,
-    netMinor: 0, updatedAt: now,
-  };
+  const balance = { schemaVersion: 1, ...zeroBalance(participantId), updatedAt: now };
   return { participant, balance };
 }

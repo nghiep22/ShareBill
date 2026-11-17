@@ -15,11 +15,11 @@ Tài liệu thiết kế và triển khai, cập nhật ngày **16/11/2026**. Ng
 | [Website quản trị React/Node.js](docs/ADMIN_WEB.md) | UX đơn giản, dashboard, người dùng, chuyến đi, hỗ trợ, quyền quản trị và API Node.js | FE quản trị và BE |
 | [CI/CD và triển khai](docs/CICD_DEPLOY.md) | Môi trường, secrets, GitHub Actions, Vercel, Firebase Rules, release, rollback, backup, vận hành | Cả FE và BE |
 | [Lộ trình và kiểm thử](docs/ROADMAP_TESTING.md) | Công việc theo giai đoạn, dependency, acceptance criteria, dữ liệu mẫu, test matrix, checklist ra mắt | Cả FE và BE |
-| [Các lát cắt triển khai nhỏ](docs/slices/README.md) | 105 lát tổng cộng, D01–D08 đã xong và 97 còn lại; có dependency, file/module, kiểm thử và tiêu chí hoàn tất | Người trực tiếp triển khai |
+| [20 lát cắt triển khai](docs/slices/README.md) | S01–S03 đã hoàn tất, còn 17 lát. Mỗi lát có phụ thuộc, phạm vi và tiêu chí nghiệm thu | Người trực tiếp triển khai |
 
 **Thứ tự đọc:** Product → Database → Frontend/Backend song song → CI/CD → Roadmap. Khi triển khai, Database là hợp đồng lưu trữ, Backend là hợp đồng API và công thức; phạm vi và quy tắc người dùng trong Product là chuẩn nghiệp vụ. Thay đổi hợp đồng phải cập nhật cả hai phía và test liên quan trong cùng PR.
 
-**Bắt đầu công việc tiếp theo:** D01–D08 đã hoàn tất; làm [D09 — operation chuẩn](docs/slices/01_DATABASE_BE.md#d09), rồi D10. Mỗi lát có điều kiện nghiệm thu riêng.
+Lát tiếp theo là [S04 — Kiểm tra CSDL và đối soát ledger](docs/slices/01_DATABASE_BE.md#s04).
 
 ## Hướng triển khai đề xuất
 

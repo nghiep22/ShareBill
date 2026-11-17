@@ -6,7 +6,7 @@ Phiên bản 1.0 · 16/11/2026 · Phương án chính: Next.js API trên Vercel 
 
 **Cập nhật auth:** P0 hiện dùng email/password. `POST /api/v1/auth/register`, `/login`, `/refresh` trả Firebase ID token dạng JWT và refresh token; các API protected dùng `verifyIdToken(token, true)`. Web API key chọn Firebase project, không phải bằng chứng xác thực. Google OAuth trong bản thiết kế cũ là tùy chọn sau này hoặc dành riêng cho admin nếu triển khai.
 
-**Hồ sơ app đã triển khai (D02):** `POST /api/v1/me/bootstrap` nhận Bearer ID token và body trống, lấy danh tính từ Firebase Auth để chỉ tạo hồ sơ v1 khi chưa có. `GET /api/v1/me` chỉ đọc hồ sơ, trả 404 nếu chưa bootstrap. Register/login/refresh và tạo chuyến dùng cùng bootstrap service; hồ sơ legacy được giữ nguyên để migration D13 xử lý sau. Xem [API đang chạy](../be/README.md).
+`POST /api/v1/me/bootstrap` nhận Bearer ID token và body trống, lấy danh tính từ Firebase Auth để chỉ tạo hồ sơ v1 khi chưa có. `GET /api/v1/me` chỉ đọc hồ sơ, trả 404 nếu chưa bootstrap. Register/login/refresh và tạo chuyến dùng chung logic bootstrap. Việc bổ sung trường v1 vào hồ sơ legacy thuộc [S05](slices/01_DATABASE_BE.md#s05). Xem [API đang chạy](../be/README.md).
 
 **Thiết kế CSDL hợp nhất:** [DATABASE.md](DATABASE.md) bổ sung từ điển dữ liệu cho cả app/admin/jobs, schemaVersion, owner link, receipt cleanup fields, index thực thi, migration và cổng nghiệm thu. Đây là hợp đồng lưu trữ đích; trạng thái code hiện tại được ghi riêng, không coi collection đã hoàn thiện chỉ vì có schema mẫu. Các mục bên dưới tiếp tục giải thích thuật toán và API.
 
@@ -322,7 +322,10 @@ type OperationDoc = {
   resourceType: string;
   resourceId: string;
   httpStatus: number;
-  responseSnapshot: unknown;// DTO nhỏ, không receipt URL/raw invite token
+  responseSnapshot: {       // DTO nhỏ, không receipt URL/raw invite token
+    data: unknown;
+    meta: { revision?: number; ledgerVersion?: number };
+  };
   responseEtag: string | null;
   committedAt: Timestamp;
 };
@@ -484,6 +487,7 @@ Confirm dùng `If-Match` của settlement và body `{ "basedOnLedgerVersion": 3 
 | 404 | `NOT_FOUND` | Không tồn tại hoặc không có membership active |
 | 409 | `VERSION_CONFLICT`, `LEDGER_CHANGED`, `CURSOR_STALE` | Refresh, giữ form |
 | 409 | `IDEMPOTENCY_KEY_REUSED` | Không đổi payload của lệnh đang chờ |
+| 409 | `OPERATION_RESULT_UNAVAILABLE` | Giữ key và kiểm tra lại trạng thái nghiệp vụ khi kết quả đã lưu thiếu dữ liệu |
 | 409 | `TRIP_ARCHIVED`, `INVALID_STATE_TRANSITION`, `PARTICIPANT_ALREADY_LINKED` | Giải thích điều kiện trạng thái |
 | 409 | `RECEIPT_NOT_READY`, `RECEIPT_ALREADY_ATTACHED`, `PROCESSING_IN_PROGRESS` | Chờ hoặc chọn ảnh khác |
 | 422 | `VALIDATION_ERROR`, `SPLIT_TOTAL_MISMATCH`, `UNSAFE_AMOUNT` | Field errors |
@@ -614,9 +618,9 @@ Firestore có thể chạy lại callback transaction khi tranh chấp. Vì vậ
 
 ### 6.3. Idempotency chi tiết
 
-1. Scope key theo actor uid. Body hash gồm method, canonical path, normalized body, If-Match; sort key JSON ổn định.
+1. Scope key theo actor uid. Hash gồm method, canonical path, body đã validate và If-Match đã parse ở endpoint yêu cầu version. Sắp xếp key JSON ở mọi cấp và giữ thứ tự phần tử mảng.
 2. Operation committed được ghi nguyên tử với dữ liệu nghiệp vụ; không có khoảng “expense đã có nhưng key chưa lưu”.
-3. Cùng key/hash: trả status/DTO/ETag đã lưu và `Idempotency-Replayed: true`, kể cả entity đã có version cao hơn.
+3. Cùng key/hash: trả status, DTO, metadata phiên bản và ETag đã lưu, kèm `Idempotency-Replayed: true`, kể cả entity đã có version cao hơn. Bản ghi legacy lưu DTO dùng HTTP 200 và trả DTO cũ kèm dấu replay.
 4. Cùng key khác hash: 409, không ghi gì.
 5. Response snapshot có thể cũ theo thiết kế replay; FE invalidate và GET lại overview/detail sau đó.
 6. Nếu uid không còn quyền xem trip, không trả response snapshot riêng tư; trả 404. Replay không tự cấp lại quyền.

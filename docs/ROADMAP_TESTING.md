@@ -6,7 +6,7 @@ Phiên bản 1.0 · 16/11/2026 · Phạm vi gồm app mobile-first và website q
 
 Ưu tiên BE trước theo yêu cầu dự án: mỗi lát backend hoàn thiện API/dữ liệu/test cho một hành vi, sau đó lát FE ghép màn hình vào API đã nghiệm thu. Sau mỗi chặng phải demo được bằng API, script hoặc giao diện tương ứng.
 
-**Danh sách công việc thực thi:** [105 lát cắt nhỏ](slices/README.md), chia thành CSDL, nghiệp vụ BE, ảnh hóa đơn, FE app, admin và vận hành. Mỗi lát có mã/phụ thuộc/phạm vi file/kiểm thử/điều kiện hoàn tất. Bắt đầu D01; các giai đoạn và backlog lớn dưới đây là mốc tổng quan, không phải đơn vị giao việc một lần.
+Theo dõi công việc trong [20 lát cắt triển khai](slices/README.md). Mỗi lát có phụ thuộc, phạm vi file, kiểm thử và điều kiện hoàn tất. Các giai đoạn và ma trận bên dưới cung cấp tiêu chí kiểm thử theo từng nhóm tính năng.
 
 Ước lượng dành cho một người đã biết JavaScript/React cơ bản: **10–14 tuần làm tập trung**, bao gồm admin website và vận hành tối thiểu. Người vừa học vừa làm bán thời gian có thể cần **16–24 tuần hoặc hơn**. Đây là giả định lập kế hoạch, không deadline đã cam kết; chốt lại sau bootstrap và hai luồng đầu.
 

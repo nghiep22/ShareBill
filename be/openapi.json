@@ -22,7 +22,7 @@
       "TripId": { "name": "tripId", "in": "path", "required": true, "description": "ID từ POST /trips hoặc GET /trips", "schema": { "type": "string", "format": "uuid" } },
       "ExpenseId": { "name": "id", "in": "path", "required": true, "description": "ID khoản chi", "schema": { "type": "string", "format": "uuid" } },
       "SettlementId": { "name": "id", "in": "path", "required": true, "description": "ID lượt trả nợ", "schema": { "type": "string", "format": "uuid" } },
-      "IdempotencyKey": { "name": "Idempotency-Key", "in": "header", "required": true, "description": "UUID v4 mới cho mỗi lệnh ghi; dùng lại cùng key để retry cùng payload.", "schema": { "type": "string", "format": "uuid", "example": "550e8400-e29b-41d4-a716-446655440000" } },
+      "IdempotencyKey": { "name": "Idempotency-Key", "in": "header", "required": true, "description": "UUID v4 mới cho mỗi lệnh ghi. Retry với cùng endpoint, payload và If-Match (nếu có) trả kết quả đã lưu, kèm Idempotency-Replayed: true. Key đã dùng cho lệnh khác trả 409.", "schema": { "type": "string", "format": "uuid", "example": "550e8400-e29b-41d4-a716-446655440000" } },
       "IfMatch": { "name": "If-Match", "in": "header", "required": true, "description": "Phiên bản bản ghi, đặt trong dấu ngoặc kép. Ví dụ version 1 gửi \"1\".", "schema": { "type": "string", "pattern": "^\"[1-9][0-9]*\"$", "example": "\"1\"" } }
     },
     "responses": {

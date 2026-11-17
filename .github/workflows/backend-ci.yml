@@ -1,4 +1,4 @@
-name: Backend CI
+name: ShareBill CI
 
 on:
   push:
@@ -9,6 +9,21 @@ permissions:
   contents: read
 
 jobs:
+  frontend:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v6
+      - uses: pnpm/action-setup@v6
+        with:
+          version: 11.25.0
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .node-version
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm --dir fe build
+
   backend:
     runs-on: ubuntu-latest
     timeout-minutes: 20

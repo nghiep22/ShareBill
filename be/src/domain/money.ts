@@ -12,6 +12,10 @@ export type Balance = {
 
 export const MAX_AMOUNT_MINOR = 1_000_000_000_000;
 
+export function zeroBalance(participantId: string): Balance {
+  return { participantId, paidMinor: 0, owedMinor: 0, sentMinor: 0, receivedMinor: 0, netMinor: 0 };
+}
+
 export function applyExpenseTotals(
   totalExpenseMinor: unknown,
   categoryTotalsMinor: unknown,

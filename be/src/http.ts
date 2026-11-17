@@ -1,5 +1,6 @@
 import type { FastifyReply, FastifyRequest } from 'fastify';
 import { auth, db } from './firebase.js';
+import type { OperationOutcome } from './database/operation.js';
 
 export class ApiError extends Error {
   constructor(public status: number, public code: string, message: string) { super(message); }
@@ -22,6 +23,26 @@ export function operationKey(request: FastifyRequest): string {
     throw new ApiError(400, 'INVALID_IDEMPOTENCY_KEY', 'Thiếu mã yêu cầu hợp lệ.');
   }
   return key;
+}
+
+export function requireVersion(value: unknown): number {
+  const match = typeof value === 'string' ? /^"([1-9][0-9]*)"$/.exec(value) : null;
+  const version = Number(match?.[1]);
+  if (!Number.isSafeInteger(version)) throw new ApiError(428, 'PRECONDITION_REQUIRED', 'Hãy tải lại phiên bản mới nhất.');
+  return version;
+}
+
+export function requireTripAccess(member: FirebaseFirestore.DocumentSnapshot, trip: FirebaseFirestore.DocumentSnapshot): void {
+  if (!trip.exists || member.get('status') !== 'active') throw new ApiError(404, 'NOT_FOUND', 'Không tìm thấy chuyến đi.');
+}
+
+export function sendOperationResult(reply: FastifyReply, { outcome, replayed }: { outcome: OperationOutcome; replayed: boolean }) {
+  if (outcome.responseEtag !== null) reply.header('ETag', outcome.responseEtag);
+  if (replayed) reply.header('Idempotency-Replayed', 'true');
+  return reply.code(outcome.httpStatus).send({
+    data: outcome.responseSnapshot.data,
+    meta: { ...outcome.responseSnapshot.meta, replayed },
+  });
 }
 
 export function sendError(error: unknown, _request: FastifyRequest, reply: FastifyReply): void {

@@ -6,7 +6,7 @@ Backend Node.js/Fastify + TypeScript, dùng Firebase Authentication và Cloud Fi
 
 Thiết kế lưu trữ và backlog hoàn thiện ở [DATABASE.md](../docs/DATABASE.md). Index P0 đã có trong `firestore.indexes.json` và được nối với `firebase.json`; cần deploy và smoke query trên staging trước release. File index bao gồm cả query của chức năng chưa được code.
 
-Để triển khai từng phần nhỏ, mở [danh mục lát cắt](../docs/slices/README.md). D01–D08 đã hoàn tất; hàng đợi BE tiếp tục ở [D09 — operation chuẩn](../docs/slices/01_DATABASE_BE.md#d09). Mỗi mã có phạm vi/kiểm thử/nghiệm thu riêng.
+Kế hoạch có [20 lát cắt triển khai](../docs/slices/README.md). S01–S03 đã hoàn tất. Backend tiếp tục với [S04 — Kiểm tra CSDL và đối soát ledger](../docs/slices/01_DATABASE_BE.md#s04).
 
 - Node.js 24 LTS, pnpm 11.25.0; phiên bản lưu trong `.node-version` và `package.json` ở thư mục gốc.
 - Java 21 cho Firebase Emulator Suite.
@@ -67,7 +67,7 @@ Invoke-RestMethod -Uri http://localhost:3001/api/v1/trips -Headers @{ Authorizat
 
 Đăng ký có thể tạo tài khoản Auth thành công trước khi ghi hồ sơ Firestore. Nếu Firestore tạm lỗi, đăng nhập lại sẽ hoàn tất hồ sơ; không tạo tài khoản thứ hai. Trên production cần đặt rate limit tại ingress cho các endpoint đăng ký/đăng nhập/làm mới phiên.
 
-Frontend dùng Firebase Web SDK gọi `POST /api/v1/me/bootstrap` một lần sau đăng ký/đăng nhập bằng `Authorization: Bearer <ID token>` rồi dùng `GET /api/v1/me` để đọc hồ sơ. Body bootstrap phải trống; API lấy UID/email/tên từ Firebase Auth, không nhận role/status từ client. Hồ sơ legacy thiếu trường v1 hiện được giữ nguyên khi đọc; migration D13 xử lý bổ sung sau.
+Frontend dùng Firebase Web SDK gọi `POST /api/v1/me/bootstrap` một lần sau đăng ký/đăng nhập bằng `Authorization: Bearer <ID token>` rồi dùng `GET /api/v1/me` để đọc hồ sơ. Body bootstrap phải trống; API lấy UID/email/tên từ Firebase Auth, không nhận role/status từ client. Việc bổ sung trường v1 vào hồ sơ legacy thuộc [S05](../docs/slices/01_DATABASE_BE.md#s05).
 
 ## API đã làm
 
@@ -115,7 +115,7 @@ Payload khoản chi chia đều:
 }
 ```
 
-Mọi lệnh ghi được kiểm tra quyền trong Firestore transaction, ghi operation key cùng dữ liệu để retry không tạo trùng. Tiền lưu số nguyên VND. Firestore Rules hiện deny toàn bộ client direct reads/writes; API server dùng Admin SDK và tự kiểm quyền.
+Sáu lệnh ghi nghiệp vụ kiểm tra quyền trong Firestore transaction và lưu kết quả cùng dữ liệu. Khi retry, gửi lại cùng `Idempotency-Key`, endpoint, body và `If-Match` nếu lệnh yêu cầu version. API kiểm tra quyền xem chuyến hiện tại rồi trả kết quả gốc kèm `Idempotency-Replayed: true`. Key đã dùng cho lệnh khác trả `409 IDEMPOTENCY_KEY_REUSED`. Tiền lưu số nguyên VND. Firestore Rules hiện deny toàn bộ client direct reads/writes; API server dùng Admin SDK và tự kiểm quyền.
 
 ## Kiểm tra
 

@@ -10,11 +10,15 @@ import { registerReadRoutes } from './read-routes.js';
 import { sendError } from './http.js';
 import { registerAuthRoutes } from './auth-routes.js';
 
-export async function buildApp() {
-  const app = Fastify({ logger: true });
+export async function buildApp(app = Fastify({ logger: true })) {
   const origin = process.env.APP_ORIGIN ?? 'http://localhost:3000';
   const specPath = fileURLToPath(new URL('../openapi.json', import.meta.url));
-  await app.register(cors, { origin: [origin], methods: ['GET', 'POST'], allowedHeaders: ['authorization', 'content-type', 'idempotency-key'] });
+  await app.register(cors, {
+    origin: [origin],
+    methods: ['GET', 'POST'],
+    allowedHeaders: ['authorization', 'content-type', 'idempotency-key', 'if-match'],
+    exposedHeaders: ['idempotency-replayed'],
+  });
   await app.register(swagger, { mode: 'static', specification: { path: specPath, baseDir: dirname(specPath) } });
   await app.register(swaggerUi, {
     routePrefix: '/docs',

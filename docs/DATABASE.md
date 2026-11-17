@@ -24,14 +24,14 @@ Node API xác minh JWT rồi kiểm quyền trên dữ liệu. Mọi lệnh ghi 
 
 | Nhóm | Có trong code | Cần hoàn thiện |
 | --- | --- | --- |
-| Auth/user | Register, login, refresh JWT; bootstrap hồ sơ v1 dùng chung | Migration hồ sơ legacy D13; quyền và lifecycle còn trong backlog |
-| Trip | Tạo chuyến v1 với metadata, moderation mặc định, counters và category totals; create/void expense cập nhật cùng transaction | Archive/reopen; migration projection legacy D14/D16 |
+| Auth/user | Register, login, refresh JWT; bootstrap hồ sơ v1 dùng chung | Migration hồ sơ legacy [S05](slices/01_DATABASE_BE.md#s05) và quản trị tài khoản [S15](slices/05_ADMIN_HO_TRO.md#s15) |
+| Trip | Tạo chuyến v1 với metadata, moderation mặc định, counters và category totals; create/void expense cập nhật cùng transaction | Chốt/mở lại [S09](slices/02_NGHIEP_VU_BE.md#s09) và migration [S05](slices/01_DATABASE_BE.md#s05) |
 | Membership | Owner membership đủ timestamps và tripRef trong cùng transaction | Invite/join/remove/restore; API phân trang |
 | Participant | Owner và người thêm sau có participant/balance zero với metadata v1; owner có participantLink | Link/unlink/inactive; migration dữ liệu cũ |
-| Expense | Writer v1 lưu `splitInput`, shares, currency/receiptIds và void metadata; reader đọc được legacy `split`; create/void đồng bộ tổng chi và số dư | Sửa khoản chi; migration legacy D15; receipt lifecycle I01–I07 |
-| Settlement | Writer v1 tạo pending/confirm đủ currency, metadata nullable, actor/mode/timestamps; giữ mốc ledger lúc tạo | Cancel/void; migration legacy D15 |
-| Balance/signal | Balance có `updatedAt` khi tạo và khi ghi tiền; signal giữ schemaVersion, revision và ledgerVersion theo root | Checker/reconciler và repair có kiểm soát; migration projection legacy D16 |
-| Audit/operation | Sáu mutation chuyến hiện có ghi audit v1 cùng transaction; key chống trùng đã có | Chuẩn hóa operation D09; baseline audit legacy D18; endpoint tra outcome |
+| Expense | Writer v1 lưu `splitInput`, shares, currency/receiptIds và void metadata; reader đọc được legacy `split`; create/void đồng bộ tổng chi và số dư | Sửa khoản chi [S09](slices/02_NGHIEP_VU_BE.md#s09), migration [S05](slices/01_DATABASE_BE.md#s05) và vòng đời ảnh [S10](slices/03_HOA_DON.md#s10) |
+| Settlement | Writer v1 tạo pending/confirm đủ currency, metadata nullable, actor/mode/timestamps; giữ mốc ledger lúc tạo | Hủy/đảo trả nợ [S09](slices/02_NGHIEP_VU_BE.md#s09) và migration [S05](slices/01_DATABASE_BE.md#s05) |
+| Balance/signal | Balance có `updatedAt` khi tạo và khi ghi tiền; signal giữ schemaVersion, revision và ledgerVersion theo root | Kiểm tra/đối soát [S04](slices/01_DATABASE_BE.md#s04), migration [S05](slices/01_DATABASE_BE.md#s05) và repair [S19](slices/06_VAN_HANH.md#s19) |
+| Audit/operation | Sáu mutation chuyến hiện có ghi audit v1 và operation chuẩn cùng transaction; hỗ trợ replay key legacy | Migration operation và baseline audit [S05](slices/01_DATABASE_BE.md#s05), tra kết quả operation [S06](slices/01_DATABASE_BE.md#s06) |
 | Receipt/invite/admin/support/jobs | Đã có mô tả trong tài liệu | Chưa có lifecycle/API/worker hoàn chỉnh |
 | Index | Đã bổ sung file cấu hình trong lần cập nhật này | Deploy staging, đợi index ready và chạy query thật; API hiện vẫn chỉ lấy 20/30 bản gần nhất |
 | Dữ liệu mẫu | Đã bổ sung `pnpm --dir be db:seed` | Seed chỉ chạy emulator và đi qua API hiện có; không thay migration |
@@ -287,7 +287,7 @@ Audit append-only và commit cùng dữ liệu. Không ghi JWT, raw token, email
 | state | committed | Không dùng trạng thái pending cho transaction tài chính |
 | resourceType / resourceId | enum / ID | Entity đã ghi |
 | httpStatus | integer 200..299 | Mã trả thành công gốc |
-| responseSnapshot / responseEtag | DTO map / string? | DTO nhỏ; không token/URL có quyền truy cập |
+| responseSnapshot / responseEtag | `{data, meta}` / string? | DTO nhỏ và metadata revision/ledgerVersion có sẵn khi commit; không token/URL có quyền truy cập |
 | committedAt | Timestamp | Cùng commit với ledger |
 
 Key UUID v4 unique trong namespace UID. Cùng key cùng command trả kết quả cũ; khác payload, path hoặc method trả 409. Recheck quyền hiện tại trước khi trả snapshot có dữ liệu nhóm. Operation tài chính giữ suốt vòng đời sổ chuyến; không bật TTL 24 giờ. Legacy `path`/`response` phải được đọc tương thích cho đến khi migration hoàn tất để retry cũ không tạo expense thứ hai.
@@ -496,7 +496,7 @@ TTL không xóa subcollections và không bảo đảm xóa ngay khi hết hạn
 
 ## 11. Kế hoạch thực hiện để CSDL đạt v1
 
-Các mã DB-01..09 là nhóm công việc lớn. Dùng [các lát cắt nhỏ](slices/README.md) để thực hiện: D01..D22 chuẩn hóa/migration/query, B01..B19 nghiệp vụ, I01..I08 ảnh, A01..A17 quản trị và O06..O14 staging/vận hành. Mỗi lát có dependency và cổng nghiệm thu; bắt đầu D01 thay vì nhận cả nhóm DB-02 trong một thay đổi.
+Các mã DB-01..09 mô tả các nhóm công việc trong thiết kế. Tiến độ được theo dõi trong [20 lát cắt triển khai](slices/README.md). S01–S06 phụ trách nền tảng CSDL và API. S07–S10 mở rộng nghiệp vụ và backend ảnh. Phần quản trị nằm ở S15–S16, còn staging, vận hành và phát hành nằm ở S18–S20.
 
 Ước lượng cho một người làm BE, chưa tính thời gian xây toàn bộ FE hay mua/cấu hình cloud. Các collection cho tính năng chưa code chỉ hoàn thành khi có writer/reader/worker và test tương ứng.
 

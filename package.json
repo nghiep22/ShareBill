@@ -4,6 +4,9 @@
   "packageManager": "pnpm@11.25.0",
   "engines": { "node": ">=24 <27" },
   "scripts": {
+    "dev": "npm --prefix be run dev",
+    "emulators": "npm --prefix be run emulators",
+    "db:seed": "npm --prefix be run db:seed",
     "dev:be": "pnpm --dir be dev",
     "test:be": "pnpm --dir be test",
     "check:be": "pnpm --dir be check"
