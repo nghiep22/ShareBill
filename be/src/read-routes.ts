@@ -5,6 +5,7 @@ import { db } from './firebase.js';
 import { ApiError, requireTripAccess, requireUser } from './http.js';
 import { decodeCursor, encodeCursor, cursorValue, timestampPoint, type CursorScope } from './http/cursor.js';
 import { expenseReadData } from './database/expense.js';
+import { auditEventSchema } from './database/audit.js';
 import { operationDocumentSchema } from './database/operation.js';
 
 const idSchema = z.strictObject({ tripId: z.uuid(), id: z.uuid().optional() });
@@ -44,21 +45,17 @@ function dto(snapshot: FirebaseFirestore.DocumentSnapshot): Record<string, unkno
   return result;
 }
 function activityDto(snapshot: FirebaseFirestore.QueryDocumentSnapshot) {
-  const event = snapshot.data();
-  const actions = ['trip.created', 'participant.created', 'expense.created', 'expense.voided',
-    'settlement.created', 'settlement.confirmed'];
-  const action = typeof event.action === 'string' && actions.includes(event.action) ? event.action : 'legacy';
-  return { eventId: snapshot.id, action,
-    actorUid: typeof event.actorUid === 'string' && event.actorUid.length <= 128 ? event.actorUid : null,
-    actorDisplayNameSnapshot: typeof event.actorDisplayNameSnapshot === 'string' &&
-      event.actorDisplayNameSnapshot.length <= 80 ? event.actorDisplayNameSnapshot : null,
-    entityType: ['trip', 'participant', 'expense', 'settlement'].includes(event.entityType) ? event.entityType : null,
-    entityId: z.uuid().safeParse(event.entityId).success ? event.entityId : null,
-    reason: action === 'expense.voided' && typeof event.reason === 'string' && event.reason.length <= 500
-      ? event.reason : null,
-    revision: Number.isSafeInteger(event.revision) && event.revision > 0 ? event.revision : null,
-    ledgerVersion: Number.isSafeInteger(event.ledgerVersion) && event.ledgerVersion >= 0 ? event.ledgerVersion : null,
-    createdAt: event.createdAt instanceof Timestamp ? event.createdAt.toDate().toISOString() : null };
+  const raw = snapshot.data();
+  const parsed = auditEventSchema.safeParse(raw);
+  if (!parsed.success) return { eventId: snapshot.id, action: 'legacy', actorUid: null,
+    actorDisplayNameSnapshot: null, entityType: null, entityId: null, reason: null,
+    revision: null, ledgerVersion: null,
+    createdAt: raw.createdAt instanceof Timestamp ? raw.createdAt.toDate().toISOString() : null };
+  const event = parsed.data;
+  return { eventId: snapshot.id, action: event.action, actorUid: event.actorUid,
+    actorDisplayNameSnapshot: event.actorDisplayNameSnapshot, entityType: event.entityType,
+    entityId: event.entityId, reason: event.reason, revision: event.revision,
+    ledgerVersion: event.ledgerVersion, createdAt: event.createdAt.toDate().toISOString() };
 }
 function scope(kind: CursorScope['kind'], uid: string, sort: string,
   filters: Record<string, string | null>, tripId?: string): CursorScope {

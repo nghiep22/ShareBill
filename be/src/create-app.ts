@@ -7,6 +7,7 @@ import { dirname } from 'node:path';
 import { registerRoutes } from './routes.js';
 import { registerFinanceRoutes } from './finance-routes.js';
 import { registerReadRoutes } from './read-routes.js';
+import { registerManagementRoutes } from './management-routes.js';
 import { sendError } from './http.js';
 import { registerAuthRoutes } from './auth-routes.js';
 
@@ -35,5 +36,6 @@ export async function buildApp(app = Fastify({ logger: true })) {
   await registerRoutes(app);
   await registerFinanceRoutes(app);
   await registerReadRoutes(app);
+  await registerManagementRoutes(app);
   return app;
 }

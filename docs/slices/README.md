@@ -1,6 +1,6 @@
 # ShareBill — 20 lát cắt triển khai
 
-Cập nhật 17/11/2026. **Đã hoàn tất 6 lát (S01–S06), còn 14 lát.** Công việc tiếp theo là [S07](02_NGHIEP_VU_BE.md#s07) về chỉnh thông tin chuyến và người tham gia.
+Cập nhật 17/11/2026. **Đã hoàn tất 7 lát (S01–S07), còn 13 lát.** Công việc tiếp theo là [S08](02_NGHIEP_VU_BE.md#s08) về lời mời và vòng đời thành viên.
 
 ## Thứ tự triển khai
 
@@ -12,7 +12,7 @@ Cập nhật 17/11/2026. **Đã hoàn tất 6 lát (S01–S06), còn 14 lát.** 
 | [S04](01_DATABASE_BE.md#s04) | Kiểm tra CSDL và đối soát ledger | Hoàn tất | [S03](01_DATABASE_BE.md#s03) |
 | [S05](01_DATABASE_BE.md#s05) | Migration dữ liệu legacy | Hoàn tất trên Emulator | [S04](01_DATABASE_BE.md#s04) |
 | [S06](01_DATABASE_BE.md#s06) | Phân trang và hợp đồng API cho frontend | Hoàn tất trên Emulator | [S05](01_DATABASE_BE.md#s05) |
-| [S07](02_NGHIEP_VU_BE.md#s07) | Chỉnh thông tin chuyến và người tham gia | Chưa làm | [S05](01_DATABASE_BE.md#s05) |
+| [S07](02_NGHIEP_VU_BE.md#s07) | Chỉnh thông tin chuyến và người tham gia | Hoàn tất trên Emulator | [S05](01_DATABASE_BE.md#s05) |
 | [S08](02_NGHIEP_VU_BE.md#s08) | Lời mời và vòng đời thành viên | Chưa làm | [S06](01_DATABASE_BE.md#s06), [S07](02_NGHIEP_VU_BE.md#s07) |
 | [S09](02_NGHIEP_VU_BE.md#s09) | Sửa giao dịch và chốt chuyến | Chưa làm | [S08](02_NGHIEP_VU_BE.md#s08) |
 | [S10](03_HOA_DON.md#s10) | Backend ảnh hóa đơn | Chưa làm | [S09](02_NGHIEP_VU_BE.md#s09) |

@@ -6,7 +6,7 @@ Backend Node.js/Fastify + TypeScript, dùng Firebase Authentication và Cloud Fi
 
 Thiết kế lưu trữ và backlog hoàn thiện ở [DATABASE.md](../docs/DATABASE.md). Index P0 đã có trong `firestore.indexes.json` và được nối với `firebase.json`; cần deploy và smoke query trên staging trước release. File index bao gồm cả query của chức năng chưa được code.
 
-Kế hoạch có [20 lát cắt triển khai](../docs/slices/README.md). S01–S06 đã hoàn tất trên local/Emulator. Backend tiếp tục với [S07 — Chỉnh thông tin chuyến và người tham gia](../docs/slices/02_NGHIEP_VU_BE.md#s07).
+Kế hoạch có [20 lát cắt triển khai](../docs/slices/README.md). S01–S07 đã hoàn tất trên local/Emulator. Backend tiếp tục với [S08 — Lời mời và vòng đời thành viên](../docs/slices/02_NGHIEP_VU_BE.md#s08).
 
 - Node.js 24 LTS, pnpm 11.25.0; phiên bản lưu trong `.node-version` và `package.json` ở thư mục gốc.
 - Java 21 cho Firebase Emulator Suite.
@@ -34,7 +34,7 @@ Trong terminal **cmd** của VS Code, có thể chạy `cd be` rồi `npm run em
 
 ### Thử API trên Swagger UI
 
-Khi cả Emulator và API đã chạy, mở **http://localhost:3001/docs/**. Trang này mô tả 20 endpoint hiện có; đặc tả JSON ở `http://localhost:3001/docs/json`.
+Khi cả Emulator và API đã chạy, mở **http://localhost:3001/docs/**. Trang này mô tả 23 endpoint hiện có; đặc tả JSON ở `http://localhost:3001/docs/json`.
 
 1. Mở **Tài khoản → POST /api/v1/auth/register** (hoặc `login`), bấm **Try it out**, điền email/mật khẩu/tên rồi **Execute**. Mỗi lần đăng ký cần email mới.
 2. Trong response, sao chép **`data.accessToken`**. Bấm **Authorize** ở đầu trang, dán token vào ô BearerAuth **không thêm chữ `Bearer`**, rồi **Authorize**.
@@ -106,7 +106,10 @@ Frontend dùng Firebase Web SDK gọi `POST /api/v1/me/bootstrap` một lần sa
 | POST | `/api/v1/trips` | Firebase ID token, Idempotency-Key, body `{name, ownerName}` |
 | GET | `/api/v1/trips` | `status`, `limit` tối đa 20, `cursor`; kiểm membership hiện tại |
 | GET | `/api/v1/trips/:tripId/overview` | ID token, membership active |
+| PATCH | `/api/v1/trips/:tripId` | Owner sửa tên/địa điểm/ngày/ghi chú/múi giờ; Idempotency-Key, If-Match trip.version |
 | POST | `/api/v1/trips/:tripId/participants` | ID token, owner, Idempotency-Key, body `{displayName}` |
+| PATCH | `/api/v1/trips/:tripId/participants/:id` | Owner đổi tên/active/inactive; Idempotency-Key, If-Match participant.version |
+| POST | `/api/v1/trips/:tripId/memberships/:uid/link` | Owner gắn participantId hoặc null để gỡ; lý do, Idempotency-Key, If-Match membership.version |
 | POST | `/api/v1/trips/:tripId/expenses` | ID token, member, Idempotency-Key, split equal/exact |
 | GET | `/api/v1/trips/:tripId/expenses` | `status`, `from`/`to`, một trong `category`/`payer`, `limit` tối đa 50, `cursor` |
 | GET | `/api/v1/trips/:tripId/expenses/:id` | Chi tiết khoản chi |

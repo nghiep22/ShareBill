@@ -9,6 +9,28 @@ export const participantInput = z.strictObject({
   displayName: z.string().trim().min(1).max(80),
 });
 
+export const tripUpdateInput = z.strictObject({
+  name: z.string().trim().min(1).max(100).optional(),
+  destination: z.string().trim().min(1).max(150).nullable().optional(),
+  note: z.string().trim().max(1000).nullable().optional(),
+  startDate: z.iso.date().nullable().optional(),
+  endDate: z.iso.date().nullable().optional(),
+  timezone: z.string().refine(value => {
+    try { new Intl.DateTimeFormat('en', { timeZone: value }); return true; }
+    catch { return false; }
+  }).optional(),
+}).refine(value => Object.keys(value).length > 0);
+
+export const participantUpdateInput = z.strictObject({
+  displayName: z.string().trim().min(1).max(80).optional(),
+  status: z.enum(['active', 'inactive']).optional(),
+}).refine(value => Object.keys(value).length > 0);
+
+export const participantLinkInput = z.strictObject({
+  participantId: z.uuid().nullable(),
+  reason: z.string().trim().min(1).max(300),
+});
+
 const money = z.number().int().min(1).max(1_000_000_000_000);
 const id = z.string().min(1).max(128);
 

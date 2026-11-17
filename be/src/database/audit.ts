@@ -5,9 +5,15 @@ const tripSnapshot = z.strictObject({
   id: z.uuid(), name: z.string().min(1).max(100), ownerUid: z.string().min(1),
   status: z.literal('active'), version: z.number().int().min(1).safe(),
 });
+const tripMetadataSnapshot = z.strictObject({
+  id: z.uuid(), name: z.string().min(1).max(100), destination: z.string().max(150).nullable(),
+  note: z.string().max(1000).nullable(), startDate: z.iso.date().nullable(), endDate: z.iso.date().nullable(),
+  timezone: z.string().min(1), status: z.enum(['active', 'archived']),
+  version: z.number().int().min(1).safe(),
+});
 const participantSnapshot = z.strictObject({
   id: z.uuid(), displayName: z.string().min(1).max(80), linkedUid: z.string().min(1).nullable(),
-  status: z.literal('active'), version: z.number().int().min(1).safe(),
+  status: z.enum(['active', 'inactive']), version: z.number().int().min(1).safe(),
 });
 const shareSnapshot = z.strictObject({ participantId: z.uuid(), amountMinor: z.number().int().nonnegative().safe() });
 const expenseSnapshot = z.strictObject({
@@ -24,7 +30,13 @@ const settlementSnapshot = z.strictObject({
 
 const specs = {
   'trip.created': { entityType: 'trip', before: z.null(), after: tripSnapshot, reason: z.null() },
+  'trip.updated': { entityType: 'trip', before: tripMetadataSnapshot, after: tripMetadataSnapshot, reason: z.null() },
   'participant.created': { entityType: 'participant', before: z.null(), after: participantSnapshot, reason: z.null() },
+  'participant.updated': { entityType: 'participant', before: participantSnapshot, after: participantSnapshot, reason: z.null() },
+  'participant.linked': { entityType: 'participant', before: participantSnapshot, after: participantSnapshot,
+    reason: z.string().min(1).max(300) },
+  'participant.unlinked': { entityType: 'participant', before: participantSnapshot, after: participantSnapshot,
+    reason: z.string().min(1).max(300) },
   'expense.created': { entityType: 'expense', before: z.null(), after: expenseSnapshot, reason: z.null() },
   'expense.voided': { entityType: 'expense', before: expenseSnapshot, after: expenseSnapshot,
     reason: z.string().min(1).max(300) },
@@ -33,7 +45,8 @@ const specs = {
     reason: z.null() },
 } as const;
 
-const actions = ['trip.created', 'participant.created', 'expense.created', 'expense.voided',
+const actions = ['trip.created', 'trip.updated', 'participant.created', 'participant.updated',
+  'participant.linked', 'participant.unlinked', 'expense.created', 'expense.voided',
   'settlement.created', 'settlement.confirmed'] as const;
 export type AuditAction = (typeof actions)[number];
 
@@ -93,6 +106,16 @@ export const auditEventSchema = z.strictObject({
         event.before.confirmationMode !== null || event.after.confirmationMode === null)) {
     context.addIssue({ code: 'custom', message: 'invalid settlement transition', path: ['after'] });
   }
+  if (event.action === 'trip.updated' && event.after.version !== (event.before?.version as number) + 1) {
+    context.addIssue({ code: 'custom', message: 'invalid trip update', path: ['after'] });
+  }
+  if ((event.action === 'participant.updated' || event.action === 'participant.linked' ||
+      event.action === 'participant.unlinked') &&
+      (event.after.version !== (event.before?.version as number) + 1 ||
+        event.action === 'participant.linked' && (event.before?.linkedUid !== null || event.after.linkedUid === null) ||
+        event.action === 'participant.unlinked' && (event.before?.linkedUid === null || event.after.linkedUid !== null))) {
+    context.addIssue({ code: 'custom', message: 'invalid participant update', path: ['after'] });
+  }
 });
 
 export type AuditEvent = z.infer<typeof auditEventSchema>;
@@ -127,8 +150,9 @@ export function createAuditEvent(input: {
   createdAt: Timestamp;
 }): AuditEvent {
   const after = { ...input.after };
-  if (input.action === 'trip.created' && typeof after.name === 'string') after.name = redactAuditText(after.name);
-  if (input.action === 'participant.created' && typeof after.displayName === 'string') {
+  if ((input.action === 'trip.created' || input.action === 'trip.updated') && typeof after.name === 'string') after.name = redactAuditText(after.name);
+  if ((input.action === 'participant.created' || input.action === 'participant.updated' ||
+      input.action === 'participant.linked' || input.action === 'participant.unlinked') && typeof after.displayName === 'string') {
     after.displayName = redactAuditText(after.displayName);
   }
   return auditEventSchema.parse({ ...input, schemaVersion: 1,

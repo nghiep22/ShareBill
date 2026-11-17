@@ -8,10 +8,12 @@ Bổ sung các luồng quản lý chuyến, thành viên và giao dịch trên t
 
 **Chỉnh thông tin chuyến và người tham gia**
 
-- **Trạng thái** Chưa làm
+- **Trạng thái** Hoàn tất trên Firebase Emulator; chưa triển khai cloud.
 - **Phụ thuộc** [S05](01_DATABASE_BE.md#s05)
 - **Kết quả** Sửa metadata chuyến, đổi tên/ngừng chia và liên kết hoặc gỡ UID với participant.
 - **Nghiệm thu** Kiểm quyền owner và `If-Match`. Hai request cạnh tranh chỉ tạo liên kết hợp lệ. Lịch sử, số dư và `ledgerVersion` dùng đúng dữ liệu đã ghi.
+- **Đã làm** `PATCH /trips/:tripId` chỉ nhận tên/địa điểm/ghi chú/ngày/múi giờ, kiểm khoảng ngày và schema; `PATCH /participants/:id` đổi tên hoặc active/inactive, không xóa lịch sử; `POST /memberships/:uid/link` kiểm ba chiều membership–link–participant trong transaction, gỡ link cũ rồi liên kết đích cùng commit. Cả ba yêu cầu key và `If-Match`, ghi operation/audit/signal, tăng revision; chỉ sửa trip metadata mới tăng trip.version, không đổi ledgerVersion hay số dư.
+- **Kiểm chứng** Emulator: owner/member/outsider, version cũ/thiếu, ngày và timezone sai, currency bị từ chối, expense cũ giữ nguyên sau inactive, expense mới bị chặn, hai UID tranh cùng participant, chuyển/gỡ link và removed membership, participant thuộc chuyến khác. `checkDatabase` sạch sau thay đổi.
 
 <details>
 <summary>Các bước và tiêu chí chi tiết</summary>

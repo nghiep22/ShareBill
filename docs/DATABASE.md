@@ -25,9 +25,9 @@ Node API xác minh JWT rồi kiểm quyền trên dữ liệu. Mọi lệnh ghi 
 | Nhóm | Có trong code | Cần hoàn thiện |
 | --- | --- | --- |
 | Auth/user | Register, login, refresh JWT; bootstrap hồ sơ v1 dùng chung | Migration hồ sơ legacy [S05](slices/01_DATABASE_BE.md#s05) và quản trị tài khoản [S15](slices/05_ADMIN_HO_TRO.md#s15) |
-| Trip | Tạo chuyến v1 với metadata, moderation mặc định, counters và category totals; create/void expense cập nhật cùng transaction | Chốt/mở lại [S09](slices/02_NGHIEP_VU_BE.md#s09) và migration [S05](slices/01_DATABASE_BE.md#s05) |
+| Trip | Tạo và sửa metadata chuyến v1; moderation mặc định, counters và category totals; create/void expense cập nhật cùng transaction | Chốt/mở lại [S09](slices/02_NGHIEP_VU_BE.md#s09) |
 | Membership | Owner membership đủ timestamps và tripRef trong cùng transaction | Invite/join/remove/restore; API phân trang |
-| Participant | Owner và người thêm sau có participant/balance zero với metadata v1; owner có participantLink | Link/unlink/inactive; migration dữ liệu cũ |
+| Participant | Owner và người thêm sau có participant/balance zero với metadata v1; S07 hỗ trợ đổi tên, active/inactive và link/unlink UID qua transaction | Invite/accept [S08](slices/02_NGHIEP_VU_BE.md#s08) |
 | Expense | Writer v1 lưu `splitInput`, shares, currency/receiptIds và void metadata; reader đọc được legacy `split`; create/void đồng bộ tổng chi và số dư | Sửa khoản chi [S09](slices/02_NGHIEP_VU_BE.md#s09), migration [S05](slices/01_DATABASE_BE.md#s05) và vòng đời ảnh [S10](slices/03_HOA_DON.md#s10) |
 | Settlement | Writer v1 tạo pending/confirm đủ currency, metadata nullable, actor/mode/timestamps; giữ mốc ledger lúc tạo | Hủy/đảo trả nợ [S09](slices/02_NGHIEP_VU_BE.md#s09) và migration [S05](slices/01_DATABASE_BE.md#s05) |
 | Balance/signal | Balance có `updatedAt` khi tạo và khi ghi tiền; signal giữ schemaVersion, revision và ledgerVersion theo root | Kiểm tra/đối soát [S04](slices/01_DATABASE_BE.md#s04), migration [S05](slices/01_DATABASE_BE.md#s05) và repair [S19](slices/06_VAN_HANH.md#s19) |
