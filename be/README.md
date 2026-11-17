@@ -30,6 +30,19 @@ pnpm dev:be
 
 API: `http://localhost:3001/health`. Emulator UI: `http://localhost:4000`. Nếu lệnh `java` chưa nhận sau khi vừa cài JDK trên Windows, mở terminal mới hoặc thêm thư mục `C:\Program Files\Eclipse Adoptium\jdk-21.0.13.9-hotspot\bin` vào PATH của terminal đó.
 
+Trong terminal **cmd** của VS Code, có thể chạy `cd be` rồi `npm run emulators`; ở terminal thứ hai cũng `cd be` rồi `npm run dev`. Các dependency phải được cài trước; repo dùng `pnpm-lock.yaml` làm lockfile chuẩn.
+
+### Thử API trên Swagger UI
+
+Khi cả Emulator và API đã chạy, mở **http://localhost:3001/docs/**. Trang này mô tả 18 endpoint hiện có; đặc tả JSON ở `http://localhost:3001/docs/json`.
+
+1. Mở **Tài khoản → POST /api/v1/auth/register** (hoặc `login`), bấm **Try it out**, điền email/mật khẩu/tên rồi **Execute**. Mỗi lần đăng ký cần email mới.
+2. Trong response, sao chép **`data.accessToken`**. Bấm **Authorize** ở đầu trang, dán token vào ô BearerAuth **không thêm chữ `Bearer`**, rồi **Authorize**.
+3. Mở **Chuyến đi → POST /api/v1/trips**. Điền `Idempotency-Key` là UUID v4 mới, body gồm `name` và `ownerName`, rồi **Execute**. Lấy `data.id` làm `tripId`, `data.ownerParticipantId` để tạo khoản chi.
+4. Dùng `tripId` với **GET /api/v1/trips/{tripId}/overview** hoặc thử thêm thành viên/khoản chi. Với mỗi lệnh ghi mới dùng UUID v4 khác; retry đúng cùng payload mới dùng lại key cũ. Khi hủy khoản chi hoặc xác nhận trả nợ, điền `If-Match` dạng `"1"` theo `version` hiện tại.
+
+Swagger UI chỉ là công cụ thử API; đăng nhập/chuyến đi cần hai Emulator đang chạy. Không chia sẻ accessToken hoặc refreshToken trong ảnh chụp hay issue.
+
 Backend đọc `be/.env` khi chạy từ thư mục `be`. Đừng commit file này. Trên production, cấu hình `FIREBASE_PROJECT_ID`, `FIREBASE_WEB_API_KEY` (Web API key của cùng Firebase project), `APP_ORIGIN` và server credentials ở host secret store. Bật phương thức **Email/Password** trong Firebase Authentication trước khi dùng tài khoản thật. Tuyệt đối không đặt private key trong `fe/` hay biến `NEXT_PUBLIC_*`.
 
 ## Đăng ký, đăng nhập và JWT
