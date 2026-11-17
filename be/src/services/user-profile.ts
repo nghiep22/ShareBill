@@ -17,15 +17,24 @@ function toProfile(uid: string, value: FirebaseFirestore.DocumentData, identity:
 }
 
 /** Creates only missing profiles. Existing, including legacy, fields are never overwritten. */
+export function ensureUserProfileDocument(
+  tx: FirebaseFirestore.Transaction, snapshot: FirebaseFirestore.DocumentSnapshot, identity: UserRecord, now: Timestamp,
+): FirebaseFirestore.DocumentData {
+  const existing = snapshot.data();
+  if (identity.disabled || (existing && existing.status !== 'active')) {
+    throw new ApiError(403, 'ACCOUNT_DISABLED', 'Tài khoản đang tạm khóa.');
+  }
+  if (existing) return existing;
+  const document = createUserDocument(identity, now);
+  tx.create(snapshot.ref, document);
+  return document;
+}
+
 export async function bootstrapUserProfile(identity: UserRecord): Promise<UserProfile> {
-  if (identity.disabled) throw new ApiError(403, 'ACCOUNT_DISABLED', 'Tài khoản đang tạm khóa.');
   const store = db();
   const ref = store.doc(`users/${identity.uid}`);
   return store.runTransaction(async tx => {
-    const snapshot = await tx.get(ref);
-    if (snapshot.exists) return toProfile(identity.uid, snapshot.data()!, identity);
-    const document = createUserDocument(identity, Timestamp.now());
-    tx.create(ref, document);
+    const document = ensureUserProfileDocument(tx, await tx.get(ref), identity, Timestamp.now());
     return toProfile(identity.uid, document, identity);
   });
 }

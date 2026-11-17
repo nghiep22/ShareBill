@@ -1,6 +1,6 @@
 import { existsSync } from 'node:fs';
 import { randomUUID } from 'node:crypto';
-import { buildApp } from '../src/app.js';
+import { buildApp } from '../src/create-app.js';
 
 if (existsSync('.env')) process.loadEnvFile('.env');
 

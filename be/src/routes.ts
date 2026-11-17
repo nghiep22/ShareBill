@@ -1,17 +1,17 @@
 import type { FastifyInstance } from 'fastify';
-import { randomUUID, createHash } from 'node:crypto';
+import { randomUUID } from 'node:crypto';
 import { FieldValue, Timestamp } from 'firebase-admin/firestore';
 import { z } from 'zod';
-import { db } from './firebase.js';
-import { ApiError, operationKey, requireUser } from './http.js';
+import { auth, db } from './firebase.js';
+import { ApiError, operationKey, requireTripAccess, requireUser, sendOperationResult } from './http.js';
 import { tripInput, participantInput, expenseInput } from './schemas.js';
 import { splitEqual, validateExact, expenseDelta, applyBalanceDelta, applyExpenseTotals, type Balance } from './domain/money.js';
-import { auth } from './firebase.js';
-import { bootstrapUserProfile } from './services/user-profile.js';
+import { ensureUserProfileDocument } from './services/user-profile.js';
 import { createTripDocuments } from './database/trip.js';
 import { createParticipantDocuments } from './database/participant.js';
 import { createExpenseDocument } from './database/expense.js';
 import { createAuditEvent } from './database/audit.js';
+import { createOperationDocument, readOperationResult } from './database/operation.js';
 
 function parse<T>(schema: { safeParse: (value: unknown) => { success: true; data: T } | { success: false } }, body: unknown): T {
   const result = schema.safeParse(body);
@@ -19,7 +19,6 @@ function parse<T>(schema: { safeParse: (value: unknown) => { success: true; data
   return result.data;
 }
 
-function hash(value: unknown): string { return createHash('sha256').update(JSON.stringify(value)).digest('hex'); }
 function params(value: unknown): { tripId: string } {
   const result = z.strictObject({ tripId: z.uuid() }).safeParse(value);
   if (!result.success) throw new ApiError(404, 'NOT_FOUND', 'Không tìm thấy chuyến đi.');
@@ -28,31 +27,36 @@ function params(value: unknown): { tripId: string } {
 export async function registerRoutes(app: FastifyInstance): Promise<void> {
   app.get('/health', async () => ({ status: 'ok', service: 'sharebill-be' }));
 
-  app.post('/api/v1/trips', async request => {
+  app.post('/api/v1/trips', async (request, reply) => {
     const uid = await requireUser(request);
     const key = operationKey(request);
     const body = parse(tripInput, request.body);
-    await bootstrapUserProfile(await auth().getUser(uid));
-    const requestHash = hash(body);
+    const identity = await auth().getUser(uid);
+    const command = { method: request.method, canonicalPath: '/api/v1/trips', body };
     const tripId = randomUUID();
     const participantId = randomUUID();
     const auditEventId = randomUUID();
     const store = db();
     const opRef = store.doc(`users/${uid}/operations/${key}`);
-    return store.runTransaction(async tx => {
-      const op = await tx.get(opRef);
-      if (op.exists) {
-        if (op.get('requestHash') !== requestHash || op.get('path') !== '/api/v1/trips') throw new ApiError(409, 'IDEMPOTENCY_KEY_REUSED', 'Mã yêu cầu đã được dùng.');
-        return { data: op.get('response'), meta: { replayed: true } };
+    const result = await store.runTransaction(async tx => {
+      const [op, user] = await Promise.all([tx.get(opRef), tx.get(store.doc(`users/${uid}`))]);
+      if (identity.disabled || (user.exists && user.get('status') !== 'active')) {
+        throw new ApiError(403, 'ACCOUNT_DISABLED', 'Tài khoản đang tạm khóa.');
       }
-      const userRef = store.doc(`users/${uid}`);
-      const userSnap = await tx.get(userRef);
-      if (!userSnap.exists) throw new ApiError(409, 'PROFILE_NOT_FOUND', 'Hồ sơ chưa sẵn sàng. Hãy thử lại.');
-      if (userSnap.get('status') !== 'active') throw new ApiError(403, 'ACCOUNT_DISABLED', 'Tài khoản đang tạm khóa.');
+      const replay = readOperationResult(op.data(), command, uid);
+      if (replay) {
+        if (!replay.tripId) throw new ApiError(404, 'NOT_FOUND', 'Không tìm thấy chuyến đi.');
+        const [member, trip] = await Promise.all([
+          tx.get(store.doc(`trips/${replay.tripId}/memberships/${uid}`)), tx.get(store.doc(`trips/${replay.tripId}`)),
+        ]);
+        requireTripAccess(member, trip);
+        return { outcome: replay, replayed: true };
+      }
       const now = Timestamp.now();
+      const profile = ensureUserProfileDocument(tx, user, identity, now);
       const initial = createTripDocuments({
         tripId, participantId, auditEventId, ownerUid: uid, ownerName: body.ownerName,
-        actorDisplayNameSnapshot: userSnap.get('displayName'), name: body.name, operationKey: key, now,
+        actorDisplayNameSnapshot: profile.displayName, name: body.name, operationKey: key, now,
       });
       tx.create(store.doc(`trips/${tripId}`), initial.trip);
       tx.create(store.doc(`trips/${tripId}/memberships/${uid}`), initial.membership);
@@ -63,9 +67,12 @@ export async function registerRoutes(app: FastifyInstance): Promise<void> {
       tx.create(store.doc(`users/${uid}/tripRefs/${tripId}`), initial.tripRef);
       tx.create(store.doc(`trips/${tripId}/auditEvents/${auditEventId}`), initial.audit);
       const response = { id: tripId, name: body.name, ownerParticipantId: participantId, currency: 'VND', version: 1 };
-      tx.create(opRef, { requestHash, path: '/api/v1/trips', response, committedAt: now });
-      return { data: response, meta: { replayed: false } };
+      const outcome = createOperationDocument(command, { actorUid: uid, tripId, resourceType: 'trip', resourceId: tripId,
+        httpStatus: 200, responseSnapshot: { data: response, meta: {} }, committedAt: now });
+      tx.create(opRef, outcome);
+      return { outcome, replayed: false };
     });
+    return sendOperationResult(reply, result);
   });
 
   app.get('/api/v1/trips/:tripId/overview', async request => {
@@ -90,28 +97,25 @@ export async function registerRoutes(app: FastifyInstance): Promise<void> {
     }, { readOnly: true });
   });
 
-  app.post('/api/v1/trips/:tripId/participants', async request => {
+  app.post('/api/v1/trips/:tripId/participants', async (request, reply) => {
     const uid = await requireUser(request);
     const key = operationKey(request);
     const { tripId } = params(request.params);
     const body = parse(participantInput, request.body);
-    const path = `/api/v1/trips/${tripId}/participants`;
-    const requestHash = hash(body);
+    const command = { method: request.method, canonicalPath: `/api/v1/trips/${tripId}/participants`, body };
     const participantId = randomUUID();
     const auditEventId = randomUUID();
     const store = db();
-    return store.runTransaction(async tx => {
+    const result = await store.runTransaction(async tx => {
       const opRef = store.doc(`users/${uid}/operations/${key}`);
       const tripRef = store.doc(`trips/${tripId}`);
       const [op, member, trip, user] = await Promise.all([
         tx.get(opRef), tx.get(store.doc(`trips/${tripId}/memberships/${uid}`)), tx.get(tripRef), tx.get(store.doc(`users/${uid}`)),
       ]);
-      if (!member.exists || member.get('status') !== 'active' || !trip.exists) throw new ApiError(404, 'NOT_FOUND', 'Không tìm thấy chuyến đi.');
+      requireTripAccess(member, trip);
       if (user.get('status') === 'disabled') throw new ApiError(403, 'ACCOUNT_DISABLED', 'Tài khoản đang tạm khóa.');
-      if (op.exists) {
-        if (op.get('requestHash') !== requestHash || op.get('path') !== path) throw new ApiError(409, 'IDEMPOTENCY_KEY_REUSED', 'Mã yêu cầu đã được dùng.');
-        return { data: op.get('response'), meta: { replayed: true } };
-      }
+      const replay = readOperationResult(op.data(), command, uid, tripId);
+      if (replay) return { outcome: replay, replayed: true };
       if (member.get('role') !== 'owner') throw new ApiError(403, 'FORBIDDEN', 'Chỉ chủ nhóm có thể thêm người.');
       if (trip.get('status') !== 'active' || trip.get('moderationStatus') !== 'normal') throw new ApiError(409, 'TRIP_NOT_WRITABLE', 'Chuyến đi đang khóa thao tác.');
       if (trip.get('participantCount') >= 50) throw new ApiError(422, 'TRIP_LIMIT_REACHED', 'Chuyến đi đã đủ 50 người.');
@@ -132,12 +136,15 @@ export async function registerRoutes(app: FastifyInstance): Promise<void> {
       }));
       tx.update(tripRef, { participantCount: FieldValue.increment(1), revision, updatedAt: now });
       tx.update(store.doc(`trips/${tripId}/signals/current`), { revision, ledgerVersion: trip.get('ledgerVersion'), updatedAt: now });
-      tx.create(opRef, { path, requestHash, response, tripId, committedAt: now });
-      return { data: response, meta: { revision, replayed: false } };
+      const outcome = createOperationDocument(command, { actorUid: uid, tripId, resourceType: 'participant', resourceId: participantId,
+        httpStatus: 200, responseSnapshot: { data: response, meta: { revision } }, committedAt: now });
+      tx.create(opRef, outcome);
+      return { outcome, replayed: false };
     });
+    return sendOperationResult(reply, result);
   });
 
-  app.post('/api/v1/trips/:tripId/expenses', async request => {
+  app.post('/api/v1/trips/:tripId/expenses', async (request, reply) => {
     const uid = await requireUser(request);
     const key = operationKey(request);
     const { tripId } = params(request.params);
@@ -146,13 +153,13 @@ export async function registerRoutes(app: FastifyInstance): Promise<void> {
     let shares;
     try { shares = body.splitMethod === 'equal' ? splitEqual(body.amountMinor, body.split.participantIds) : validateExact(body.amountMinor, body.split.shares); }
     catch (error) { throw new ApiError(422, error instanceof Error ? error.message : 'INVALID_SPLIT', 'Cách chia tiền chưa hợp lệ.'); }
-    const path = `/api/v1/trips/${tripId}/expenses`;
     // Empty receiptIds was absent from requests before D05; preserve their operation hash.
-    const requestHash = hash({ ...body, receiptIds: undefined });
+    const command = { method: request.method, canonicalPath: `/api/v1/trips/${tripId}/expenses`, body,
+      legacyBody: { ...body, receiptIds: undefined } };
     const expenseId = randomUUID();
     const auditEventId = randomUUID();
     const store = db();
-    return store.runTransaction(async tx => {
+    const result = await store.runTransaction(async tx => {
       const opRef = store.doc(`users/${uid}/operations/${key}`);
       const tripRef = store.doc(`trips/${tripId}`);
       const participantIds = [...new Set([body.payerParticipantId, ...shares.map(x => x.participantId)])];
@@ -160,12 +167,10 @@ export async function registerRoutes(app: FastifyInstance): Promise<void> {
         tx.get(opRef), tx.get(tripRef), tx.get(store.doc(`trips/${tripId}/memberships/${uid}`)), tx.get(store.doc(`users/${uid}`)),
         ...participantIds.map(id => tx.get(store.doc(`trips/${tripId}/participants/${id}`))),
       ]);
-      if (!member.exists || member.get('status') !== 'active' || !trip.exists) throw new ApiError(404, 'NOT_FOUND', 'Không tìm thấy chuyến đi.');
+      requireTripAccess(member, trip);
       if (user.get('status') === 'disabled') throw new ApiError(403, 'ACCOUNT_DISABLED', 'Tài khoản đang tạm khóa.');
-      if (op.exists) {
-        if (op.get('requestHash') !== requestHash || op.get('path') !== path) throw new ApiError(409, 'IDEMPOTENCY_KEY_REUSED', 'Mã yêu cầu đã được dùng.');
-        return { data: op.get('response'), meta: { replayed: true } };
-      }
+      const replay = readOperationResult(op.data(), command, uid, tripId);
+      if (replay) return { outcome: replay, replayed: true };
       if (trip.get('status') !== 'active' || trip.get('moderationStatus') !== 'normal') throw new ApiError(409, 'TRIP_NOT_WRITABLE', 'Chuyến đi đang khóa thao tác.');
       const expenseCount = trip.get('expenseCountAllTime'), activeExpenseCount = trip.get('activeExpenseCount');
       if (!Number.isSafeInteger(expenseCount) || !Number.isSafeInteger(activeExpenseCount) ||
@@ -208,8 +213,11 @@ export async function registerRoutes(app: FastifyInstance): Promise<void> {
           shares, status: 'active', version: 1 }, reason: null,
         revision, ledgerVersion, operationKey: key, createdAt: now,
       }));
-      tx.set(opRef, { path, requestHash, response, tripId, committedAt: now });
-      return { data: response, meta: { revision, ledgerVersion, replayed: false } };
+      const outcome = createOperationDocument(command, { actorUid: uid, tripId, resourceType: 'expense', resourceId: expenseId,
+        httpStatus: 200, responseSnapshot: { data: response, meta: { revision, ledgerVersion } }, committedAt: now });
+      tx.create(opRef, outcome);
+      return { outcome, replayed: false };
     });
+    return sendOperationResult(reply, result);
   });
 }

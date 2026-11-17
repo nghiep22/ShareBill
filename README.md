@@ -1,6 +1,6 @@
 # ShareBill — Kế hoạch xây dựng app chia tiền du lịch
 
-**Trạng thái triển khai:** monorepo có `fe/` và `be/`; đang làm backend trước. Đã có đăng ký/đăng nhập email và mật khẩu, làm mới Firebase ID token (JWT) cùng các API chia tiền đầu tiên. [Chạy backend local](be/README.md). Tài liệu dưới đây là thiết kế đích, một số API/tính năng vẫn chưa được code.
+**Trạng thái triển khai:** đã có Web/PWA mobile-first ở `fe/` và API ở `be/`, cùng môi trường staging Vercel Hobby và Firebase Spark. API có đăng ký/đăng nhập email và mật khẩu, làm mới Firebase ID token (JWT) và các luồng chia tiền đầu tiên. Giao diện hiện dùng dữ liệu mẫu trong trình duyệt. [Mở giao diện](https://sharebill-nghiep22.vercel.app/) · [Tài liệu API staging](https://sharebill-api-staging.vercel.app/docs/) · [Thiết lập staging](docs/CICD_DEPLOY.md).
 
 Tài liệu thiết kế và triển khai, cập nhật ngày **16/11/2026**. Ngôn ngữ sản phẩm: tiếng Việt. Mục tiêu: một người có thể đi từ phân tích bài toán, làm frontend/backend, kiểm thử đến vận hành bản thật.
 
@@ -15,11 +15,11 @@ Tài liệu thiết kế và triển khai, cập nhật ngày **16/11/2026**. Ng
 | [Website quản trị React/Node.js](docs/ADMIN_WEB.md) | UX đơn giản, dashboard, người dùng, chuyến đi, hỗ trợ, quyền quản trị và API Node.js | FE quản trị và BE |
 | [CI/CD và triển khai](docs/CICD_DEPLOY.md) | Môi trường, secrets, GitHub Actions, Vercel, Firebase Rules, release, rollback, backup, vận hành | Cả FE và BE |
 | [Lộ trình và kiểm thử](docs/ROADMAP_TESTING.md) | Công việc theo giai đoạn, dependency, acceptance criteria, dữ liệu mẫu, test matrix, checklist ra mắt | Cả FE và BE |
-| [Các lát cắt triển khai nhỏ](docs/slices/README.md) | 105 lát tổng cộng, D01–D08 đã xong và 97 còn lại; có dependency, file/module, kiểm thử và tiêu chí hoàn tất | Người trực tiếp triển khai |
+| [20 lát cắt triển khai](docs/slices/README.md) | S01–S03 đã hoàn tất, còn 17 lát. Mỗi lát có phụ thuộc, phạm vi và tiêu chí nghiệm thu | Người trực tiếp triển khai |
 
 **Thứ tự đọc:** Product → Database → Frontend/Backend song song → CI/CD → Roadmap. Khi triển khai, Database là hợp đồng lưu trữ, Backend là hợp đồng API và công thức; phạm vi và quy tắc người dùng trong Product là chuẩn nghiệp vụ. Thay đổi hợp đồng phải cập nhật cả hai phía và test liên quan trong cùng PR.
 
-**Bắt đầu công việc tiếp theo:** D01–D08 đã hoàn tất; làm [D09 — operation chuẩn](docs/slices/01_DATABASE_BE.md#d09), rồi D10. Mỗi lát có điều kiện nghiệm thu riêng.
+Lát tiếp theo là [S04 — Kiểm tra CSDL và đối soát ledger](docs/slices/01_DATABASE_BE.md#s04).
 
 ## Hướng triển khai đề xuất
 
@@ -37,6 +37,6 @@ SQLite được phân tích như phương án thay thế trong Backend. Không d
 
 ## Phạm vi bộ tài liệu
 
-Đây là kế hoạch và phần khởi đầu backend. `be/` đã có code chạy local; `fe/` mới là khung thư mục. Các đoạn TypeScript, Rules và YAML **trong docs/** vẫn là mẫu thiết kế, cần hoàn thiện theo checklist trước khi deploy. Chưa có Firebase cloud project, deployment hay tài nguyên trả phí nào được tạo.
+Repo có giao diện Web/PWA, backend và môi trường staging trên Vercel Hobby/Firebase Spark. Các đoạn TypeScript, Rules và YAML **trong docs/** vẫn có nội dung thiết kế đích cần đối chiếu với phần đã triển khai. Trạng thái và cách chạy từng phần nằm trong README của `fe/`, `be/` và tài liệu staging.
 
 Các đề xuất chưa có trong yêu cầu gốc được đánh dấu là **giả định thiết kế** hoặc **P1/P2**, để dễ điều chỉnh mà không nhầm với yêu cầu đã được chốt.

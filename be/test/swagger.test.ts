@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { buildApp } from '../src/app.js';
+import { buildApp } from '../src/create-app.js';
 
 describe('Swagger UI', () => {
   it('serves the existing API as a testable OpenAPI document', async () => {

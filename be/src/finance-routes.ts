@@ -1,13 +1,14 @@
 import type { FastifyInstance } from 'fastify';
-import { createHash, randomUUID } from 'node:crypto';
+import { randomUUID } from 'node:crypto';
 import { FieldValue, Timestamp } from 'firebase-admin/firestore';
 import { z } from 'zod';
 import { db } from './firebase.js';
-import { ApiError, operationKey, requireUser } from './http.js';
+import { ApiError, operationKey, requireTripAccess, requireUser, requireVersion, sendOperationResult } from './http.js';
 import { expenseDelta, applyBalanceDelta, applyExpenseTotals, type Balance, type Share, type ExpenseCategory } from './domain/money.js';
 import { suggestSettlements, applySettlement } from './domain/settlement.js';
 import { settlementInput, settlementDocumentSchema, createSettlementDocument, confirmationChanges } from './database/settlement.js';
 import { createAuditEvent } from './database/audit.js';
+import { createOperationDocument, readOperationResult } from './database/operation.js';
 
 const confirmInput = z.strictObject({ basedOnLedgerVersion: z.number().int().min(0) });
 const voidInput = z.strictObject({ reason: z.string().trim().min(1).max(300) });
@@ -17,28 +18,17 @@ function parse<T>(schema: z.ZodType<T>, value: unknown): T {
   if (!result.success) throw new ApiError(422, 'VALIDATION_ERROR', 'Dữ liệu chưa hợp lệ.');
   return result.data;
 }
-function digest(value: unknown) { return createHash('sha256').update(JSON.stringify(value)).digest('hex'); }
-function version(value: unknown): number {
-  const parsed = typeof value === 'string' ? /^"([1-9][0-9]*)"$/.exec(value) : null;
-  if (!parsed) throw new ApiError(428, 'PRECONDITION_REQUIRED', 'Hãy tải lại phiên bản mới nhất.');
-  return Number(parsed[1]);
-}
 function ids(value: unknown): { tripId: string; id?: string } {
   const p = value as { tripId: string; id?: string };
   if (!z.uuid().safeParse(p.tripId).success || (p.id && !z.uuid().safeParse(p.id).success)) throw new ApiError(404, 'NOT_FOUND', 'Không tìm thấy dữ liệu.');
   return p;
 }
 function ensureMember(member: FirebaseFirestore.DocumentSnapshot, trip: FirebaseFirestore.DocumentSnapshot, user: FirebaseFirestore.DocumentSnapshot) {
-  if (!member.exists || member.get('status') !== 'active' || !trip.exists) throw new ApiError(404, 'NOT_FOUND', 'Không tìm thấy chuyến đi.');
+  requireTripAccess(member, trip);
   if (user.get('status') === 'disabled') throw new ApiError(403, 'ACCOUNT_DISABLED', 'Tài khoản đang tạm khóa.');
 }
 function ensureWritable(trip: FirebaseFirestore.DocumentSnapshot) {
   if (trip.get('status') !== 'active' || trip.get('moderationStatus') !== 'normal') throw new ApiError(409, 'TRIP_NOT_WRITABLE', 'Chuyến đi đang khóa thao tác.');
-}
-function operationResult(op: FirebaseFirestore.DocumentSnapshot, requestHash: string, path: string) {
-  if (!op.exists) return null;
-  if (op.get('requestHash') !== requestHash || op.get('path') !== path) throw new ApiError(409, 'IDEMPOTENCY_KEY_REUSED', 'Mã yêu cầu đã được dùng.');
-  return { data: op.get('response'), meta: { replayed: true } };
 }
 function balancesFrom(snaps: FirebaseFirestore.DocumentSnapshot[]): Balance[] {
   return snaps.map(s => {
@@ -64,14 +54,15 @@ export async function registerFinanceRoutes(app: FastifyInstance): Promise<void>
     }, { readOnly: true });
   });
 
-  app.post('/api/v1/trips/:tripId/settlements', async request => {
+  app.post('/api/v1/trips/:tripId/settlements', async (request, reply) => {
     const uid = await requireUser(request), key = operationKey(request);
     const { tripId } = ids(request.params);
     const body = parse(settlementInput, request.body);
     if (body.fromParticipantId === body.toParticipantId) throw new ApiError(422, 'VALIDATION_ERROR', 'Hai người phải khác nhau.');
-    const path = `/api/v1/trips/${tripId}/settlements`, requestHash = digest(body), settlementId = randomUUID(), store = db();
+    const command = { method: request.method, canonicalPath: `/api/v1/trips/${tripId}/settlements`, body };
+    const settlementId = randomUUID(), store = db();
     const auditEventId = randomUUID();
-    return store.runTransaction(async tx => {
+    const result = await store.runTransaction(async tx => {
       const opRef = store.doc(`users/${uid}/operations/${key}`), tripRef = store.doc(`trips/${tripId}`);
       const [op, trip, member, user, fromParticipant, toParticipant, fromBalanceSnap, toBalanceSnap] = await Promise.all([
         tx.get(opRef), tx.get(tripRef), tx.get(store.doc(`trips/${tripId}/memberships/${uid}`)), tx.get(store.doc(`users/${uid}`)),
@@ -79,7 +70,8 @@ export async function registerFinanceRoutes(app: FastifyInstance): Promise<void>
         tx.get(store.doc(`trips/${tripId}/balances/${body.fromParticipantId}`)), tx.get(store.doc(`trips/${tripId}/balances/${body.toParticipantId}`)),
       ]);
       ensureMember(member, trip, user);
-      const replay = operationResult(op, requestHash, path); if (replay) return replay;
+      const replay = readOperationResult(op.data(), command, uid, tripId);
+      if (replay) return { outcome: replay, replayed: true };
       ensureWritable(trip);
       if (member.get('role') !== 'owner' && member.get('participantId') !== body.fromParticipantId) throw new ApiError(403, 'FORBIDDEN', 'Bạn không thể ghi trả nợ cho người này.');
       if (!fromParticipant.exists || !toParticipant.exists) throw new ApiError(422, 'INVALID_PARTICIPANTS', 'Người tham gia không hợp lệ.');
@@ -108,25 +100,30 @@ export async function registerFinanceRoutes(app: FastifyInstance): Promise<void>
           confirmationMode: null }, reason: null,
         revision, ledgerVersion: trip.get('ledgerVersion'), operationKey: key, createdAt: now,
       }));
-      tx.set(opRef, { path, requestHash, response, tripId, committedAt: now });
-      return { data: response, meta: { revision, replayed: false } };
+      const outcome = createOperationDocument(command, { actorUid: uid, tripId, resourceType: 'settlement', resourceId: settlementId,
+        httpStatus: 200, responseSnapshot: { data: response, meta: { revision } }, committedAt: now });
+      tx.create(opRef, outcome);
+      return { outcome, replayed: false };
     });
+    return sendOperationResult(reply, result);
   });
 
-  app.post('/api/v1/trips/:tripId/settlements/:id/confirm', async request => {
+  app.post('/api/v1/trips/:tripId/settlements/:id/confirm', async (request, reply) => {
     const uid = await requireUser(request), key = operationKey(request);
     const { tripId, id } = ids(request.params);
     if (!id) throw new ApiError(404, 'NOT_FOUND', 'Không tìm thấy lượt trả nợ.');
-    const body = parse(confirmInput, request.body), expectedVersion = version(request.headers['if-match']);
-    const path = `/api/v1/trips/${tripId}/settlements/${id}/confirm`, requestHash = digest({ body, expectedVersion }), store = db();
+    const body = parse(confirmInput, request.body), expectedVersion = requireVersion(request.headers['if-match']);
+    const command = { method: request.method, canonicalPath: `/api/v1/trips/${tripId}/settlements/${id}/confirm`, body, ifMatch: expectedVersion };
+    const store = db();
     const auditEventId = randomUUID();
-    return store.runTransaction(async tx => {
+    const result = await store.runTransaction(async tx => {
       const opRef = store.doc(`users/${uid}/operations/${key}`), tripRef = store.doc(`trips/${tripId}`), settlementRef = store.doc(`trips/${tripId}/settlements/${id}`);
       const [op, trip, member, user, settlement] = await Promise.all([
         tx.get(opRef), tx.get(tripRef), tx.get(store.doc(`trips/${tripId}/memberships/${uid}`)), tx.get(store.doc(`users/${uid}`)), tx.get(settlementRef),
       ]);
       ensureMember(member, trip, user);
-      const replay = operationResult(op, requestHash, path); if (replay) return replay;
+      const replay = readOperationResult(op.data(), command, uid, tripId);
+      if (replay) return { outcome: replay, replayed: true };
       ensureWritable(trip);
       if (!settlement.exists) throw new ApiError(404, 'NOT_FOUND', 'Không tìm thấy lượt trả nợ.');
       if (settlement.get('version') !== expectedVersion) throw new ApiError(409, 'VERSION_CONFLICT', 'Lượt trả nợ đã thay đổi.');
@@ -160,23 +157,28 @@ export async function registerFinanceRoutes(app: FastifyInstance): Promise<void>
           confirmationMode: mode }, reason: null,
         revision, ledgerVersion, operationKey: key, createdAt: now,
       }));
-      tx.set(opRef, { path, requestHash, response, tripId, committedAt: now });
-      return { data: response, meta: { revision, ledgerVersion, replayed: false } };
+      const outcome = createOperationDocument(command, { actorUid: uid, tripId, resourceType: 'settlement', resourceId: id,
+        httpStatus: 200, responseSnapshot: { data: response, meta: { revision, ledgerVersion } }, committedAt: now });
+      tx.create(opRef, outcome);
+      return { outcome, replayed: false };
     });
+    return sendOperationResult(reply, result);
   });
 
-  app.post('/api/v1/trips/:tripId/expenses/:id/void', async request => {
+  app.post('/api/v1/trips/:tripId/expenses/:id/void', async (request, reply) => {
     const uid = await requireUser(request), key = operationKey(request);
     const { tripId, id } = ids(request.params);
     if (!id) throw new ApiError(404, 'NOT_FOUND', 'Không tìm thấy khoản chi.');
-    const body = parse(voidInput, request.body), expectedVersion = version(request.headers['if-match']);
-    const path = `/api/v1/trips/${tripId}/expenses/${id}/void`, requestHash = digest({ body, expectedVersion }), store = db();
+    const body = parse(voidInput, request.body), expectedVersion = requireVersion(request.headers['if-match']);
+    const command = { method: request.method, canonicalPath: `/api/v1/trips/${tripId}/expenses/${id}/void`, body, ifMatch: expectedVersion };
+    const store = db();
     const auditEventId = randomUUID();
-    return store.runTransaction(async tx => {
+    const result = await store.runTransaction(async tx => {
       const opRef = store.doc(`users/${uid}/operations/${key}`), tripRef = store.doc(`trips/${tripId}`), expenseRef = store.doc(`trips/${tripId}/expenses/${id}`);
       const [op, trip, member, user, expense] = await Promise.all([tx.get(opRef), tx.get(tripRef), tx.get(store.doc(`trips/${tripId}/memberships/${uid}`)), tx.get(store.doc(`users/${uid}`)), tx.get(expenseRef)]);
       ensureMember(member, trip, user);
-      const replay = operationResult(op, requestHash, path); if (replay) return replay;
+      const replay = readOperationResult(op.data(), command, uid, tripId);
+      if (replay) return { outcome: replay, replayed: true };
       ensureWritable(trip);
       if (!expense.exists) throw new ApiError(404, 'NOT_FOUND', 'Không tìm thấy khoản chi.');
       if (expense.get('version') !== expectedVersion) throw new ApiError(409, 'VERSION_CONFLICT', 'Khoản chi đã thay đổi.');
@@ -213,8 +215,11 @@ export async function registerFinanceRoutes(app: FastifyInstance): Promise<void>
         before: beforeAudit, after: { ...beforeAudit, status: 'void', version: expectedVersion + 1 },
         reason: body.reason, revision, ledgerVersion, operationKey: key, createdAt: now,
       }));
-      tx.set(opRef, { path, requestHash, response, tripId, committedAt: now });
-      return { data: response, meta: { revision, ledgerVersion, replayed: false } };
+      const outcome = createOperationDocument(command, { actorUid: uid, tripId, resourceType: 'expense', resourceId: id,
+        httpStatus: 200, responseSnapshot: { data: response, meta: { revision, ledgerVersion } }, committedAt: now });
+      tx.create(opRef, outcome);
+      return { outcome, replayed: false };
     });
+    return sendOperationResult(reply, result);
   });
 }

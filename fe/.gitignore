@@ -1,0 +1,4 @@
+out/
+/.sites-preview/
+next-env.d.ts
+*.tsbuildinfo
