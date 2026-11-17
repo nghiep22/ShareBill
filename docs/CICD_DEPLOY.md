@@ -4,12 +4,22 @@ Tài liệu thiết lập staging và kế hoạch đưa ShareBill vào vận h�
 
 Repo tách Web/PWA Next.js ở `fe/` và API Fastify ở `be/`. Hai thư mục có cấu hình Vercel riêng. GitHub Actions kiểm tra các gói trong cùng monorepo.
 
+## Môi trường staging hiện tại
+
+- Web/PWA ở [sharebill-nghiep22.vercel.app](https://sharebill-nghiep22.vercel.app/), thuộc tài khoản Vercel Hobby. Giao diện hiện dùng dữ liệu mẫu lưu trong trình duyệt.
+- API ở [sharebill-api-staging.vercel.app](https://sharebill-api-staging.vercel.app/health), có tài liệu tương tác tại [/docs/](https://sharebill-api-staging.vercel.app/docs/).
+- Firebase project `sharebill-staging` dùng Spark, bật đăng nhập Email/Password và Firestore Standard tại `asia-southeast1` (Singapore). Rules và indexes lấy từ `be/`.
+- Runtime API dùng service account `sharebill-api@sharebill-staging.iam.gserviceaccount.com` với `roles/datastore.user` và `roles/firebaseauth.admin`. Thông tin xác thực nằm trong secrets của Vercel.
+- GitHub Actions kiểm tra frontend và backend trên PR. R2 còn ở kế hoạch lưu ảnh.
+
+Môi trường này triển khai theo yêu cầu chỉ dùng gói miễn phí của người dùng, với Vercel Hobby và Firebase Spark.
+
 ## Staging đầu tiên
 
 1. Trong Vercel, import cùng repo GitHub hai lần, với Root Directory lần lượt là `fe` và `be`. Bật quyền truy cập các file ngoài Root Directory để hai project đọc được `pnpm-lock.yaml` và `pnpm-workspace.yaml` ở gốc repo. Chọn Node.js 24.x. [Vercel monorepo](https://vercel.com/docs/monorepos).
 2. Với `fe`, chạy build theo `fe/vercel.json` và phục vụ thư mục `out`. Kiểm tra trang chủ, `/manifest.webmanifest` và `/sw.js` qua HTTPS. Giao diện hiện sử dụng chuyến đi mẫu lưu trong trình duyệt.
 3. Tạo hoặc chọn một Firebase project dành cho staging. Bật đăng nhập Email/Password, tạo Firestore và áp dụng Rules/indexes từ `be/firebase.json`. [Firebase Admin SDK](https://firebase.google.com/docs/admin/setup).
-4. Với `be`, dùng preset Fastify và đặt `APP_ORIGIN` bằng origin của Web/PWA. Cấu hình `FIREBASE_PROJECT_ID`, `FIREBASE_WEB_API_KEY` và thông tin xác thực runtime `FIREBASE_CLIENT_EMAIL`, `FIREBASE_PRIVATE_KEY` trong Vercel. Cấu hình emulator chỉ dùng ở local và CI. [Fastify trên Vercel](https://vercel.com/docs/frameworks/backend/fastify).
+4. Với `be`, dùng cấu hình `be/vercel.json` và đầu vào serverless `be/api/index.ts`. Các đường dẫn HTTP được chuyển vào Fastify. Đặt `APP_ORIGIN` bằng origin của Web/PWA, cấu hình `FIREBASE_PROJECT_ID`, `FIREBASE_WEB_API_KEY` và thông tin xác thực runtime `FIREBASE_CLIENT_EMAIL`, `FIREBASE_PRIVATE_KEY` trong Vercel. Cấu hình emulator chỉ dùng ở local và CI.
 5. Kiểm tra API `/health` và `/docs/`, sau đó dùng tài khoản thử để đăng ký, đăng nhập, tạo chuyến và thêm khoản chi. R2 là lưu trữ dự kiến cho ảnh hóa đơn khi luồng upload được tích hợp. [Cloudflare R2](https://developers.cloudflare.com/r2/).
 
 ## 1. Kiến trúc triển khai

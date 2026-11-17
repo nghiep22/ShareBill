@@ -1,6 +1,6 @@
 # ShareBill — Kế hoạch xây dựng app chia tiền du lịch
 
-**Trạng thái triển khai:** monorepo có `fe/` và `be/`; đang làm backend trước. Đã có đăng ký/đăng nhập email và mật khẩu, làm mới Firebase ID token (JWT) cùng các API chia tiền đầu tiên. [Chạy backend local](be/README.md). Tài liệu dưới đây là thiết kế đích, một số API/tính năng vẫn chưa được code.
+**Trạng thái triển khai:** đã có Web/PWA mobile-first ở `fe/` và API ở `be/`, cùng môi trường staging Vercel Hobby và Firebase Spark. API có đăng ký/đăng nhập email và mật khẩu, làm mới Firebase ID token (JWT) và các luồng chia tiền đầu tiên. Giao diện hiện dùng dữ liệu mẫu trong trình duyệt. [Mở giao diện](https://sharebill-nghiep22.vercel.app/) · [Tài liệu API staging](https://sharebill-api-staging.vercel.app/docs/) · [Thiết lập staging](docs/CICD_DEPLOY.md).
 
 Tài liệu thiết kế và triển khai, cập nhật ngày **16/11/2026**. Ngôn ngữ sản phẩm: tiếng Việt. Mục tiêu: một người có thể đi từ phân tích bài toán, làm frontend/backend, kiểm thử đến vận hành bản thật.
 
@@ -37,6 +37,6 @@ SQLite được phân tích như phương án thay thế trong Backend. Không d
 
 ## Phạm vi bộ tài liệu
 
-Đây là kế hoạch và phần khởi đầu backend. `be/` đã có code chạy local; `fe/` mới là khung thư mục. Các đoạn TypeScript, Rules và YAML **trong docs/** vẫn là mẫu thiết kế, cần hoàn thiện theo checklist trước khi deploy. Chưa có Firebase cloud project, deployment hay tài nguyên trả phí nào được tạo.
+Repo có giao diện Web/PWA, backend và môi trường staging trên Vercel Hobby/Firebase Spark. Các đoạn TypeScript, Rules và YAML **trong docs/** vẫn có nội dung thiết kế đích cần đối chiếu với phần đã triển khai. Trạng thái và cách chạy từng phần nằm trong README của `fe/`, `be/` và tài liệu staging.
 
 Các đề xuất chưa có trong yêu cầu gốc được đánh dấu là **giả định thiết kế** hoặc **P1/P2**, để dễ điều chỉnh mà không nhầm với yêu cầu đã được chốt.
