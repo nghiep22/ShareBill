@@ -11,10 +11,12 @@ const localToday = () => {
   return new Date(now.getTime() - now.getTimezoneOffset() * 60_000).toISOString().slice(0, 10);
 };
 
-type Session = { accessToken: string; refreshToken: string; expiresAt: number; user: { displayName: string; email: string } };
+type Session = { accessToken: string; refreshToken: string; expiresAt: number; user: { uid: string; displayName: string; email: string } };
 type Trip = { id: string; name: string; myParticipantId: string; role: string; totalExpenseMinor: number; participantCount: number };
 type Participant = { id: string; displayName: string; status: string };
-type Expense = { id: string; title: string; amountMinor: number; payerParticipantId: string; occurredOn: string; category: string; status: string };
+type Expense = { id: string; title: string; amountMinor: number; payerParticipantId: string; occurredOn: string;
+  category: string; status: 'active' | 'void'; version: number; note: string | null; voidReason: string | null;
+  createdBy: string; splitMethod: 'equal' | 'exact'; shares: { participantId: string; amountMinor: number }[] };
 type Overview = { trip: Trip; participants: Participant[]; balances: { participantId: string; netMinor: number }[]; ledgerVersion: number };
 type Transfer = { fromParticipantId: string; toParticipantId: string; amountMinor: number };
 type Settlement = Transfer & { id: string; status: 'pending' | 'confirmed' | 'cancelled' | 'void'; version: number; occurredOn: string };
@@ -57,11 +59,17 @@ export function LiveWorkspace() {
   const [expenses, setExpenses] = useState<Expense[]>([]);
   const [settlements, setSettlements] = useState<Settlement[]>([]);
   const [suggestions, setSuggestions] = useState<Transfer[]>([]);
-  const [screen, setScreen] = useState<'login' | 'register' | 'list' | 'create-trip' | 'trip' | 'create-expense'>('login');
+  const [screen, setScreen] = useState<'login' | 'register' | 'list' | 'create-trip' | 'trip' | 'create-expense' | 'expense'>('login');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
+  const [expenseId, setExpenseId] = useState<string | null>(null);
+  const [splitMethod, setSplitMethod] = useState<'equal' | 'exact'>('equal');
+  const [selectedShares, setSelectedShares] = useState<string[]>([]);
+  const [exactShares, setExactShares] = useState<Record<string, string>>({});
+  const [expenseAmount, setExpenseAmount] = useState('');
   const pendingTrip = useRef<{ payload: string; key: string } | null>(null);
   const pendingExpense = useRef<{ payload: string; key: string } | null>(null);
+  const voidKeys = useRef<Record<string, string>>({});
   const settlementKeys = useRef<Record<string, string>>({});
 
   const saveSession = useCallback((value: Session | null) => {
@@ -149,7 +157,7 @@ export function LiveWorkspace() {
 
   function signOut() {
     saveSession(null);
-    setTrips([]); setOverview(null); setExpenses([]); setSettlements([]); setSuggestions([]); setSelected(null);
+    setTrips([]); setOverview(null); setExpenses([]); setSettlements([]); setSuggestions([]); setSelected(null); setExpenseId(null);
     setScreen('login'); setError('');
   }
 
@@ -194,14 +202,19 @@ export function LiveWorkspace() {
     if (!selected || !overview) return;
     const values = new FormData(event.currentTarget);
     const amountMinor = Number(values.get('amount'));
-    const participantIds = values.getAll('participantIds').map(String);
+    const participantIds = selectedShares;
     if (!Number.isSafeInteger(amountMinor) || amountMinor < 1 || !participantIds.length) {
       setError('Nhập số tiền và chọn ít nhất một người để chia.'); return;
+    }
+    const shares = participantIds.map(participantId => ({ participantId, amountMinor: Number(exactShares[participantId]) }));
+    if (splitMethod === 'exact' && (shares.some(share => !Number.isSafeInteger(share.amountMinor) || share.amountMinor < 1) ||
+      shares.reduce((sum, share) => sum + share.amountMinor, 0) !== amountMinor)) {
+      setError('Nhập số tiền từng người lớn hơn 0; tổng phần chia phải đúng bằng số tiền khoản chi.'); return;
     }
     const body = {
       title: String(values.get('title')).trim(), amountMinor,
       payerParticipantId: String(values.get('payerParticipantId')),
-      splitMethod: 'equal', split: { participantIds },
+      splitMethod, split: splitMethod === 'equal' ? { participantIds } : { shares },
       occurredOn: String(values.get('occurredOn')),
       category: String(values.get('category')), note: String(values.get('note')).trim() || null,
       receiptIds: [],
@@ -214,6 +227,28 @@ export function LiveWorkspace() {
       await request(`/api/v1/trips/${selected}/expenses`, body, authToken, key);
       pendingExpense.current = null;
       setScreen('trip');
+      await loadTrip(selected, authToken);
+      await loadTrips(authToken);
+    });
+  }
+
+  function voidExpense(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const item = expenses.find(entry => entry.id === expenseId);
+    if (!selected || !item || item.status !== 'active') return;
+    const reason = String(new FormData(event.currentTarget).get('reason')).trim();
+    if (!reason) return;
+    const operation = `void:${selected}:${item.id}:${item.version}:${reason}`;
+    const key = voidKeys.current[operation] ??= crypto.randomUUID();
+    void run(async () => {
+      const authToken = await token();
+      try {
+        await request(`/api/v1/trips/${selected}/expenses/${item.id}/void`, { reason }, authToken, key, item.version);
+        delete voidKeys.current[operation];
+      } catch (cause) {
+        await loadTrip(selected, authToken).catch(() => {});
+        throw cause;
+      }
       await loadTrip(selected, authToken);
       await loadTrips(authToken);
     });
@@ -272,6 +307,8 @@ export function LiveWorkspace() {
 
   const current = trips.find(trip => trip.id === selected);
   const participants = overview?.participants.filter(item => item.status === 'active') ?? [];
+  const activeExpense = expenses.find(item => item.id === expenseId);
+  const exactTotal = selectedShares.reduce((sum, id) => sum + Number(exactShares[id] || 0), 0);
   const nameOf = (id: string) => participants.find(item => item.id === id)?.displayName ?? 'Thành viên';
   const pending = settlements.filter(item => item.status === 'pending');
   const reserved = new Set(pending.flatMap(item => [item.fromParticipantId, item.toParticipantId]));
@@ -317,16 +354,21 @@ export function LiveWorkspace() {
             <button className="primary-button" disabled={busy}>{busy ? 'Đang lưu…' : 'Tạo chuyến đi'}</button>
           </form>
         </section>}
-        {(screen === 'trip' || screen === 'create-expense') && current && overview && <>
+        {(screen === 'trip' || screen === 'create-expense' || screen === 'expense') && current && overview && <>
           <button className="text-button" onClick={() => { setScreen('list'); setError(''); }}><ArrowLeft size={17} /> Tất cả chuyến đi</button>
           <div className="live-heading"><div><p className="muted">Chuyến đi</p><h1>{current.name}</h1></div>
             {screen === 'trip' && <button className="icon-button" aria-label="Tải lại" disabled={busy} onClick={() => void run(async () => loadTrip(current.id, await token()))}><RefreshCw size={19} /></button>}</div>
           {screen === 'trip' ? <>
             <div className="summary-grid"><div className="summary-card"><span className="summary-label">Tổng chi tiêu</span><strong>{formatMoney(overview.trip.totalExpenseMinor)}</strong></div>
               <div className="summary-card"><span className="summary-label">Số dư của bạn</span><strong>{formatMoney(overview.balances.find(item => item.participantId === current.myParticipantId)?.netMinor ?? 0)}</strong></div></div>
-            <button className="primary-button" onClick={() => setScreen('create-expense')}><Plus size={20} /> Thêm khoản chi</button>
+            <button className="primary-button" onClick={() => {
+              setSplitMethod('equal'); setSelectedShares(participants.map(item => item.id));
+              setExactShares({}); setExpenseAmount(''); setError(''); setScreen('create-expense');
+            }}><Plus size={20} /> Thêm khoản chi</button>
             <section className="card live-panel"><h2><ReceiptText size={19} /> Khoản chi gần đây</h2>
-              {expenses.length ? expenses.map(item => <div className="live-line" key={item.id}><div><strong>{item.title}</strong><span className="muted">{participants.find(p => p.id === item.payerParticipantId)?.displayName} đã trả · {item.occurredOn}{item.status === 'void' ? ' · Đã hủy' : ''}</span></div><strong>{formatMoney(item.amountMinor)}</strong></div>) : <p className="muted">Chưa có khoản chi.</p>}
+              {expenses.length ? expenses.map(item => <button className="live-line live-expense-row" key={item.id} onClick={() => { setExpenseId(item.id); setError(''); setScreen('expense'); }}>
+                <span><strong>{item.title}</strong><small className="muted">{nameOf(item.payerParticipantId)} đã trả · {item.occurredOn}{item.status === 'void' ? ' · Đã hủy' : ''}</small></span><strong>{formatMoney(item.amountMinor)}</strong>
+              </button>) : <p className="muted">Chưa có khoản chi.</p>}
               {expenses.length >= 30 && <p className="muted">Hiển thị 30 khoản chi gần nhất.</p>}
             </section>
             <section className="card live-panel"><h2><Users size={19} /> Thành viên và số dư</h2>
@@ -352,14 +394,35 @@ export function LiveWorkspace() {
                 <div className="live-line" key={item.id}><span>{nameOf(item.fromParticipantId)} → {nameOf(item.toParticipantId)}</span><strong>{formatMoney(item.amountMinor)}</strong></div>)}</div>}
               {settlements.length >= 30 && <p className="muted">Hiển thị 30 khoản chuyển gần nhất.</p>}
             </section>
-          </> : <section className="card live-panel">
+          </> : screen === 'expense' && activeExpense ? <section className="card live-panel">
+            <button className="text-button" onClick={() => setScreen('trip')}><ArrowLeft size={17} /> Về chuyến đi</button>
+            <div><span className="tag">{activeExpense.status === 'void' ? 'Đã hủy' : 'Khoản chi'}</span><h2>{activeExpense.title}</h2><strong className="live-amount">{formatMoney(activeExpense.amountMinor)}</strong></div>
+            <p className="muted">{nameOf(activeExpense.payerParticipantId)} đã trả · {activeExpense.occurredOn} · {activeExpense.splitMethod === 'equal' ? 'Chia đều' : 'Chia theo số tiền'}</p>
+            {activeExpense.note && <p>{activeExpense.note}</p>}
+            <div><h3>Phần chia</h3>{activeExpense.shares.map(share => <div className="live-line" key={share.participantId}><span>{nameOf(share.participantId)}</span><strong>{formatMoney(share.amountMinor)}</strong></div>)}</div>
+            {activeExpense.voidReason && <p className="inline-note">Lý do hủy: {activeExpense.voidReason}</p>}
+            {activeExpense.status === 'active' && (current.role === 'owner' || activeExpense.createdBy === session?.user.uid) && <form className="form-stack" onSubmit={voidExpense}>
+              <p className="muted">Hủy khoản chi sẽ tính lại số dư của nhóm.</p>
+              <label>Lý do hủy<input name="reason" maxLength={300} required /></label>
+              <button className="danger-button" disabled={busy}>{busy ? 'Đang xử lý…' : 'Hủy khoản chi'}</button>
+            </form>}
+          </section> : screen === 'expense' ? <section className="card live-panel">
+            <button className="text-button" onClick={() => setScreen('trip')}><ArrowLeft size={17} /> Về chuyến đi</button>
+            <p>Không tìm thấy khoản chi. Hãy tải lại chuyến đi.</p>
+          </section> : <section className="card live-panel">
             <button className="text-button" onClick={() => setScreen('trip')}><ArrowLeft size={17} /> Về chuyến đi</button>
             <h2>Thêm khoản chi</h2>
             <form className="form-stack" onSubmit={createExpense}>
               <label>Tên khoản chi<input name="title" maxLength={120} placeholder="Ví dụ: Ăn tối" required /></label>
-              <label>Số tiền (VNĐ)<input name="amount" type="number" min="1" step="1" inputMode="numeric" required /></label>
+              <label>Số tiền (VNĐ)<input name="amount" type="number" min="1" step="1" inputMode="numeric" value={expenseAmount} onChange={event => setExpenseAmount(event.target.value)} required /></label>
               <label>Người trả<select name="payerParticipantId" defaultValue={current.myParticipantId}>{participants.map(p => <option key={p.id} value={p.id}>{p.displayName}</option>)}</select></label>
-              <fieldset className="live-fieldset"><legend>Chia đều cho</legend>{participants.map(p => <label key={p.id}><input type="checkbox" name="participantIds" value={p.id} defaultChecked /> {p.displayName}</label>)}</fieldset>
+              <fieldset className="live-fieldset"><legend>Cách chia</legend>
+                <div className="live-split-mode"><button type="button" className="secondary-button" aria-pressed={splitMethod === 'equal'} onClick={() => setSplitMethod('equal')}>Chia đều</button><button type="button" className="secondary-button" aria-pressed={splitMethod === 'exact'} onClick={() => setSplitMethod('exact')}>Nhập từng phần</button></div>
+                {participants.map(p => <div className="live-share" key={p.id}><label><input type="checkbox" name="participantIds" value={p.id} checked={selectedShares.includes(p.id)} onChange={event => setSelectedShares(event.target.checked ? [...selectedShares, p.id] : selectedShares.filter(id => id !== p.id))} /> {p.displayName}</label>
+                  {splitMethod === 'exact' && selectedShares.includes(p.id) && <input aria-label={`Phần của ${p.displayName}`} type="number" min="1" step="1" inputMode="numeric" value={exactShares[p.id] ?? ''} onChange={event => setExactShares({ ...exactShares, [p.id]: event.target.value })} required />}
+                </div>)}
+                {splitMethod === 'exact' && <p className={Number(expenseAmount) === exactTotal ? 'positive' : 'muted'}>Đã chia {formatMoney(exactTotal)} / {formatMoney(Number(expenseAmount) || 0)}</p>}
+              </fieldset>
               <label>Ngày chi<input name="occurredOn" type="date" defaultValue={localToday()} required /></label>
               <label>Danh mục<select name="category" defaultValue="food"><option value="food">Ăn uống</option><option value="transport">Di chuyển</option><option value="stay">Lưu trú</option><option value="tickets">Vé</option><option value="shopping">Mua sắm</option><option value="other">Khác</option></select></label>
               <label>Ghi chú<textarea name="note" rows={2} maxLength={1000} /></label>

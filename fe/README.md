@@ -1,6 +1,6 @@
 # Frontend ShareBill
 
-Ứng dụng người dùng là Web/PWA mobile-first, viết bằng Next.js và TypeScript. Trang `/` dùng API cho đăng ký/đăng nhập, tạo chuyến đi, thêm thành viên, khoản chi chia đều và quyết toán (gợi ý → chờ xác nhận → cập nhật số dư); khi chạy ở localhost, trang gọi API local tại cổng 3001. Trang `/demo/` dựa trên các mẫu trong [GiaoDien](../GiaoDien/GiaoDien) và lưu dữ liệu minh họa trên trình duyệt. Các thao tác trong bản xem thử không gọi API hoặc đồng bộ với người khác.
+Ứng dụng người dùng là Web/PWA mobile-first, viết bằng Next.js và TypeScript. Trang `/` dùng API cho đăng ký/đăng nhập, tạo chuyến đi, thêm thành viên, khoản chi (chia đều hoặc nhập từng phần, xem chi tiết, hủy) và quyết toán (gợi ý → chờ xác nhận → cập nhật số dư); khi chạy ở localhost, trang gọi API local tại cổng 3001. Trang `/demo/` dựa trên các mẫu trong [GiaoDien](../GiaoDien/GiaoDien) và lưu dữ liệu minh họa trên trình duyệt. Các thao tác trong bản xem thử không gọi API hoặc đồng bộ với người khác.
 
 ## Chạy giao diện
 
@@ -24,7 +24,7 @@ Mở ứng dụng một lần khi có mạng để service worker lưu phần gi
 
 Backend nằm trong `../be`. Hợp đồng API của người dùng và quản trị nằm ở [BACKEND.md](../docs/BACKEND.md) và [ADMIN_WEB.md](../docs/ADMIN_WEB.md).
 
-Giao diện hiện dùng REST `/api/v1/auth/register`, `/login`, `/refresh` của backend, lưu phiên trong `sessionStorage` của tab và gửi `Authorization: Bearer <token>` cho thao tác dữ liệu. Trên localhost, yêu cầu đi tới API tại `http://localhost:3001`; trên host khác dùng API staging. Hợp đồng và lỗi xem [be/README.md](../be/README.md). Không đặt Firebase Admin SDK hoặc private key trong thư mục này. Chưa có đặt lại mật khẩu, sửa/hủy khoản chi hoặc mời người khác đăng nhập vào chuyến đi trong luồng dữ liệu thật. Chủ chuyến có thể xác nhận khoản chuyển thay người nhận; giao diện ghi rõ việc này trước khi cập nhật số dư.
+Giao diện hiện dùng REST `/api/v1/auth/register`, `/login`, `/refresh` của backend, lưu phiên trong `sessionStorage` của tab và gửi `Authorization: Bearer <token>` cho thao tác dữ liệu. Trên localhost, yêu cầu đi tới API tại `http://localhost:3001`; trên host khác dùng API staging. Hợp đồng và lỗi xem [be/README.md](../be/README.md). Không đặt Firebase Admin SDK hoặc private key trong thư mục này. Chưa có đặt lại mật khẩu, sửa khoản chi hoặc mời người khác đăng nhập vào chuyến đi trong luồng dữ liệu thật. Chủ chuyến có thể xác nhận khoản chuyển thay người nhận; giao diện ghi rõ việc này trước khi cập nhật số dư.
 
 Sau khi SDK đăng ký/đăng nhập thành công, gọi `POST /api/v1/me/bootstrap` với Bearer ID token và body trống; sau đó dùng `GET /api/v1/me` để đọc hồ sơ. Tên hiển thị ở Firebase Auth được cập nhật trước khi bootstrap. Backend không nhận UID, role hay status từ body của client.
 

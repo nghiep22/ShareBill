@@ -309,3 +309,12 @@ input[type="radio"], input[type="checkbox"] { min-height: 0; width: 16px; height
 .live-transfer strong:last-child { white-space: nowrap; }
 .live-history { border-top: 1px solid var(--line); padding-top: 13px; }
 .live-history h3 { margin: 0 0 4px; font-size: 14px; }
+.live-expense-row { width: 100%; border: 0; border-top: 1px solid var(--line); background: transparent; color: inherit; text-align: left; }
+.live-expense-row:hover { color: var(--teal); }
+.live-expense-row > span { display: grid; gap: 3px; min-width: 0; }
+.live-expense-row small { font-size: 12px; }
+.live-amount { display: block; margin-top: 5px; font-size: 26px; }
+.live-split-mode { display: flex; flex-wrap: wrap; gap: 8px; }
+.live-split-mode button[aria-pressed="true"] { color: var(--teal); background: var(--mint); border-color: var(--teal); }
+.live-share { display: flex; align-items: center; justify-content: space-between; gap: 10px; min-height: 44px; }
+.live-share > input { max-width: 125px; }
