@@ -11,13 +11,18 @@ import { sendError } from './http.js';
 import { registerAuthRoutes } from './auth-routes.js';
 
 export async function buildApp(app = Fastify({ logger: true })) {
-  const origin = process.env.APP_ORIGIN ?? 'http://localhost:3000';
+  const origins = (process.env.APP_ORIGIN ?? 'http://localhost:3000').split(',').map(value => value.trim()).filter(Boolean);
   const specPath = fileURLToPath(new URL('../openapi.json', import.meta.url));
   await app.register(cors, {
-    origin: [origin],
-    methods: ['GET', 'POST'],
+    origin: origins,
+    methods: ['GET', 'POST', 'PATCH'],
     allowedHeaders: ['authorization', 'content-type', 'idempotency-key', 'if-match'],
-    exposedHeaders: ['idempotency-replayed'],
+    exposedHeaders: ['etag', 'x-request-id', 'idempotency-replayed'],
+  });
+  app.addHook('onSend', async (request, reply, payload) => {
+    reply.header('X-Request-Id', request.id);
+    if (request.url.startsWith('/api/v1/')) reply.header('Cache-Control', 'private, no-store');
+    return payload;
   });
   await app.register(swagger, { mode: 'static', specification: { path: specPath, baseDir: dirname(specPath) } });
   await app.register(swaggerUi, {

@@ -6,7 +6,7 @@ Backend Node.js/Fastify + TypeScript, dùng Firebase Authentication và Cloud Fi
 
 Thiết kế lưu trữ và backlog hoàn thiện ở [DATABASE.md](../docs/DATABASE.md). Index P0 đã có trong `firestore.indexes.json` và được nối với `firebase.json`; cần deploy và smoke query trên staging trước release. File index bao gồm cả query của chức năng chưa được code.
 
-Kế hoạch có [20 lát cắt triển khai](../docs/slices/README.md). S01–S05 đã hoàn tất trên local/Emulator. Backend tiếp tục với [S06 — Phân trang và hợp đồng API cho frontend](../docs/slices/01_DATABASE_BE.md#s06).
+Kế hoạch có [20 lát cắt triển khai](../docs/slices/README.md). S01–S06 đã hoàn tất trên local/Emulator. Backend tiếp tục với [S07 — Chỉnh thông tin chuyến và người tham gia](../docs/slices/02_NGHIEP_VU_BE.md#s07).
 
 - Node.js 24 LTS, pnpm 11.25.0; phiên bản lưu trong `.node-version` và `package.json` ở thư mục gốc.
 - Java 21 cho Firebase Emulator Suite.
@@ -34,7 +34,7 @@ Trong terminal **cmd** của VS Code, có thể chạy `cd be` rồi `npm run em
 
 ### Thử API trên Swagger UI
 
-Khi cả Emulator và API đã chạy, mở **http://localhost:3001/docs/**. Trang này mô tả 18 endpoint hiện có; đặc tả JSON ở `http://localhost:3001/docs/json`.
+Khi cả Emulator và API đã chạy, mở **http://localhost:3001/docs/**. Trang này mô tả 20 endpoint hiện có; đặc tả JSON ở `http://localhost:3001/docs/json`.
 
 1. Mở **Tài khoản → POST /api/v1/auth/register** (hoặc `login`), bấm **Try it out**, điền email/mật khẩu/tên rồi **Execute**. Mỗi lần đăng ký cần email mới.
 2. Trong response, sao chép **`data.accessToken`**. Bấm **Authorize** ở đầu trang, dán token vào ô BearerAuth **không thêm chữ `Bearer`**, rồi **Authorize**.
@@ -43,7 +43,7 @@ Khi cả Emulator và API đã chạy, mở **http://localhost:3001/docs/**. Tra
 
 Swagger UI chỉ là công cụ thử API; đăng nhập/chuyến đi cần hai Emulator đang chạy. Không chia sẻ accessToken hoặc refreshToken trong ảnh chụp hay issue.
 
-Backend đọc `be/.env` khi chạy từ thư mục `be`. Đừng commit file này. Trên production, cấu hình `FIREBASE_PROJECT_ID`, `FIREBASE_WEB_API_KEY` (Web API key của cùng Firebase project), `APP_ORIGIN` và server credentials ở host secret store. Bật phương thức **Email/Password** trong Firebase Authentication trước khi dùng tài khoản thật. Tuyệt đối không đặt private key trong `fe/` hay biến `NEXT_PUBLIC_*`.
+Backend đọc `be/.env` khi chạy từ thư mục `be`. Đừng commit file này. Trên production, cấu hình `FIREBASE_PROJECT_ID`, `FIREBASE_WEB_API_KEY` (Web API key của cùng Firebase project), `APP_ORIGIN` (danh sách origin FE ngăn bằng dấu phẩy), `CURSOR_SIGNING_SECRET` riêng ít nhất 32 ký tự và server credentials ở host secret store. Bật phương thức **Email/Password** trong Firebase Authentication trước khi dùng tài khoản thật. Tuyệt đối không đặt private key trong `fe/` hay biến `NEXT_PUBLIC_*`.
 
 ### Kiểm tra CSDL local chỉ đọc
 
@@ -104,17 +104,21 @@ Frontend dùng Firebase Web SDK gọi `POST /api/v1/me/bootstrap` một lần sa
 | POST | `/api/v1/me/bootstrap` | Bearer JWT; tạo hồ sơ nếu thiếu, không nhận field từ client |
 | GET | `/api/v1/me` | Bearer JWT; chỉ đọc hồ sơ app |
 | POST | `/api/v1/trips` | Firebase ID token, Idempotency-Key, body `{name, ownerName}` |
-| GET | `/api/v1/trips` | Danh sách tối đa 20 chuyến gần đây của tài khoản |
+| GET | `/api/v1/trips` | `status`, `limit` tối đa 20, `cursor`; kiểm membership hiện tại |
 | GET | `/api/v1/trips/:tripId/overview` | ID token, membership active |
 | POST | `/api/v1/trips/:tripId/participants` | ID token, owner, Idempotency-Key, body `{displayName}` |
 | POST | `/api/v1/trips/:tripId/expenses` | ID token, member, Idempotency-Key, split equal/exact |
-| GET | `/api/v1/trips/:tripId/expenses` | 30 khoản chi gần nhất |
+| GET | `/api/v1/trips/:tripId/expenses` | `status`, `from`/`to`, một trong `category`/`payer`, `limit` tối đa 50, `cursor` |
 | GET | `/api/v1/trips/:tripId/expenses/:id` | Chi tiết khoản chi |
 | POST | `/api/v1/trips/:tripId/expenses/:id/void` | Chủ nhóm/người tạo, If-Match, lý do |
 | GET | `/api/v1/trips/:tripId/settlement-suggestions` | Gợi ý từ số dư hiện tại |
 | POST | `/api/v1/trips/:tripId/settlements` | Tạo đề nghị trả nợ, Idempotency-Key |
 | POST | `/api/v1/trips/:tripId/settlements/:id/confirm` | Người nhận/chủ nhóm xác nhận, If-Match |
-| GET | `/api/v1/trips/:tripId/settlements` | 30 lượt trả nợ gần nhất |
+| GET | `/api/v1/trips/:tripId/settlements` | `status`, `limit` tối đa 50, `cursor` |
+| GET | `/api/v1/trips/:tripId/activity` | Lịch sử chuyến, DTO giới hạn trường, `limit` tối đa 50, `cursor` |
+| GET | `/api/v1/operations/:key` | Tra kết quả tối thiểu theo Idempotency-Key, cần quyền chuyến hiện tại |
+
+Các danh sách trả `data.items` và `data.nextCursor`; dùng lại cursor với cùng người dùng, chuyến và bộ lọc. Khi `revision` của chuyến đổi, API trả `409 CURSOR_STALE` và client tải lại trang đầu. Trang trips có thể rỗng nhưng vẫn có `nextCursor` nếu các tripRefs trong trang không còn quyền hoặc không khớp trạng thái. `404 OPERATION_UNKNOWN` chưa chứng minh lệnh cũ thất bại; retry cùng key và body trước khi tạo key khác. Cursor dùng khóa ký riêng `CURSOR_SIGNING_SECRET` ít nhất 32 ký tự ngoài Emulator; Emulator dùng khóa development cố định. Chưa kiểm composite query trên Firestore cloud; việc đó thuộc S18.
 
 Header của lệnh ghi:
 

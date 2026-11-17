@@ -21,7 +21,7 @@ describe('Swagger UI', () => {
 
       const operations = Object.entries(spec.paths).flatMap(([path, methods]) =>
         Object.entries(methods as Record<string, unknown>).map(([method, details]) => ({ path, method, details })));
-      expect(operations).toHaveLength(18);
+      expect(operations).toHaveLength(20);
       for (const { path, method, details } of operations) {
         const url = path.replace(/\{([^}]+)\}/g, ':$1');
         expect(app.hasRoute({ method: method.toUpperCase(), url }), `${method.toUpperCase()} ${url}`).toBe(true);

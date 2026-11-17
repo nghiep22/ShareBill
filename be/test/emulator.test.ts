@@ -55,7 +55,7 @@ describe.skipIf(!enabled)('Firebase emulator API flow', () => {
     expect(invalid.statusCode).toBe(422);
     const registered = await app.inject({ method: 'POST', url: '/api/v1/auth/register', payload });
     expect(registered.statusCode).toBe(201);
-    expect(registered.headers['cache-control']).toBe('no-store');
+    expect(registered.headers['cache-control']).toBe('private, no-store');
     const session = registered.json().data;
     expect(session.accessToken.split('.')).toHaveLength(3);
     expect(session.refreshToken).toBeTruthy();
@@ -108,7 +108,7 @@ describe.skipIf(!enabled)('Firebase emulator API flow', () => {
     expect((await db().doc(`users/${sdk.uid}`).get()).exists).toBe(false);
     const bootstrapped = await app.inject({ method: 'POST', url: '/api/v1/me/bootstrap', headers: sdkHeaders });
     expect(bootstrapped.statusCode).toBe(200);
-    expect(bootstrapped.headers['cache-control']).toBe('no-store');
+    expect(bootstrapped.headers['cache-control']).toBe('private, no-store');
     expect(bootstrapped.json().data).toMatchObject({ uid: sdk.uid, email: sdkEmail, displayName: 'Tên từ Auth', status: 'active' });
     expect(userDocumentSchema.safeParse((await db().doc(`users/${sdk.uid}`).get()).data()).success).toBe(true);
     const read = await app.inject({ method: 'GET', url: '/api/v1/me', headers: sdkHeaders });

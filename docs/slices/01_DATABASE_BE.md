@@ -284,10 +284,12 @@ Hoàn thiện dữ liệu và hợp đồng API trước khi mở rộng nghiệ
 
 **Phân trang và hợp đồng API cho frontend**
 
-- **Trạng thái** Chưa làm
+- **Trạng thái** Hoàn tất trên Firebase Emulator; query cloud kiểm ở S18.
 - **Phụ thuộc** [S05](#s05)
 - **Kết quả** Dùng cursor chung cho chuyến, khoản chi, trả nợ và hoạt động. Bổ sung tra kết quả operation sau timeout và hợp đồng HTTP khác origin.
 - **Nghiệm thu** Kiểm nhiều trang, filter, cursor stale, actor đã mất quyền và key legacy. Preflight cho `If-Match` và lỗi HTTP hoạt động theo hợp đồng. Query cloud được kiểm ở S18.
+- **Đã làm** Cursor HMAC có hạn 24 giờ, khóa theo UID/chuyến/bộ lọc/sort/revision; giới hạn 20 tripRefs hoặc 50 bản ghi tài chính/hoạt động mỗi trang. Trips đọc `tripRefs` active, kiểm membership hiện tại, trả `nextCursor` kể cả trang lọc rỗng. Expense hỗ trợ status, khoảng ngày, một trong category/payer; settlement hỗ trợ status; activity chỉ xuất DTO allowlist. `GET /operations/:key` trả kết quả tối thiểu sau kiểm quyền hiện tại, gồm key legacy. API xuất `ETag`, `X-Request-Id`, `Cache-Control: private, no-store`, CORS allowlist và lỗi JSON ổn định. `CURSOR_SIGNING_SECRET` bắt buộc ngoài Emulator khi cần phân trang.
+- **Kiểm chứng** Unit test ký/tamper/scope/revision; Emulator tạo 23 chuyến với `joinedAt` trùng, trang đầu bị lọc rỗng, membership mất quyền; 32 settlements cùng `createdAt`, expense lọc ngày/danh mục, activity legacy có trường riêng tư, cursor stale sau mutation, tra operation của người khác và sau mất quyền. HTTP test GET/POST/PATCH preflight, origin lạ, header và JSON lỗi. Các composite query mới chưa smoke trên Firestore cloud.
 
 <details>
 <summary>Các bước và tiêu chí chi tiết</summary>

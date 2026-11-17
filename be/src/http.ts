@@ -50,6 +50,17 @@ export function sendError(error: unknown, _request: FastifyRequest, reply: Fasti
     reply.status(error.status).send({ error: { code: error.code, message: error.message } });
     return;
   }
+  if (typeof error === 'object' && error !== null &&
+      'code' in error && (error.code === 'FST_ERR_CTP_INVALID_JSON_BODY' || error.code === 'FST_ERR_CTP_EMPTY_JSON_BODY')) {
+    reply.status(400).send({ error: { code: 'INVALID_JSON', message: 'Nội dung JSON không hợp lệ.' } });
+    return;
+  }
+  const statusCode = typeof error === 'object' && error !== null && 'statusCode' in error
+    ? error.statusCode : null;
+  if (typeof statusCode === 'number' && statusCode >= 400 && statusCode < 500) {
+    reply.status(statusCode).send({ error: { code: 'INVALID_REQUEST', message: 'Yêu cầu không hợp lệ.' } });
+    return;
+  }
   reply.log.error(error);
   reply.status(500).send({ error: { code: 'INTERNAL_ERROR', message: 'Đã có lỗi. Vui lòng thử lại.' } });
 }
