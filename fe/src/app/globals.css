@@ -302,3 +302,10 @@ input[type="radio"], input[type="checkbox"] { min-height: 0; width: 16px; height
 .live-fieldset { display: grid; gap: 8px; border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; }
 .live-fieldset label { display: flex !important; align-items: center; gap: 8px; font-weight: 500 !important; }
 .live-fieldset input { width: 18px; height: 18px; }
+.live-settlement { display: grid; gap: 10px; padding: 13px 0; border-top: 1px solid var(--line); }
+.live-settlement .secondary-button { justify-self: start; }
+.live-transfer { display: flex; justify-content: space-between; align-items: center; gap: 12px; }
+.live-transfer strong:first-child { display: flex; align-items: center; gap: 5px; min-width: 0; }
+.live-transfer strong:last-child { white-space: nowrap; }
+.live-history { border-top: 1px solid var(--line); padding-top: 13px; }
+.live-history h3 { margin: 0 0 4px; font-size: 14px; }

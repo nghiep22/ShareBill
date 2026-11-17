@@ -1,17 +1,23 @@
 'use client';
 
 import { FormEvent, useCallback, useEffect, useRef, useState } from 'react';
-import { ArrowLeft, LogOut, Plus, ReceiptText, RefreshCw, Users, WalletCards } from 'lucide-react';
+import { ArrowLeft, ArrowRight, CircleCheck, LogOut, Plus, ReceiptText, RefreshCw, Scale, Users, WalletCards } from 'lucide-react';
 
 const remoteApi = 'https://sharebill-api-staging.vercel.app';
 const sessionKey = 'sharebill-live-session-v1';
 const formatMoney = (value: number) => `${new Intl.NumberFormat('vi-VN').format(value)}đ`;
+const localToday = () => {
+  const now = new Date();
+  return new Date(now.getTime() - now.getTimezoneOffset() * 60_000).toISOString().slice(0, 10);
+};
 
 type Session = { accessToken: string; refreshToken: string; expiresAt: number; user: { displayName: string; email: string } };
 type Trip = { id: string; name: string; myParticipantId: string; role: string; totalExpenseMinor: number; participantCount: number };
 type Participant = { id: string; displayName: string; status: string };
 type Expense = { id: string; title: string; amountMinor: number; payerParticipantId: string; occurredOn: string; category: string; status: string };
-type Overview = { trip: Trip; participants: Participant[]; balances: { participantId: string; netMinor: number }[] };
+type Overview = { trip: Trip; participants: Participant[]; balances: { participantId: string; netMinor: number }[]; ledgerVersion: number };
+type Transfer = { fromParticipantId: string; toParticipantId: string; amountMinor: number };
+type Settlement = Transfer & { id: string; status: 'pending' | 'confirmed' | 'cancelled' | 'void'; version: number; occurredOn: string };
 
 function readSession(): Session | null {
   try {
@@ -20,7 +26,7 @@ function readSession(): Session | null {
   } catch { return null; }
 }
 
-async function request<T>(path: string, body?: unknown, token?: string, key?: string): Promise<T> {
+async function request<T>(path: string, body?: unknown, token?: string, key?: string, ifMatch?: number): Promise<T> {
   let response: Response;
   try {
     const api = ['localhost', '127.0.0.1'].includes(window.location.hostname) ? 'http://localhost:3001' : remoteApi;
@@ -30,6 +36,7 @@ async function request<T>(path: string, body?: unknown, token?: string, key?: st
         ...(body === undefined ? {} : { 'Content-Type': 'application/json' }),
         ...(token ? { Authorization: `Bearer ${token}` } : {}),
         ...(key ? { 'Idempotency-Key': key } : {}),
+        ...(ifMatch ? { 'If-Match': `"${ifMatch}"` } : {}),
       },
       body: body === undefined ? undefined : JSON.stringify(body),
       cache: 'no-store',
@@ -48,11 +55,14 @@ export function LiveWorkspace() {
   const [selected, setSelected] = useState<string | null>(null);
   const [overview, setOverview] = useState<Overview | null>(null);
   const [expenses, setExpenses] = useState<Expense[]>([]);
+  const [settlements, setSettlements] = useState<Settlement[]>([]);
+  const [suggestions, setSuggestions] = useState<Transfer[]>([]);
   const [screen, setScreen] = useState<'login' | 'register' | 'list' | 'create-trip' | 'trip' | 'create-expense'>('login');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const pendingTrip = useRef<{ payload: string; key: string } | null>(null);
   const pendingExpense = useRef<{ payload: string; key: string } | null>(null);
+  const settlementKeys = useRef<Record<string, string>>({});
 
   const saveSession = useCallback((value: Session | null) => {
     setSession(value);
@@ -85,12 +95,16 @@ export function LiveWorkspace() {
   }, []);
 
   const loadTrip = useCallback(async (tripId: string, authToken: string) => {
-    const [nextOverview, nextExpenses] = await Promise.all([
+    const [nextOverview, nextExpenses, nextSettlements, nextSuggestions] = await Promise.all([
       request<Overview>(`/api/v1/trips/${tripId}/overview`, undefined, authToken),
       request<{ items: Expense[] }>(`/api/v1/trips/${tripId}/expenses`, undefined, authToken),
+      request<{ items: Settlement[] }>(`/api/v1/trips/${tripId}/settlements`, undefined, authToken),
+      request<{ suggestions: Transfer[] }>(`/api/v1/trips/${tripId}/settlement-suggestions`, undefined, authToken),
     ]);
     setOverview(nextOverview);
     setExpenses(nextExpenses.items);
+    setSettlements(nextSettlements.items);
+    setSuggestions(nextSuggestions.suggestions);
     setSelected(tripId);
     setScreen('trip');
   }, []);
@@ -135,7 +149,7 @@ export function LiveWorkspace() {
 
   function signOut() {
     saveSession(null);
-    setTrips([]); setOverview(null); setExpenses([]); setSelected(null);
+    setTrips([]); setOverview(null); setExpenses([]); setSettlements([]); setSuggestions([]); setSelected(null);
     setScreen('login'); setError('');
   }
 
@@ -220,8 +234,48 @@ export function LiveWorkspace() {
     });
   }
 
+  function proposeSettlement(transfer: Transfer) {
+    if (!selected || !overview) return;
+    const body = { ...transfer, occurredOn: localToday(), note: null, basedOnLedgerVersion: overview.ledgerVersion };
+    const operation = `propose:${selected}:${JSON.stringify(body)}`;
+    const key = settlementKeys.current[operation] ??= crypto.randomUUID();
+    void run(async () => {
+      const authToken = await token();
+      try {
+        await request(`/api/v1/trips/${selected}/settlements`, body, authToken, key);
+        delete settlementKeys.current[operation];
+      } catch (cause) {
+        await loadTrip(selected, authToken).catch(() => {});
+        throw cause;
+      }
+      await loadTrip(selected, authToken);
+    });
+  }
+
+  function confirmSettlement(item: Settlement) {
+    if (!selected || !overview || !window.confirm('Xác nhận khoản tiền này đã được người nhận nhận? Số dư của nhóm sẽ được cập nhật.')) return;
+    const body = { basedOnLedgerVersion: overview.ledgerVersion };
+    const operation = `confirm:${selected}:${item.id}:${item.version}:${body.basedOnLedgerVersion}`;
+    const key = settlementKeys.current[operation] ??= crypto.randomUUID();
+    void run(async () => {
+      const authToken = await token();
+      try {
+        await request(`/api/v1/trips/${selected}/settlements/${item.id}/confirm`, body, authToken, key, item.version);
+        delete settlementKeys.current[operation];
+      } catch (cause) {
+        await loadTrip(selected, authToken).catch(() => {});
+        throw cause;
+      }
+      await loadTrip(selected, authToken);
+    });
+  }
+
   const current = trips.find(trip => trip.id === selected);
   const participants = overview?.participants.filter(item => item.status === 'active') ?? [];
+  const nameOf = (id: string) => participants.find(item => item.id === id)?.displayName ?? 'Thành viên';
+  const pending = settlements.filter(item => item.status === 'pending');
+  const reserved = new Set(pending.flatMap(item => [item.fromParticipantId, item.toParticipantId]));
+  const availableSuggestions = suggestions.filter(item => !reserved.has(item.fromParticipantId) && !reserved.has(item.toParticipantId));
   return <div className="live-app">
     <header className="app-header live-header">
       <a className="brand" href="/"><span className="brand-icon"><WalletCards size={23} aria-hidden /></span><strong>Share<span>Bill</span></strong></a>
@@ -282,6 +336,22 @@ export function LiveWorkspace() {
                 <button className="secondary-button" disabled={busy}><Plus size={17} /> Thêm người</button>
               </form>}
             </section>
+            <section className="card live-panel"><h2><Scale size={19} /> Quyết toán</h2>
+              {pending.length > 0 && <><p className="muted">Khoản chuyển chờ xác nhận. Số dư chỉ thay đổi khi xác nhận đã nhận tiền.</p>
+                {pending.map(item => <div className="live-settlement" key={item.id}>
+                  <div className="live-transfer"><strong>{nameOf(item.fromParticipantId)} <ArrowRight size={14} aria-hidden /> {nameOf(item.toParticipantId)}</strong><strong>{formatMoney(item.amountMinor)}</strong></div>
+                  {(current.role === 'owner' || current.myParticipantId === item.toParticipantId) && <button className="secondary-button" disabled={busy} onClick={() => confirmSettlement(item)}><CircleCheck size={17} /> {current.role === 'owner' && current.myParticipantId !== item.toParticipantId ? 'Xác nhận thay người nhận' : 'Xác nhận đã nhận tiền'}</button>}
+                </div>)}</>}
+              {availableSuggestions.length > 0 && <><p className="muted">Gợi ý dựa trên số dư hiện tại:</p>
+                {availableSuggestions.map(item => <div className="live-settlement" key={`${item.fromParticipantId}-${item.toParticipantId}`}>
+                  <div className="live-transfer"><strong>{nameOf(item.fromParticipantId)} <ArrowRight size={14} aria-hidden /> {nameOf(item.toParticipantId)}</strong><strong>{formatMoney(item.amountMinor)}</strong></div>
+                  {(current.role === 'owner' || current.myParticipantId === item.fromParticipantId) && <button className="secondary-button" disabled={busy} onClick={() => proposeSettlement(item)}>Ghi nhận đã chuyển tiền</button>}
+                </div>)}</>}
+              {pending.length === 0 && availableSuggestions.length === 0 && <p className="muted">Các thành viên đã cân bằng.</p>}
+              {settlements.filter(item => item.status === 'confirmed').length > 0 && <div className="live-history"><h3>Đã xác nhận</h3>{settlements.filter(item => item.status === 'confirmed').map(item =>
+                <div className="live-line" key={item.id}><span>{nameOf(item.fromParticipantId)} → {nameOf(item.toParticipantId)}</span><strong>{formatMoney(item.amountMinor)}</strong></div>)}</div>}
+              {settlements.length >= 30 && <p className="muted">Hiển thị 30 khoản chuyển gần nhất.</p>}
+            </section>
           </> : <section className="card live-panel">
             <button className="text-button" onClick={() => setScreen('trip')}><ArrowLeft size={17} /> Về chuyến đi</button>
             <h2>Thêm khoản chi</h2>
@@ -290,7 +360,7 @@ export function LiveWorkspace() {
               <label>Số tiền (VNĐ)<input name="amount" type="number" min="1" step="1" inputMode="numeric" required /></label>
               <label>Người trả<select name="payerParticipantId" defaultValue={current.myParticipantId}>{participants.map(p => <option key={p.id} value={p.id}>{p.displayName}</option>)}</select></label>
               <fieldset className="live-fieldset"><legend>Chia đều cho</legend>{participants.map(p => <label key={p.id}><input type="checkbox" name="participantIds" value={p.id} defaultChecked /> {p.displayName}</label>)}</fieldset>
-              <label>Ngày chi<input name="occurredOn" type="date" defaultValue={new Date().toLocaleDateString('en-CA')} required /></label>
+              <label>Ngày chi<input name="occurredOn" type="date" defaultValue={localToday()} required /></label>
               <label>Danh mục<select name="category" defaultValue="food"><option value="food">Ăn uống</option><option value="transport">Di chuyển</option><option value="stay">Lưu trú</option><option value="tickets">Vé</option><option value="shopping">Mua sắm</option><option value="other">Khác</option></select></label>
               <label>Ghi chú<textarea name="note" rows={2} maxLength={1000} /></label>
               <button className="primary-button" disabled={busy}>{busy ? 'Đang lưu…' : 'Lưu khoản chi'}</button>
