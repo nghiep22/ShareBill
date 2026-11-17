@@ -430,7 +430,7 @@ Xem trạng thái xây index trong Firebase Console và chạy query smoke sau k
 
 ## 9. Nâng schema dữ liệu cũ
 
-Chưa có lệnh `db:migrate` trong repo. Quy trình dưới đây là yêu cầu để triển khai runner; không chạy tự động khi API boot hoặc khi Vercel build. Không xóa dữ liệu hiện có để làm schema “đúng”.
+Đã có lệnh `pnpm --dir be db:migrate --project demo-sharebill` để dry-run trên Emulator và `--apply` để ghi vào Emulator; chưa chạy migration trên dữ liệu cloud. Runner không chạy tự động khi API boot hoặc khi Vercel build. Không xóa dữ liệu hiện có để làm schema “đúng”. Xem [hướng dẫn chạy local](../be/README.md#chuyển-dữ-liệu-legacy-trên-emulator).
 
 ### 9.1. Các migration cần viết
 

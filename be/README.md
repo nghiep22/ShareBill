@@ -6,7 +6,7 @@ Backend Node.js/Fastify + TypeScript, dùng Firebase Authentication và Cloud Fi
 
 Thiết kế lưu trữ và backlog hoàn thiện ở [DATABASE.md](../docs/DATABASE.md). Index P0 đã có trong `firestore.indexes.json` và được nối với `firebase.json`; cần deploy và smoke query trên staging trước release. File index bao gồm cả query của chức năng chưa được code.
 
-Kế hoạch có [20 lát cắt triển khai](../docs/slices/README.md). S01–S04 đã hoàn tất. Backend tiếp tục với [S05 — Migration dữ liệu legacy](../docs/slices/01_DATABASE_BE.md#s05).
+Kế hoạch có [20 lát cắt triển khai](../docs/slices/README.md). S01–S05 đã hoàn tất trên local/Emulator. Backend tiếp tục với [S06 — Phân trang và hợp đồng API cho frontend](../docs/slices/01_DATABASE_BE.md#s06).
 
 - Node.js 24 LTS, pnpm 11.25.0; phiên bản lưu trong `.node-version` và `package.json` ở thư mục gốc.
 - Java 21 cho Firebase Emulator Suite.
@@ -56,6 +56,18 @@ pnpm --dir be db:check --project demo-sharebill --trip <trip-uuid> --page-size 2
 ```
 
 Checker xuất JSON với `summary` và các lỗi có mã, đường dẫn, trường và giá trị kỳ vọng/thực tế. Exit code `0` là sạch, `1` là tìm thấy lỗi, `2` là tham số hoặc kết nối sai. Checker không ghi hay sửa document; Emulator không có dữ liệu sẽ báo 0 chuyến đã quét. Chạy bộ test tự khởi động/dừng Emulator bằng `pnpm --dir be exec firebase emulators:exec --project demo-sharebill --only auth,firestore "pnpm test:emulator"`.
+
+### Chuyển dữ liệu legacy trên Emulator
+
+Khi cả Auth và Firestore Emulator đang chạy, tại thư mục gốc:
+
+```powershell
+pnpm --dir be db:migrate --project demo-sharebill --page-size 100
+pnpm --dir be db:migrate --project demo-sharebill --migration DBM-004-ledger
+pnpm --dir be db:migrate --project demo-sharebill --apply
+```
+
+Lệnh mặc định chỉ đọc. `--apply` chỉ hoạt động với Emulator; có thể thêm `--max-documents N` để kiểm checkpoint/resume. Chạy các migration theo thứ tự DBM-001–007. `issues` chặn hoàn tất và không ghi thay đổi của document/chuyến đó. `exceptions` ghi lại operation cũ không đủ căn cứ để nâng schema và audit cũ thiếu dữ liệu; bản gốc vẫn nguyên, reader legacy vẫn hoạt động. Job có ngoại lệ được ghi `completed_with_exceptions`, còn `completed` trong báo cáo nghĩa là đã quét hết scope. Chạy lại dry-run để lấy lại danh sách đường dẫn ngoại lệ. Với dữ liệu lớn, runner từ chối tự suy link khi một chuyến có hơn 200 bản ghi ledger; cần xử lý riêng có kiểm chứng. Không chạy migration tự động khi API khởi động hoặc build.
 
 ## Đăng ký, đăng nhập và JWT
 

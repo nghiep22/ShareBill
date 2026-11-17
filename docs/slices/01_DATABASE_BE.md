@@ -198,10 +198,12 @@ Hoàn thiện dữ liệu và hợp đồng API trước khi mở rộng nghiệ
 
 **Migration dữ liệu legacy**
 
-- **Trạng thái** Chưa làm
+- **Trạng thái** Hoàn tất trên Firebase Emulator; chưa chạy trên dữ liệu cloud theo kế hoạch local-first.
 - **Phụ thuộc** [S04](#s04)
 - **Kết quả** Xây runner có dry-run và checkpoint. Nâng metadata hồ sơ, chuyến, liên kết, khoản chi, trả nợ, projection, operation và audit.
 - **Nghiệm thu** Kiểm dry-run/apply/rerun và chạy tiếp sau crash. Giữ nguyên lịch sử tiền, key chống trùng và dữ liệu nguồn. Báo trường thiếu căn cứ hoặc projection lệch.
+- **Đã làm** `db:migrate` mặc định dry-run, yêu cầu project và hai Emulator; `--apply` chỉ ghi vào Firestore Emulator. Bảy migration DBM-001–007 chạy lần lượt, checkpoint theo document, lease/checksum/project guard. Metadata thiếu được thêm có kiểm schema; xung đột liên kết, tổng shares và projection lệch là lỗi chặn. Operation không suy được request giữ nguyên và được báo `LEGACY_OPERATION_RETAINED`; audit cũ giữ nguyên, có baseline riêng và `LEGACY_AUDIT_EVENT`. Job có ngoại lệ mang trạng thái `completed_with_exceptions`; báo cáo `completed` chỉ nghĩa là đã quét hết scope, cần đọc `exceptions` và `failed` trước khi coi dữ liệu đạt schema v1.
+- **Kiểm chứng** `pnpm check:be`, bộ test Emulator `migration-users.emulator.test.ts` và `migration-slices.emulator.test.ts`: dry-run không ghi, lease tranh chấp, sai project, ngắt giữa chừng rồi resume, rerun, profile disabled/mất Auth, owner link thiếu, UID/link mâu thuẫn, removed membership, invalid shares, void/confirmed, balance/signal/counter lệch, retry key trước/sau migration, operation thiếu response và audit baseline. CLI dry-run cả collection group đã chạy trên Emulator.
 
 <details>
 <summary>Các bước và tiêu chí chi tiết</summary>
