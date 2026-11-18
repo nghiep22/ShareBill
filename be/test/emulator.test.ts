@@ -63,8 +63,18 @@ describe.skipIf(!enabled)('Firebase emulator API flow', () => {
     const profile = (await db().doc(`users/${session.user.uid}`).get()).data();
     expect(userDocumentSchema.safeParse(profile).success).toBe(true);
     expect(profile).toMatchObject({ status: 'active', schemaVersion: 1, displayName: 'An' });
-    const trip = await app.inject({ method: 'POST', url: '/api/v1/trips', headers: { authorization: `Bearer ${session.accessToken}`, 'idempotency-key': randomUUID() }, payload: { name: 'Huế', ownerName: 'An' } });
+    const tripHeaders = { authorization: `Bearer ${session.accessToken}`, 'idempotency-key': randomUUID() };
+    const details = { name: 'Huế', ownerName: 'An', destination: 'Huế', note: 'Đi cuối tuần', startDate: '2026-12-18', endDate: '2026-12-20' };
+    const invalidTrip = await app.inject({ method: 'POST', url: '/api/v1/trips', headers: tripHeaders, payload: { ...details, endDate: null } });
+    expect(invalidTrip.statusCode).toBe(422);
+    const trip = await app.inject({ method: 'POST', url: '/api/v1/trips', headers: tripHeaders, payload: details });
     expect(trip.statusCode).toBe(200);
+    expect((await db().doc(`trips/${trip.json().data.id}`).get()).data()).toMatchObject({
+      destination: details.destination, note: details.note, startDate: details.startDate, endDate: details.endDate, revision: 1,
+    });
+    const replayedTrip = await app.inject({ method: 'POST', url: '/api/v1/trips', headers: tripHeaders, payload: details });
+    expect(replayedTrip.statusCode).toBe(200);
+    expect(replayedTrip.json().data.id).toBe(trip.json().data.id);
     const duplicate = await app.inject({ method: 'POST', url: '/api/v1/auth/register', payload });
     expect(duplicate.statusCode).toBe(409);
     const wrong = await app.inject({ method: 'POST', url: '/api/v1/auth/login', payload: { email, password: 'wrong-password' } });
@@ -548,8 +558,8 @@ describe.skipIf(!enabled)('Firebase emulator API flow', () => {
     const receiptAttempt = await app.inject({ method: 'POST', url: `/api/v1/trips/${tripId}/expenses`,
       headers: { ...headers, 'idempotency-key': randomUUID() },
       payload: { ...exactPayload, receiptIds: [randomUUID()] } });
-    expect(receiptAttempt.statusCode).toBe(422);
-    expect(receiptAttempt.json().error.code).toBe('RECEIPTS_UNAVAILABLE');
+    expect(receiptAttempt.statusCode).toBe(404);
+    expect(receiptAttempt.json().error.code).toBe('NOT_FOUND');
     const legacyId = randomUUID();
     const legacyTime = Timestamp.now();
     const legacySplit = { participantIds: [ownerParticipantId] };

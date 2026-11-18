@@ -8,7 +8,7 @@ Kiểm hành trình qua browser, chạy staging và diễn tập khôi phục tr
 
 **CI browser, realtime và offline**
 
-- **Trạng thái** Chưa làm
+- **Trạng thái** Đã có browser CI, polling có kiểm quyền, PWA và nháp opt-in. Còn nghiệm thu thiết bị thật
 - **Phụ thuộc** [S12](04_FRONTEND_APP.md#s12), [S13](04_FRONTEND_APP.md#s13)
 - **Kết quả** Đưa frontend vào CI, kiểm hành trình browser, cập nhật qua signal và bổ sung PWA, snapshot offline, bản nháp opt-in.
 - **Nghiệm thu** E2E chạy qua FE/API/DB. Realtime phản ánh thu hồi quyền. PWA giữ bản nháp qua update và yêu cầu người dùng gửi lại giao dịch khi online.
@@ -39,6 +39,8 @@ Kiểm hành trình qua browser, chạy staging và diễn tập khôi phục tr
 <a id="o03"></a>
 
 **O03 · Realtime invalidation theo signal**
+
+Triển khai hiện tại dùng REST signal kiểm quyền mỗi 30 giây khi tab đang hiện, cùng revalidation ở foreground/reconnect/chuyển màn hình. Client Rules tiếp tục deny toàn bộ. SDK listener ở các bước dưới là phương án có thể bổ sung sau khi đo tải. [Mã workspace](../../fe/src/connected-workspace.tsx)
 
 - **Kết quả** Tab đang mở nhận biết dữ liệu/quyền thay đổi.
 - **Phạm vi file/module** `be/firestore.rules`, signal/membership subscription FE.

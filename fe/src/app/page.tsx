@@ -1,5 +1,5 @@
-import { LiveWorkspace } from '../live';
+import { ConnectedWorkspace } from '../connected-workspace';
 
 export default function Page() {
-  return <LiveWorkspace />;
+  return <ConnectedWorkspace />;
 }

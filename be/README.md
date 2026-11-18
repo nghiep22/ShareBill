@@ -1,12 +1,12 @@
 # ShareBill backend
 
-Backend Node.js/Fastify + TypeScript, dùng Firebase Authentication và Cloud Firestore. Đã có đăng ký/đăng nhập email và mật khẩu, làm mới phiên bằng Firebase ID token (JWT), tạo chuyến, thêm người tham gia, tạo/hủy khoản chi chia đều/chia số tiền riêng, xem tổng quan và gợi ý trả nợ, tạo và xác nhận trả nợ. Chưa có API sửa khoản chi, mời thành viên, hủy lượt trả nợ, upload hóa đơn hay quản trị app. Đặc tả đầy đủ nằm trong [BACKEND.md](../docs/BACKEND.md).
+Backend Node.js/Fastify + TypeScript, dùng Firebase Authentication và Cloud Firestore. Đã có đăng ký/đăng nhập email và mật khẩu, làm mới phiên bằng Firebase ID token (JWT), tạo/sửa/chốt/mở lại chuyến, quản lý người tham gia và liên kết danh tính, lời mời có hạn, gỡ/khôi phục thành viên, chuyển chủ chuyến, tạo/sửa/hủy khoản chi chia đều/chia số tiền riêng, xem tổng quan và gợi ý trả nợ, tạo/xác nhận/hủy/đảo trả nợ. Có backend ảnh hóa đơn, cleanup, lịch trình, hỗ trợ và API quản trị với worker đồng bộ Firebase Auth. Đặc tả đầy đủ nằm trong [BACKEND.md](../docs/BACKEND.md), hướng dẫn ảnh tại [RECEIPTS.md](../docs/RECEIPTS.md).
 
 ## Yêu cầu máy
 
 Thiết kế lưu trữ và backlog hoàn thiện ở [DATABASE.md](../docs/DATABASE.md). Index P0 đã có trong `firestore.indexes.json` và được nối với `firebase.json`; cần deploy và smoke query trên staging trước release. File index bao gồm cả query của chức năng chưa được code.
 
-Kế hoạch có [20 lát cắt triển khai](../docs/slices/README.md). S01–S07 đã hoàn tất trên local/Emulator. Backend tiếp tục với [S08 — Lời mời và vòng đời thành viên](../docs/slices/02_NGHIEP_VU_BE.md#s08).
+Kế hoạch có [20 lát cắt triển khai](../docs/slices/README.md). S01–S10 có kiểm chứng local/Emulator. S11–S17 đã có luồng giao diện, quản trị, worker và browser tests. Các cổng cloud, thiết bị thật và phục hồi tiếp tục theo [tiến độ module](../docs/KE_HOACH_HOAN_THIEN.md#tiến-độ-triển-khai-ngày-18112026).
 
 - Node.js 24 LTS, pnpm 11.25.0; phiên bản lưu trong `.node-version` và `package.json` ở thư mục gốc.
 - Java 21 cho Firebase Emulator Suite.
@@ -34,7 +34,7 @@ Trong terminal **cmd** của VS Code, có thể chạy `cd be` rồi `npm run em
 
 ### Thử API trên Swagger UI
 
-Khi cả Emulator và API đã chạy, mở **http://localhost:3001/docs/**. Trang này mô tả 23 endpoint hiện có; đặc tả JSON ở `http://localhost:3001/docs/json`.
+Khi Emulator và API đã chạy, mở **http://localhost:3001/docs/**. Trang này mô tả 67 thao tác hiện có. Đặc tả JSON ở `http://localhost:3001/docs/json`.
 
 1. Mở **Tài khoản → POST /api/v1/auth/register** (hoặc `login`), bấm **Try it out**, điền email/mật khẩu/tên rồi **Execute**. Mỗi lần đăng ký cần email mới.
 2. Trong response, sao chép **`data.accessToken`**. Bấm **Authorize** ở đầu trang, dán token vào ô BearerAuth **không thêm chữ `Bearer`**, rồi **Authorize**.
@@ -107,21 +107,56 @@ Frontend dùng Firebase Web SDK gọi `POST /api/v1/me/bootstrap` một lần sa
 | GET | `/api/v1/trips` | `status`, `limit` tối đa 20, `cursor`; kiểm membership hiện tại |
 | GET | `/api/v1/trips/:tripId/overview` | ID token, membership active |
 | PATCH | `/api/v1/trips/:tripId` | Owner sửa tên/địa điểm/ngày/ghi chú/múi giờ; Idempotency-Key, If-Match trip.version |
+| POST | `/api/v1/trips/:tripId/archive` | Owner chốt khi từng net=0, không pending, balances đầy đủ; body `{}`, key, If-Match trip.version |
+| POST | `/api/v1/trips/:tripId/reopen` | Owner mở lại trip archived/normal; body `{}`, key, If-Match trip.version; không hồi sinh invite cũ |
 | POST | `/api/v1/trips/:tripId/participants` | ID token, owner, Idempotency-Key, body `{displayName}` |
 | PATCH | `/api/v1/trips/:tripId/participants/:id` | Owner đổi tên/active/inactive; Idempotency-Key, If-Match participant.version |
 | POST | `/api/v1/trips/:tripId/memberships/:uid/link` | Owner gắn participantId hoặc null để gỡ; lý do, Idempotency-Key, If-Match membership.version |
+| GET | `/api/v1/trips/:tripId/members` | Participants và membership DTO, tối đa 50 mỗi loại; membership active |
+| POST | `/api/v1/trips/:tripId/memberships/:uid/remove` | Owner gỡ quyền (được cả archived/suspended); body `{reason}`, key, If-Match membership.version |
+| POST | `/api/v1/trips/:tripId/memberships/:uid/restore` | Owner khôi phục UID cũ khi trip active/normal; `{reason}`, key, If-Match membership.version |
+| POST | `/api/v1/trips/:tripId/transfer-owner` | Owner chuyển cho member active/linked; `{uid, reason}`, key, If-Match trip.version |
+| POST | `/api/v1/trips/:tripId/invites` | Owner tạo lời mời; key, `{expiresInDays?: 1..7, maxUses?: 1..20}`, mặc định 7 ngày/20 lượt |
+| GET | `/api/v1/trips/:tripId/invites` | Owner; `limit` tối đa 50, `cursor`; không trả token |
+| POST | `/api/v1/trips/:tripId/invites/:id/revoke` | Owner, được cả archived/suspended; body `{}`, key, If-Match invite.version |
+| POST | `/api/v1/invites/preview` | User active; `{token}`; chỉ đọc tên chuyến/người mời/hạn, không cần key |
+| POST | `/api/v1/invites/accept` | User active; `{token}`, key; join chưa liên kết participant, không nhận role từ client |
+| POST | `/api/v1/trips/:tripId/receipts/upload-intents` | Member, `{contentType, bytes}`, key; receipt và signed POST policy TTL ≤5 phút |
+| POST | `/api/v1/trips/:tripId/receipts/:id/finalize` | Uploader, `{}`, key, If-Match ban đầu; xử lý ảnh theo lease 2 phút |
+| GET | `/api/v1/trips/:tripId/receipts/:id/view-url` | Member xem attached; uploader xem ready của mình; URL TTL 60 giây |
+| POST | `/api/v1/trips/:tripId/receipts/:id/discard` | Uploader/owner, `{}`, key, If-Match receipt.version; không bỏ ảnh attached |
 | POST | `/api/v1/trips/:tripId/expenses` | ID token, member, Idempotency-Key, split equal/exact |
 | GET | `/api/v1/trips/:tripId/expenses` | `status`, `from`/`to`, một trong `category`/`payer`, `limit` tối đa 50, `cursor` |
 | GET | `/api/v1/trips/:tripId/expenses/:id` | Chi tiết khoản chi |
+| PATCH | `/api/v1/trips/:tripId/expenses/:id` | Creator/owner sửa expense active; metadata riêng hoặc đủ block tiền; key, If-Match expense.version |
 | POST | `/api/v1/trips/:tripId/expenses/:id/void` | Chủ nhóm/người tạo, If-Match, lý do |
 | GET | `/api/v1/trips/:tripId/settlement-suggestions` | Gợi ý từ số dư hiện tại |
 | POST | `/api/v1/trips/:tripId/settlements` | Tạo đề nghị trả nợ, Idempotency-Key |
 | POST | `/api/v1/trips/:tripId/settlements/:id/confirm` | Người nhận/chủ nhóm xác nhận, If-Match |
+| POST | `/api/v1/trips/:tripId/settlements/:id/cancel` | Creator/owner hủy pending, body `{}`, key, If-Match settlement.version; không đổi tiền |
+| POST | `/api/v1/trips/:tripId/settlements/:id/void` | Owner đảo confirmed, `{reason}`, key, If-Match settlement.version; giữ lịch sử confirm |
 | GET | `/api/v1/trips/:tripId/settlements` | `status`, `limit` tối đa 50, `cursor` |
 | GET | `/api/v1/trips/:tripId/activity` | Lịch sử chuyến, DTO giới hạn trường, `limit` tối đa 50, `cursor` |
-| GET | `/api/v1/operations/:key` | Tra kết quả tối thiểu theo Idempotency-Key, cần quyền chuyến hiện tại |
+| GET | `/api/v1/trips/:tripId/itinerary` | Thành viên đang có quyền truy cập xem hoạt động và đề xuất |
+| POST | `/api/v1/trips/:tripId/itinerary` | Chủ chuyến quản lý hoạt động/đề xuất, thành viên có thể đề xuất. Cần key và If-Match của lịch trình |
+| POST | `/api/v1/support-tickets` | Gửi loại lỗi, mô tả và tripId tùy chọn, có key. Tối đa 5 lượt/ngày theo giờ Việt Nam |
+| GET | `/api/v1/support-tickets` | Danh sách báo lỗi của người gửi, tối đa 25 mỗi trang |
+| GET | `/api/v1/support-tickets/:id` | Chi tiết báo lỗi dành cho tài khoản đã gửi |
+| GET | `/api/v1/operations/:key` | Tra kết quả theo Idempotency-Key. Cần quyền chuyến hiện tại hoặc là người gửi báo lỗi |
 
-Các danh sách trả `data.items` và `data.nextCursor`; dùng lại cursor với cùng người dùng, chuyến và bộ lọc. Khi `revision` của chuyến đổi, API trả `409 CURSOR_STALE` và client tải lại trang đầu. Trang trips có thể rỗng nhưng vẫn có `nextCursor` nếu các tripRefs trong trang không còn quyền hoặc không khớp trạng thái. `404 OPERATION_UNKNOWN` chưa chứng minh lệnh cũ thất bại; retry cùng key và body trước khi tạo key khác. Cursor dùng khóa ký riêng `CURSOR_SIGNING_SECRET` ít nhất 32 ký tự ngoài Emulator; Emulator dùng khóa development cố định. Chưa kiểm composite query trên Firestore cloud; việc đó thuộc S18.
+Lịch trình mới bắt đầu ở version 1 và lưu tối đa 100 hoạt động, 100 đề xuất mỗi chuyến. Lên lịch đề xuất ghi cả hoạt động và trạng thái đề xuất trong cùng transaction. Xóa hoạt động gắn với đề xuất đưa đề xuất về chờ duyệt. Ghi lịch trình cập nhật revision và lịch sử chuyến, giữ nguyên số dư và ledgerVersion.
+
+Báo lỗi lưu riêng dưới `supportTickets`. Nếu kèm chuyến, API kiểm quyền tại thời điểm gửi. Người gửi vẫn có thể tra báo lỗi cũ sau khi quyền chuyến thay đổi. Cùng Idempotency-Key và nội dung trả cùng mã báo lỗi, kể cả khi đã hết lượt trong ngày.
+
+Các danh sách phân trang trả `data.items` và `data.nextCursor`; dùng lại cursor với cùng người dùng, chuyến và bộ lọc. `GET members` trả `data.participants` và `data.memberships`, có giới hạn 50 mỗi loại. Khi `revision` của chuyến đổi, API trả `409 CURSOR_STALE` và client tải lại trang đầu. Trang trips có thể rỗng nhưng vẫn có `nextCursor` nếu các tripRefs trong trang không còn quyền hoặc không khớp trạng thái. `404 OPERATION_UNKNOWN` chưa chứng minh lệnh cũ thất bại; retry cùng key và body trước khi tạo key khác. Cursor dùng khóa ký riêng `CURSOR_SIGNING_SECRET` ít nhất 32 ký tự ngoài Emulator; Emulator dùng khóa development cố định. Chưa kiểm composite query trên Firestore cloud; việc đó thuộc S18.
+
+Create invite trả `data.token` với `tokenAvailable=true` chỉ ở lần commit mới. Retry giữ HTTP 201 và trả snapshot an toàn có `tokenAvailable=false`, `message` hướng dẫn thu hồi/tạo mới nếu mất token; operation lookup chỉ trả ID, không khôi phục token. Token gửi trong body của preview/accept, không đưa vào URL API. Lời mời lưu hash SHA-256 ở lookup, không lưu raw token. Accept mới tăng invite.version/usedCount; tải lại list để lấy version trước revoke. Active join lại với key mới trả `status=already-member` không tốn lượt, kể cả khi đã hết lượt; lời mời vẫn phải chưa hết hạn/revoke/khác epoch và trip còn writable. Removed không tự join lại; owner restore giữ joinedAt/count và liên kết đã kiểm ba chiều. Remove giữ sổ tiền/danh tính, chặn đọc/ghi và replay của người bị gỡ dù JWT còn hạn.
+
+PATCH expense nhận `title`, `note`, `occurredOn`, `category`, `receiptIds` riêng; nếu gửi một trong `amountMinor`, `payerParticipantId`, `splitMethod`, `split` thì phải gửi đủ cả bốn. Block mới cần tất cả người active; metadata vẫn sửa được khi người cũ inactive. Metadata, category và block tiền giữ nguyên nghĩa vụ không tăng ledgerVersion. Đổi category chuyển category totals; đổi amount/payer/shares gộp delta mới–cũ, không sửa settlement lịch sử. `receiptIds` tối đa ba ID không trùng: giữ attached của chính expense hoặc thêm ready cùng chuyến do actor upload. Bỏ ảnh chuyển discarded trong cùng transaction, grace 7 ngày; expense void vẫn giữ ảnh attached. PATCH expense và cancel/void settlement yêu cầu document v1 hợp lệ; dữ liệu legacy chưa hoàn thiện cần migration trước (409 `EXPENSE_INVARIANT_FAILED`/`SETTLEMENT_INVARIANT_FAILED`), các đường đọc legacy vẫn giữ.
+
+S10 cần `FIREBASE_STORAGE_BUCKET` server-side, Storage Rules deny client và CORS allowlist trong `be/`. Test nghiệp vụ dùng adapter memory và xử lý ảnh thật; test Rules dùng Storage Emulator. API không tự phát policy giả trên Emulator; ký V4 và smoke IAM/CORS/expiry cần credentials/bucket thật. Xem [luồng upload, retry và cleanup](../docs/RECEIPTS.md). Cleanup mặc định dry-run: `pnpm --dir be receipts:cleanup --project demo-sharebill --trip <trip-uuid>`; apply/resume và cổng cloud được mô tả tại đó.
+
+Archive tăng inviteEpoch và trip.version, giữ ledgerVersion, chỉ thành công khi từng người net=0 và không có pending. `TRIP_NOT_BALANCED`/`PENDING_SETTLEMENTS` hướng dẫn quyết toán hoặc hủy đề nghị trước; `PROJECTION_INVARIANT_FAILED` chặn khi số dư thiếu/sai. Archived vẫn đọc được nhưng chặn ghi mới, trừ remove membership/revoke invite để thu hồi quyền. Reopen đặt archivedAt=null, giữ inviteEpoch mới; lịch sử archive giữ trong audit, link mời cũ tiếp tục vô hiệu. Replay cùng key trả snapshot gốc kể cả entity đã sửa/chuyến đã chuyển trạng thái tiếp, sau khi kiểm quyền xem hiện tại.
 
 Header của lệnh ghi:
 
@@ -146,7 +181,7 @@ Payload khoản chi chia đều:
 }
 ```
 
-Sáu lệnh ghi nghiệp vụ kiểm tra quyền trong Firestore transaction và lưu kết quả cùng dữ liệu. Khi retry, gửi lại cùng `Idempotency-Key`, endpoint, body và `If-Match` nếu lệnh yêu cầu version. API kiểm tra quyền xem chuyến hiện tại rồi trả kết quả gốc kèm `Idempotency-Replayed: true`. Key đã dùng cho lệnh khác trả `409 IDEMPOTENCY_KEY_REUSED`. Tiền lưu số nguyên VND. Firestore Rules hiện deny toàn bộ client direct reads/writes; API server dùng Admin SDK và tự kiểm quyền.
+Các lệnh ghi nghiệp vụ kiểm tra quyền trong Firestore transaction và lưu kết quả cùng dữ liệu. Khi retry, gửi lại cùng `Idempotency-Key`, endpoint, body và `If-Match` nếu lệnh yêu cầu version. API kiểm tra quyền xem chuyến hiện tại rồi trả kết quả gốc kèm `Idempotency-Replayed: true`; create invite có ngoại lệ token một lần như trên. Key đã dùng cho lệnh khác trả `409 IDEMPOTENCY_KEY_REUSED`. Tiền lưu số nguyên VND. Firestore Rules hiện deny toàn bộ client direct reads/writes; API server dùng Admin SDK và tự kiểm quyền.
 
 ## Kiểm tra
 
@@ -164,7 +199,7 @@ pnpm test:be
 pnpm --dir be build
 ```
 
-Unit tests hiện có kiểm hàm chia tiền, delta số dư và health endpoint. Integration test emulator kiểm đăng ký/đăng nhập/JWT/refresh, tài khoản bị khóa và luồng nghiệp vụ đầu tiên, nhưng chưa bao phủ đầy đủ quyền, concurrency và tình huống lỗi; chưa coi API nghiệp vụ đã nghiệm thu cho production.
+Unit/HTTP tests kiểm chia tiền, thay/đảo contribution, ràng buộc số dư, schemas, cursor, HTTP, Swagger và xử lý ảnh/Storage adapter. Emulator suite kiểm Auth, dữ liệu/migration, paging, quản lý chuyến/danh tính, invite/membership, vòng đời tiền/chốt chuyến, receipt state machine, Storage Rules, hỗ trợ và quản trị. Đã đạt 29 unit/HTTP tests và 54 Emulator tests; cloud/thiết bị và vận hành production còn theo kế hoạch các lát sau.
 
 Test emulator tạo tài khoản giả, đi qua API tạo chuyến/người/khoản chi, retry cùng key và kiểm số dư. Khi hai emulator đang chạy, dùng:
 
@@ -172,11 +207,32 @@ Test emulator tạo tài khoản giả, đi qua API tạo chuyến/người/kho�
 $env:FIREBASE_PROJECT_ID='demo-sharebill'
 $env:FIREBASE_AUTH_EMULATOR_HOST='127.0.0.1:9099'
 $env:FIRESTORE_EMULATOR_HOST='127.0.0.1:8080'
+$env:FIREBASE_STORAGE_EMULATOR_HOST='127.0.0.1:9199'
+$env:FIREBASE_STORAGE_BUCKET='demo-sharebill.appspot.com'
 pnpm --dir be test:emulator
 ```
 
-GitHub Actions có workflow `Backend CI` để chạy kiểm tra TypeScript, unit tests, build và emulator integration. List endpoints hiện giới hạn 20/30 bản gần nhất và chưa có cursor; cần bổ sung pagination trước khi dùng cho chuyến nhiều dữ liệu. Các luồng sửa khoản chi, hủy/void trả nợ, lời mời, ảnh và quản trị vẫn chưa code; chưa xem đây là backend hoàn chỉnh để chạy production.
+GitHub Actions có workflow `ShareBill CI` để chạy kiểm tra TypeScript, unit tests, build, toàn bộ Emulator suite và 6 hành trình Chromium trên bản static production, gồm tải lại app khi mất mạng. Các danh sách phân trang dùng cursor. Xem [tiến độ và cổng nghiệm thu](../docs/KE_HOACH_HOAN_THIEN.md) trước phát hành.
+
+## Quản trị
+
+Frontend có `/admin/`, API riêng `/api/admin/v1`. Bật Google provider và authorized domains trên Firebase project đã chọn; cấu hình biến `NEXT_PUBLIC_FIREBASE_*` theo [FE](../fe/.env.example) trước build. Trang quản trị giữ phiên Google trong bộ nhớ và yêu cầu đăng nhập lại sau reload. API kiểm Google provider, email verified, hồ sơ người dùng active và grant `platformAdmins/{uid}` trong transaction. Các lệnh thay đổi yêu cầu xác thực gần nhất trong 10 phút, lý do, version và idempotency key; ghi audit cùng transaction. Chủ chuyến cần grant riêng để sử dụng quản trị.
+
+Người vận hành đăng nhập Google lần đầu để tạo Auth UID. Dùng CLI với credential đúng project để cấp hoặc thu hồi quyền. `--operator` là danh tính người thực hiện, được ghi vào audit. Mặc định chỉ kiểm tra và in dry-run; `--apply` mới ghi thay đổi.
+
+```powershell
+pnpm --dir be admin:grant --project demo-sharebill --uid '<google-uid>' --operator '<operator-id>'
+pnpm --dir be admin:grant --project demo-sharebill --uid '<google-uid>' --operator '<operator-id>' --apply
+pnpm --dir be admin:grant --project demo-sharebill --uid '<google-uid>' --operator '<operator-id>' --apply --revoke
+pnpm --dir be admin:auth-worker --project demo-sharebill --limit 25
+```
+
+Đặt biến môi trường emulator như phần kiểm thử khi dùng `demo-sharebill`. Với staging/production, thay project ID, bỏ biến emulator và dùng credential của môi trường đó. CLI từ chối project khác `FIREBASE_PROJECT_ID` và project demo thiếu Firestore Emulator. Không đưa service account vào frontend.
+
+Khóa/mở tài khoản tạo job và trả HTTP 202. App khóa quyền ngay khi yêu cầu khóa, chỉ mở lại sau khi Firebase Auth đã được đồng bộ. Worker chạy một lượt hữu hạn rồi thoát, mặc định xử lý tối đa 25 job và quét 25 hồ sơ mỗi lượt, `--limit` cho phép 1–100. Có lease 120 giây theo UID, tối đa 5 lần thử, backoff tối đa 60 giây, kiểm lại desired state/version sau lời gọi Auth. Sweep dùng checkpoint để đối soát dần và đưa sai lệch Auth vào hàng đợi; job mới từ sweep được xử lý ở lượt tiếp theo.
+
+Cần cấu hình scheduler chạy worker định kỳ trên môi trường triển khai, có thể bắt đầu mỗi phút, và theo dõi exit code, job failed, lease hết hạn và độ trễ hàng đợi. Worker chưa được lên lịch trong môi trường local của đợt triển khai này. Job đạt giới hạn thử vẫn giữ trạng thái failed để operator xem và gửi lại lệnh từ giao diện khi đã xử lý nguyên nhân. Tạm khóa chuyến chỉ đổi trạng thái quản trị và revision, giữ ledger/version nghiệp vụ. API quản trị không trả nội dung khoản chi hoặc URL ảnh hóa đơn. Ghi chú nội bộ ticket chỉ hiện trong quản trị.
 
 ## Deploy
 
-Fastify có [hướng dẫn deploy trên Vercel](https://vercel.com/docs/frameworks/backend/fastify). Khi cấu hình Vercel, chọn Root Directory `be`, tách project backend và frontend, đặt origin thật vào `APP_ORIGIN`, và dùng Firebase project/credential riêng cho staging và production. Chưa có deployment hay Firebase cloud project được tạo.
+Fastify có [hướng dẫn deploy trên Vercel](https://vercel.com/docs/frameworks/backend/fastify). Khi cấu hình Vercel, chọn Root Directory `be`, tách project backend và frontend, đặt origin thật vào `APP_ORIGIN`, và dùng Firebase project/credential riêng cho staging và production. Các thay đổi hiện chỉ kiểm trên local/Emulator, chưa deploy cloud; xem [thiết lập staging](../docs/CICD_DEPLOY.md), [cấu hình ảnh](../docs/RECEIPTS.md) và cổng smoke S18.

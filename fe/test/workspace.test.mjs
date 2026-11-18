@@ -1,0 +1,345 @@
+import assert from 'node:assert/strict';
+import { randomUUID } from 'node:crypto';
+import { createRequire } from 'node:module';
+import { after, before, test } from 'node:test';
+import { chromium, request } from 'playwright';
+
+const web = 'http://localhost:3000';
+const api = 'http://localhost:3001/api/v1/';
+let http, browser;
+let fixtureApp;
+
+before(async () => {
+  http = await request.newContext({ baseURL: api });
+  browser = await chromium.launch({ executablePath: process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH });
+});
+
+after(async () => {
+  await browser?.close();
+  await http?.dispose();
+  if (fixtureApp) {
+    const require = createRequire(new URL('../../be/package.json', import.meta.url));
+    await require('firebase-admin/app').deleteApp(fixtureApp);
+  }
+});
+
+async function call(path, session, { method = 'GET', body, version } = {}) {
+  const response = await http.fetch(path, {
+    method, data: body, headers: {
+      ...(session ? { authorization: 'Bearer ' + session.accessToken } : {}),
+      ...(method !== 'GET' ? { 'idempotency-key': randomUUID() } : {}),
+      ...(version === undefined ? {} : { 'if-match': '"' + version + '"' }),
+    },
+  });
+  const result = await response.json();
+  assert.ok(response.ok(), result.error?.code);
+  return result.data;
+}
+
+async function fixture(t) {
+  const session = await call('auth/register', null, { method: 'POST', body: {
+    email: randomUUID() + '@example.test', password: 'BrowserFixture-123!', displayName: 'An E2E',
+  } });
+  const trip = await call('trips', session, { method: 'POST', body: { name: 'Đà Lạt E2E', ownerName: 'An' } });
+  const expenses = 'trips/' + trip.id + '/expenses';
+  const screen = route => web + '/#chuyen/' + trip.id + '/' + route;
+  const context = await browser.newContext();
+  t.after(() => context.close());
+  await context.addInitScript(session => {
+    const key = 'sharebill-live-session-v1';
+    if (!sessionStorage.getItem(key)) sessionStorage.setItem(key, JSON.stringify(session));
+  }, { ...session, expiresAt: Date.now() + session.expiresIn * 1000 });
+  const page = await context.newPage();
+  const create = (title, category) => call(expenses, session, { method: 'POST', body: {
+    title, category, amountMinor: 240000, payerParticipantId: trip.ownerParticipantId, occurredOn: '2026-11-18',
+    splitMethod: 'equal', split: { participantIds: [trip.ownerParticipantId] },
+  } });
+  return { page, context, session, trip, expenses, screen, create };
+}
+
+function heading(page, name) {
+  return page.getByRole('heading', { name, exact: true }).first().waitFor({ timeout: 10000 });
+}
+
+test('K01 keeps edits across refresh and applies only the explicitly retained changes', async t => {
+  const { page, session, expenses, screen, create } = await fixture(t);
+  const expense = await create('Khách sạn gốc', 'stay');
+  const path = expenses + '/' + expense.id;
+  await page.goto(screen('sua-khoan-chi/' + expense.id));
+  await heading(page, 'Sửa khoản chi');
+  const title = page.getByLabel('Tên khoản chi');
+  const save = page.getByRole('button', { name: /Lưu khoản chi/ });
+  assert.equal(await title.inputValue(), 'Khách sạn gốc');
+  await call(path, session, { method: 'PATCH', version: expense.version, body: { note: 'Ghi chú từ phiên khác' } });
+  await title.fill('Tên tôi đang sửa');
+  await save.click();
+  await page.getByRole('button', { name: 'Tải lại', exact: true }).click();
+  const conflict = page.getByRole('region', { name: 'Xung đột khoản chi' });
+  await conflict.getByText('Ghi chú từ phiên khác', { exact: false }).waitFor();
+  assert.equal(await title.inputValue(), 'Tên tôi đang sửa');
+  assert.equal(await save.isDisabled(), true);
+  assert.equal((await call(path, session)).title, 'Khách sạn gốc');
+  await conflict.getByRole('button', { name: 'Áp lại phần tôi đã sửa' }).click();
+  await save.click();
+  await heading(page, 'Tên tôi đang sửa');
+  const saved = await call(path, session);
+  assert.equal(saved.title, 'Tên tôi đang sửa');
+  assert.equal(saved.note, 'Ghi chú từ phiên khác');
+});
+
+test('K02 recovers a committed request after refresh and reuses its key on identical retry', async t => {
+  const { context, page, session, expenses, screen } = await fixture(t);
+  await page.goto(screen('them-khoan-chi'));
+  await heading(page, 'Thêm khoản chi');
+  const title = 'Nhập lại sau mất phản hồi';
+  const keys = [];
+  await context.route('**/api/v1/trips/*/expenses', async route => {
+    if (route.request().method() !== 'POST') return route.continue();
+    keys.push(route.request().headers()['idempotency-key']);
+    const response = await route.fetch();
+    if (keys.length === 1) return route.abort();
+    return route.fulfill({ response });
+  });
+  async function enter() {
+    await page.getByLabel('Tên khoản chi').fill(title);
+    await page.getByLabel('Số tiền đã trả').fill('135000');
+    await page.getByRole('button', { name: /Lưu khoản chi/ }).click();
+  }
+  await enter();
+  await page.getByText(/Kết nối với máy chủ bị gián đoạn/).waitFor();
+  await page.reload();
+  await heading(page, 'Thêm khoản chi');
+  await page.getByText('1 thao tác chưa rõ kết quả', { exact: true }).click();
+  await page.getByRole('button', { name: 'Kiểm tra kết quả' }).click();
+  await page.getByRole('link', { name: 'Mở kết quả đã lưu' }).waitFor();
+  await enter();
+  await heading(page, title);
+  assert.ok(keys[0]);
+  assert.deepEqual(keys, [keys[0], keys[0]]);
+  const saved = (await call(expenses, session)).items.filter(item => item.title === title);
+  assert.equal(saved.length, 1);
+});
+
+test('K04 and K05 preserve filters after detail, reload and a fresh tab', async t => {
+  const { page, context, screen, create } = await fixture(t);
+  await create('Khách sạn', 'stay');
+  await create('Bữa ăn', 'food');
+  await page.goto(screen('chi-tieu'));
+  await heading(page, 'Chi tiêu');
+  await page.getByLabel('Danh mục').selectOption('food');
+  await page.getByRole('link', { name: /Bữa ăn/ }).click();
+  await heading(page, 'Bữa ăn');
+  const detail = page.url();
+  assert.match(detail, /\/khoan-chi\/.+category=food/);
+  await page.getByRole('link', { name: 'Quay lại', exact: true }).click();
+  await page.reload();
+  await heading(page, 'Chi tiêu');
+  await page.getByRole('link', { name: /Bữa ăn/ }).waitFor();
+  assert.equal(await page.getByLabel('Danh mục').inputValue(), 'food');
+  assert.equal(await page.getByRole('link', { name: /Khách sạn/ }).count(), 0);
+
+  const blank = await context.newPage();
+  await blank.goto(detail);
+  await heading(blank, 'Bữa ăn');
+  await blank.getByRole('link', { name: 'Quay lại', exact: true }).click();
+  await heading(blank, 'Chi tiêu');
+  assert.equal(await blank.getByLabel('Danh mục').inputValue(), 'food');
+});
+
+test('trusted devices recover an offline draft and clear private data on sign out', async t => {
+  const { context, page, screen, expenses, session } = await fixture(t);
+  await page.goto(web + '/#tai-khoan');
+  await heading(page, 'Tài khoản');
+  await page.getByLabel('Tin cậy thiết bị này').check();
+  await page.goto(screen('them-khoan-chi'));
+  await heading(page, 'Thêm khoản chi');
+  await page.getByLabel('Tên khoản chi').fill('Nháp riêng tư');
+  await page.getByLabel('Số tiền đã trả').fill('105000');
+  // Queue a database read after the input's write transaction, without arbitrary timeouts.
+  await page.waitForFunction(async () => {
+    const databases = await indexedDB.databases();
+    const name = databases.find(db => db.name.startsWith('sharebill-private-v1:'))?.name;
+    if (!name) return false;
+    return new Promise(resolve => {
+      const open = indexedDB.open(name);
+      open.onsuccess = () => {
+        const db = open.result, tx = db.transaction('data');
+        const read = tx.objectStore('data').getAll();
+        read.onsuccess = () => resolve(read.result.some(row => row.kind === 'expense-new' && row.value.amount === '105000'));
+        tx.oncomplete = () => db.close();
+      };
+    });
+  });
+  if (process.env.SHAREBILL_PWA_TEST === '1') {
+    await page.evaluate(async () => {
+      await navigator.serviceWorker.ready;
+      if (!navigator.serviceWorker.controller) await new Promise(resolve => navigator.serviceWorker.addEventListener('controllerchange', resolve, { once: true }));
+    });
+  }
+  await context.setOffline(true);
+  await page.evaluate(() => window.dispatchEvent(new Event('offline')));
+  if (process.env.SHAREBILL_PWA_TEST === '1') {
+    await page.reload();
+    await heading(page, 'Thêm khoản chi');
+  }
+  await page.getByRole('button', { name: /Lưu khoản chi/ }).waitFor();
+  assert.equal(await page.getByRole('button', { name: /Lưu khoản chi/ }).isDisabled(), true);
+  // Route away and return while the app shell remains available offline.
+  await page.evaluate(() => { window.location.hash = 'tai-khoan'; });
+  await heading(page, 'Tài khoản');
+  await page.evaluate(url => { window.location.hash = new URL(url).hash; }, screen('them-khoan-chi'));
+  await heading(page, 'Thêm khoản chi');
+  await page.getByRole('button', { name: 'Tiếp tục bản nháp' }).click();
+  assert.equal(await page.getByLabel('Tên khoản chi').inputValue(), 'Nháp riêng tư');
+  assert.equal(await page.getByLabel('Số tiền đã trả').inputValue(), '105000');
+  assert.equal(await page.getByRole('button', { name: /Lưu khoản chi/ }).isDisabled(), true);
+  await context.setOffline(false);
+  await page.evaluate(() => window.dispatchEvent(new Event('online')));
+  await page.waitForFunction(() => !Array.from(document.querySelectorAll('button')).find(button => button.textContent.includes('Lưu khoản chi'))?.disabled);
+  assert.equal((await call(expenses, session)).items.length, 0);
+  await page.getByRole('button', { name: /Lưu khoản chi/ }).click();
+  await heading(page, 'Nháp riêng tư');
+  assert.equal((await call(expenses, session)).items.length, 1);
+  await page.goto(web + '/#tai-khoan');
+  await page.getByRole('button', { name: 'Đăng xuất', exact: true }).click();
+  await page.waitForFunction(async () => {
+    const databases = await indexedDB.databases();
+    const name = databases.find(db => db.name.startsWith('sharebill-private-v1:'))?.name;
+    if (!name) return true;
+    return new Promise(resolve => {
+      const open = indexedDB.open(name);
+      open.onsuccess = () => {
+        const db = open.result, tx = db.transaction('data');
+        const read = tx.objectStore('data').count();
+        read.onsuccess = () => resolve(read.result === 0);
+        tx.oncomplete = () => db.close();
+      };
+    });
+  });
+});
+
+test('two accounts record an expense, confirm repayment and archive a balanced trip', async t => {
+  const { page, context: ownerContext, session, trip, screen } = await fixture(t);
+  const root = 'trips/' + trip.id;
+  const participant = await call(root + '/participants', session, { method: 'POST', body: { displayName: 'Bình' } });
+  const member = await call('auth/register', null, { method: 'POST', body: {
+    email: randomUUID() + '@example.test', password: 'BrowserFixture-123!', displayName: 'Bình E2E',
+  } });
+  const invitation = await call(root + '/invites', session, { method: 'POST', body: {} });
+  await call('invites/accept', member, { method: 'POST', body: { token: invitation.token } });
+  await call(root + '/memberships/' + member.user.uid + '/link', session, {
+    method: 'POST', version: 1, body: { participantId: participant.id, reason: 'Liên kết người chia tiền' },
+  });
+  await page.goto(screen('them-khoan-chi'));
+  await heading(page, 'Thêm khoản chi');
+  await page.getByLabel('Tên khoản chi').fill('Khoản chi để quyết toán');
+  await page.getByLabel('Số tiền đã trả').fill('240000');
+  await page.getByRole('button', { name: /Lưu khoản chi/ }).click();
+  await heading(page, 'Khoản chi để quyết toán');
+
+  const context = await browser.newContext({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true });
+  t.after(() => context.close());
+  await context.addInitScript(session => {
+    sessionStorage.setItem('sharebill-live-session-v1', JSON.stringify(session));
+  }, { ...member, expiresAt: Date.now() + member.expiresIn * 1000 });
+  const memberPage = await context.newPage();
+  await memberPage.goto(screen('so-du'));
+  await heading(memberPage, 'Số dư & quyết toán');
+  await memberPage.getByRole('button', { name: 'Ghi nhận đã chuyển', exact: true }).click();
+  await memberPage.getByRole('dialog').getByRole('button', { name: 'Ghi nhận', exact: true }).click();
+  await heading(memberPage, 'Lịch sử chuyển tiền');
+  await memberPage.getByText('Chờ xác nhận', { exact: true }).last().waitFor();
+  const pending = await call(root + '/overview', session);
+  assert.equal(pending.balances.find(row => row.participantId === participant.id).netMinor, -120000);
+
+  await page.goto(screen('quyet-toan'));
+  await page.getByRole('button', { name: 'Tôi đã nhận tiền', exact: true }).click();
+  await page.getByRole('dialog').getByRole('button', { name: 'Xác nhận', exact: true }).click();
+  await page.getByText('An xác nhận đã nhận', { exact: false }).waitFor();
+  const confirmed = await call(root + '/overview', session);
+  assert.ok(confirmed.balances.every(row => row.netMinor === 0));
+  await page.goto(screen('cai-dat'));
+  await page.getByRole('button', { name: 'Chốt chuyến đi', exact: true }).click();
+  await ownerContext.setOffline(true);
+  await page.evaluate(() => window.dispatchEvent(new Event('offline')));
+  const offlineDialog = page.getByRole('dialog');
+  await offlineDialog.getByText('Cần kết nối mạng để gửi thao tác. Bạn có thể đóng cửa sổ này.', { exact: true }).waitFor();
+  assert.equal(await offlineDialog.locator('.dialog-content').evaluate(element => element.inert), true);
+  await offlineDialog.getByRole('button', { name: 'Đóng', exact: true }).click();
+  assert.equal(await page.getByRole('dialog').count(), 0);
+  const refreshed = page.waitForResponse(response => response.url().endsWith(root + '/overview') && response.ok());
+  await ownerContext.setOffline(false);
+  await page.evaluate(() => window.dispatchEvent(new Event('online')));
+  await refreshed;
+  await page.getByRole('button', { name: 'Chốt chuyến đi', exact: true }).click();
+  await page.getByRole('dialog').getByRole('button', { name: 'Xác nhận', exact: true }).click();
+  await page.getByRole('heading', { name: 'Chuyến đi đã chốt', exact: true }).waitFor();
+  assert.equal((await call(root + '/overview', session)).trip.status, 'archived');
+  await memberPage.goto(screen('them-khoan-chi'));
+  await heading(memberPage, 'Khoản chi chỉ có thể xem');
+});
+
+test('a Google operator processes a user ticket through the admin screens', async t => {
+  const { page, context, session } = await fixture(t);
+  const ticket = await call('support-tickets', session, { method: 'POST', body: {
+    category: 'usability', message: 'Cần giúp kiểm tra thao tác thêm khoản chi',
+  } });
+  const email = randomUUID() + '@example.test';
+  const response = await http.post('http://127.0.0.1:9099/identitytoolkit.googleapis.com/v1/accounts:signInWithIdp?key=demo', { data: {
+    requestUri: web, returnSecureToken: true, postBody: new URLSearchParams({
+      providerId: 'google.com', id_token: JSON.stringify({ sub: randomUUID(), email, email_verified: true, name: 'Operator E2E' }),
+    }).toString(),
+  } });
+  const operator = await response.json();
+  assert.equal(response.status(), 200);
+  await call('me/bootstrap', { accessToken: operator.idToken }, { method: 'POST', body: {} });
+  process.env.FIRESTORE_EMULATOR_HOST = '127.0.0.1:8080';
+  const require = createRequire(new URL('../../be/package.json', import.meta.url));
+  const { initializeApp } = require('firebase-admin/app');
+  const { getFirestore, Timestamp } = require('firebase-admin/firestore');
+  fixtureApp ??= initializeApp({ projectId: 'demo-sharebill' }, 'browser-fixtures');
+  await getFirestore(fixtureApp).doc('platformAdmins/' + operator.localId).set({
+    uid: operator.localId, role: 'platform_admin', status: 'active', version: 1, grantedBy: 'e2e-fixture', grantedAt: Timestamp.now(),
+  });
+  const admin = await context.newPage();
+  const errors = [];
+  admin.on('pageerror', error => errors.push(error.message));
+  admin.on('response', async response => {
+    if (response.url().includes('/api/admin/v1/') && !response.ok()) {
+      errors.push(response.status() + ' ' + response.url() + ' ' + await response.text());
+    }
+  });
+  await admin.goto(web + '/admin/');
+  const popupPromise = admin.waitForEvent('popup');
+  await admin.getByRole('button', { name: 'Đăng nhập với Google' }).click();
+  const popup = await popupPromise;
+  await popup.waitForLoadState('load');
+  await popup.getByText('Sign-in with Google.com', { exact: true }).waitFor();
+  await popup.getByText(email, { exact: true }).click();
+  try { await heading(admin, 'Tổng quan'); }
+  catch (cause) { throw new Error(await admin.locator('main').innerText() + '\n' + errors.join('\n'), { cause }); }
+  await admin.getByRole('link', { name: 'Báo lỗi', exact: true }).click();
+  await admin.getByRole('link').filter({ hasText: ticket.id }).click();
+  await heading(admin, 'Chi tiết báo lỗi');
+  await admin.getByRole('button', { name: 'Đang xử lý', exact: true }).click();
+  let dialog = admin.getByRole('dialog');
+  await dialog.getByLabel('Lý do').fill('Đang kiểm tra thao tác trong chuyến');
+  await dialog.getByRole('button', { name: 'Xác nhận', exact: true }).click();
+  await admin.getByRole('button', { name: 'Thêm ghi chú nội bộ', exact: true }).click();
+  dialog = admin.getByRole('dialog');
+  await dialog.getByLabel('Ghi chú nội bộ', { exact: true }).fill('Nội dung chỉ dành cho operator E2E');
+  await dialog.getByRole('button', { name: 'Xác nhận', exact: true }).click();
+  await admin.getByText('Nội dung chỉ dành cho operator E2E', { exact: true }).waitFor();
+  await admin.getByRole('button', { name: 'Đã xử lý', exact: true }).click();
+  dialog = admin.getByRole('dialog');
+  await dialog.getByLabel('Lý do').fill('Đã kiểm tra xong cách nhập khoản chi');
+  await dialog.getByRole('button', { name: 'Xác nhận', exact: true }).click();
+  await admin.getByText('Thao tác · Đã xử lý', { exact: true }).waitFor();
+  await page.goto(web + '/#tro-giup/' + ticket.id);
+  await heading(page, 'Chi tiết báo lỗi');
+  await page.getByText('Đã xử lý', { exact: true }).waitFor();
+  assert.equal(await page.getByText('Nội dung chỉ dành cho operator E2E', { exact: true }).count(), 0);
+  await admin.getByRole('link', { name: 'Nhật ký', exact: true }).click();
+  await admin.getByRole('cell', { name: ticket.id, exact: false }).first().waitFor();
+  assert.deepEqual(errors, []);
+});

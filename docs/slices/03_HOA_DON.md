@@ -8,10 +8,12 @@ Xử lý ảnh riêng tư trên backend và Cloud Storage. Luồng camera và th
 
 **Backend ảnh hóa đơn**
 
-- **Trạng thái** Chưa làm
+- **Trạng thái** Hoàn tất local/Emulator; chưa triển khai bucket hoặc smoke signed policy/IAM/CORS trên cloud.
 - **Phụ thuộc** [S09](02_NGHIEP_VU_BE.md#s09)
 - **Kết quả** Cấp upload intent, xử lý ảnh theo lease, gắn ảnh vào khoản chi, cấp link xem, discard và dọn ảnh hết hạn.
 - **Nghiệm thu** Giới hạn ảnh và kiểm quyền theo chuyến/uploader. Chỉ attempt hợp lệ được finalize. Attach và cleanup cạnh tranh vẫn giữ đủ ảnh đã gắn.
+- **Đã làm** Bốn API upload-intents/finalize/view-url/discard; policy V4 TTL ≤5 phút, intent 15 phút, quota 10 lần cấp policy/giờ/UID/chuyến kể cả replay. Finalize claim lease 2 phút và workflow reserve key theo UID, pin source generation, xử lý JPEG/PNG/WebP tĩnh qua Sharp (5 MiB/20 MP, xoay/strip/resize 1600, JPEG ≤2 MiB), output riêng theo attempt với điều kiện không overwrite; commit ready sau recheck quyền/lease. Retry cùng key/hash/If-Match gốc được reclaim; attempt cũ không ghi đè kết quả mới. Gắn/giữ/bỏ tối đa ba receipt cùng transaction tạo/PATCH expense; ảnh bỏ chuyển discarded grace 7 ngày, ảnh của expense void giữ attached. View URL pin generation TTL 60 giây, không persist capability. Có Storage Rules deny client, CORS allowlist, cleanup dry-run/apply theo trang/checkpoint/job lease, tối đa ba lần retry lỗi/receipt/job và thu gom output orphan.
+- **Kiểm chứng** 4 unit tests ảnh/Storage adapter, 9 kịch bản API + Firestore Emulator và 1 Storage Rules test qua client đã đăng nhập. Kiểm invalid/spoofed/animated/20MP+, lease/reclaim/key reuse xuyên endpoint, quyền bị gỡ sau ghi output, claim receipt cạnh tranh, detach/void, cleanup/attach/discard cạnh tranh, dry-run/resume/error và giữ source trong cửa sổ retry. Toàn backend: 29 unit/HTTP tests + 43 Emulator tests đạt, typecheck/build và frozen lockfile đạt. Swagger có 41 endpoints. [Hướng dẫn và phần còn kiểm trên bucket thật](../RECEIPTS.md).
 
 <details>
 <summary>Các bước và tiêu chí chi tiết</summary>

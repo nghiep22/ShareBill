@@ -15,7 +15,8 @@ const payloadSchema = z.strictObject({
 });
 export type CursorPoint = z.infer<typeof pointSchema>;
 export type CursorScope = {
-  kind: 'trips' | 'expenses' | 'settlements' | 'activity'; uid: string; tripId?: string;
+  kind: 'trips' | 'expenses' | 'settlements' | 'activity' | 'invites' | 'supportTickets' |
+    'adminSupport' | 'adminUsers' | 'adminTrips' | 'adminAudit' | 'adminNotes'; uid: string; tripId?: string;
   filters: Record<string, string | null>; sort: string;
 };
 

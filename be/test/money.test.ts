@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { splitEqual, validateExact, expenseDelta, applyBalanceDelta, applyExpenseTotals, EXPENSE_CATEGORIES } from '../src/domain/money.js';
+import { splitEqual, validateExact, expenseDelta, expenseChangeDelta, zeroBalance, applyBalanceDelta, applyExpenseTotals, EXPENSE_CATEGORIES } from '../src/domain/money.js';
+import { applySettlement } from '../src/domain/settlement.js';
 
 describe('money invariants', () => {
   it('splits the remainder by stable participant ID', () => {
@@ -34,5 +35,22 @@ describe('money invariants', () => {
     expect(() => applyBalanceDelta({ participantId: 'p_A', paidMinor: 0, owedMinor: 0,
       sentMinor: 0, receivedMinor: 0, netMinor: 0 },
     { paidMinor: -1, owedMinor: 0, netMinor: -1 })).toThrow('BALANCE_INVARIANT_FAILED');
+  });
+  it('replacing a contribution matches a fresh ledger and can reverse back with repayment history preserved', () => {
+    const previous = { amountMinor: 101, payerParticipantId: 'an', shares: splitEqual(101, ['an', 'binh', 'chi']) };
+    const next = { amountMinor: 203, payerParticipantId: 'chi', shares: validateExact(203,
+      [{ participantId: 'an', amountMinor: 0 }, { participantId: 'binh', amountMinor: 203 }]) };
+    for (const id of ['an', 'binh', 'chi']) {
+      const starting = { ...zeroBalance(id), sentMinor: 5, receivedMinor: 2, netMinor: 3 };
+      const oldBalance = applyBalanceDelta(starting, expenseDelta(101, 'an', previous.shares, 1).get(id)!);
+      const replacement = applyBalanceDelta(oldBalance, expenseChangeDelta(previous, next).get(id)!);
+      const fresh = applyBalanceDelta(starting, expenseDelta(203, 'chi', next.shares, 1).get(id)!);
+      expect(replacement).toEqual(fresh);
+      expect(applyBalanceDelta(replacement, expenseChangeDelta(next, previous).get(id)!)).toEqual(oldBalance);
+    }
+  });
+  it('does not allow a repayment reversal to make transfer totals negative', () => {
+    expect(() => applySettlement(zeroBalance('an'), 'from', 1, -1)).toThrow('BALANCE_INVARIANT_FAILED');
+    expect(() => applySettlement(zeroBalance('an'), 'to', 1, -1)).toThrow('BALANCE_INVARIANT_FAILED');
   });
 });

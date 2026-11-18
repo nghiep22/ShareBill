@@ -7,7 +7,7 @@ import { ApiError, operationKey, requireTripAccess, requireUser, requireVersion,
 import { tripUpdateInput, participantUpdateInput, participantLinkInput } from './schemas.js';
 import { tripSchema, participantSchema, membershipSchema } from './database/integrity-schemas.js';
 import { createAuditEvent } from './database/audit.js';
-import { createOperationDocument, readOperationResult } from './database/operation.js';
+import { createOperationDocument, readOperationResult, readOperationSnapshot } from './database/operation.js';
 import { planParticipantLink } from './services/participant-link.js';
 
 const tripParams = z.strictObject({ tripId: z.uuid() });
@@ -58,7 +58,7 @@ export async function registerManagementRoutes(app: FastifyInstance) {
     const auditId = randomUUID();
     const result = await store.runTransaction(async tx => {
       const [op, trip, member, user] = await Promise.all([
-        tx.get(opRef), tx.get(tripRef), tx.get(tripRef.collection('memberships').doc(uid)), tx.get(store.doc(`users/${uid}`)),
+        readOperationSnapshot(tx, opRef), tx.get(tripRef), tx.get(tripRef.collection('memberships').doc(uid)), tx.get(store.doc(`users/${uid}`)),
       ]);
       requireTripAccess(member, trip);
       if (user.get('status') !== 'active') throw new ApiError(403, 'ACCOUNT_DISABLED', 'Tài khoản đang tạm khóa.');
@@ -101,7 +101,7 @@ export async function registerManagementRoutes(app: FastifyInstance) {
     const opRef = store.doc(`users/${uid}/operations/${key}`), auditId = randomUUID();
     const result = await store.runTransaction(async tx => {
       const [op, trip, member, user, participant] = await Promise.all([
-        tx.get(opRef), tx.get(tripRef), tx.get(tripRef.collection('memberships').doc(uid)),
+        readOperationSnapshot(tx, opRef), tx.get(tripRef), tx.get(tripRef.collection('memberships').doc(uid)),
         tx.get(store.doc(`users/${uid}`)), tx.get(participantRef),
       ]);
       requireTripAccess(member, trip);
@@ -143,7 +143,7 @@ export async function registerManagementRoutes(app: FastifyInstance) {
     const targetMemberRef = tripRef.collection('memberships').doc(targetUid);
     const result = await store.runTransaction(async tx => {
       const [op, trip, actor, targetMember, user, targetProfile] = await Promise.all([
-        tx.get(opRef), tx.get(tripRef), tx.get(tripRef.collection('memberships').doc(actorUid)),
+        readOperationSnapshot(tx, opRef), tx.get(tripRef), tx.get(tripRef.collection('memberships').doc(actorUid)),
         tx.get(targetMemberRef), tx.get(store.doc(`users/${actorUid}`)), tx.get(store.doc(`users/${targetUid}`)),
       ]);
       requireTripAccess(actor, trip);

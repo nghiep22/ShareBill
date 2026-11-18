@@ -114,3 +114,16 @@ export function applyBalanceDelta(balance: Balance, delta: { paidMinor: number; 
   }
   return next;
 }
+
+export type ExpenseContribution = { amountMinor: number; payerParticipantId: string; shares: Share[] };
+
+/** Combine both contributions before applying any balance, including overlapping payer/share IDs. */
+export function expenseChangeDelta(previous: ExpenseContribution, next: ExpenseContribution) {
+  const deltas = expenseDelta(previous.amountMinor, previous.payerParticipantId, previous.shares, -1);
+  for (const [id, value] of expenseDelta(next.amountMinor, next.payerParticipantId, next.shares, 1)) {
+    const old = deltas.get(id) ?? { paidMinor: 0, owedMinor: 0, netMinor: 0 };
+    deltas.set(id, { paidMinor: old.paidMinor + value.paidMinor,
+      owedMinor: old.owedMinor + value.owedMinor, netMinor: old.netMinor + value.netMinor });
+  }
+  return deltas;
+}

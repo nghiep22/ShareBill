@@ -11,6 +11,11 @@ export type TripCreateData = {
   ownerName: string;
   actorDisplayNameSnapshot?: unknown;
   name: string;
+  destination?: string | null;
+  note?: string | null;
+  startDate?: string | null;
+  endDate?: string | null;
+  timezone?: string;
   operationKey: string;
   now: Timestamp;
 };
@@ -20,8 +25,9 @@ export function createTripDocuments(input: TripCreateData) {
   const { tripId, participantId, auditEventId, ownerUid, ownerName, name, operationKey, now } = input;
   const categoryTotalsMinor = Object.fromEntries(EXPENSE_CATEGORIES.map(category => [category, 0]));
   const trip = {
-    schemaVersion: 1, id: tripId, name, destination: null, note: null, startDate: null, endDate: null,
-    timezone: 'Asia/Ho_Chi_Minh', currency: 'VND', currencyExponent: 0,
+    schemaVersion: 1, id: tripId, name, destination: input.destination ?? null, note: input.note ?? null,
+    startDate: input.startDate ?? null, endDate: input.endDate ?? null,
+    timezone: input.timezone ?? 'Asia/Ho_Chi_Minh', currency: 'VND', currencyExponent: 0,
     ownerUid, createdBy: ownerUid, status: 'active', moderationStatus: 'normal', moderationVersion: 1,
     moderationReason: null, moderatedAt: null, moderatedBy: null, inviteEpoch: 1,
     version: 1, revision: 1, ledgerVersion: 0, participantCount: 1, membershipCountAllTime: 1,

@@ -8,7 +8,7 @@ Ghép ứng dụng React mobile với API và kiểm hành trình người dùng
 
 **Ứng dụng mobile, tài khoản và chuyến đi**
 
-- **Trạng thái** Chưa làm
+- **Trạng thái** Đã nối API local, còn nghiệm thu thiết bị thật và staging
 - **Phụ thuộc** [S06](01_DATABASE_BE.md#s06), [S07](02_NGHIEP_VU_BE.md#s07)
 - **Kết quả** Dựng app React mobile, phiên tài khoản, danh sách/tạo chuyến, overview, quản lý participant và cài đặt thiết bị.
 - **Nghiệm thu** Demo từ đăng ký tới tạo chuyến và quản lý participant trên màn hình hẹp. Kiểm refresh/logout, xóa dữ liệu phiên và lỗi cập nhật khi version thay đổi.
@@ -102,7 +102,7 @@ Ghép ứng dụng React mobile với API và kiểm hành trình người dùng
 
 **Giao diện khoản chi và ảnh hóa đơn**
 
-- **Trạng thái** Chưa làm
+- **Trạng thái** Đã nối API local, còn nghiệm thu thiết bị thật và staging
 - **Phụ thuộc** [S10](03_HOA_DON.md#s10), [S11](#s11)
 - **Kết quả** Làm danh sách/filter, chi tiết, tạo equal/exact, sửa/hủy khoản chi và thêm ảnh từ camera hoặc thư viện.
 - **Nghiệm thu** Kiểm tiền, quyền, xung đột và retry sau timeout. Bản nháp còn khi lỗi. Chỉ lưu khoản chi có ảnh đã sẵn sàng và mở lại được ảnh đã gắn.
@@ -186,7 +186,7 @@ Ghép ứng dụng React mobile với API và kiểm hành trình người dùng
 
 **Giao diện trả nợ và chốt chuyến**
 
-- **Trạng thái** Chưa làm
+- **Trạng thái** Đã nối API local, còn nghiệm thu thiết bị thật và staging
 - **Phụ thuộc** [S09](02_NGHIEP_VU_BE.md#s09), [S11](#s11)
 - **Kết quả** Hiển thị số dư/gợi ý, đề nghị và xác nhận trả nợ, hủy/đảo giao dịch, chốt và mở lại chuyến.
 - **Nghiệm thu** Đi được từ gợi ý đến xác nhận, đối soát số dư rồi chốt. Xử lý số dư mới hơn, quyền xác nhận và lý do bị chặn chốt.
@@ -260,7 +260,7 @@ Ghép ứng dụng React mobile với API và kiểm hành trình người dùng
 
 **Giao diện lời mời, thành viên và hoạt động**
 
-- **Trạng thái** Chưa làm
+- **Trạng thái** Đã nối API local, còn nghiệm thu thiết bị thật và staging
 - **Phụ thuộc** [S08](02_NGHIEP_VU_BE.md#s08), [S11](#s11)
 - **Kết quả** Cho phép tham gia qua link, liên kết account, gỡ/khôi phục, chuyển owner và xem lịch sử theo trang.
 - **Nghiệm thu** Kiểm link hết hạn, người bị gỡ quyền, quyền owner sau bàn giao và timeline phân trang. App dọn dữ liệu riêng tư khi mất quyền.

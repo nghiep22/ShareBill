@@ -10,7 +10,7 @@ Repo tách Web/PWA Next.js ở `fe/` và API Fastify ở `be/`. Hai thư mục c
 - API ở [sharebill-api-staging.vercel.app](https://sharebill-api-staging.vercel.app/health), có tài liệu tương tác tại [/docs/](https://sharebill-api-staging.vercel.app/docs/).
 - Firebase project `sharebill-staging` dùng Spark, bật đăng nhập Email/Password và Firestore Standard tại `asia-southeast1` (Singapore). Rules và indexes lấy từ `be/`.
 - Runtime API dùng service account `sharebill-api@sharebill-staging.iam.gserviceaccount.com` với `roles/datastore.user` và `roles/firebaseauth.admin`. Thông tin xác thực nằm trong secrets của Vercel.
-- GitHub Actions kiểm tra frontend và backend trên PR. R2 còn ở kế hoạch lưu ảnh.
+- GitHub Actions kiểm tra frontend và backend trên PR. S10 đã có adapter Cloud Storage và kiểm local/Emulator; staging chưa gắn bucket ảnh. Lựa chọn lưu trữ cloud phải giữ ràng buộc môi trường miễn phí hiện tại.
 
 Môi trường này triển khai theo yêu cầu chỉ dùng gói miễn phí của người dùng, với Vercel Hobby và Firebase Spark.
 
@@ -20,11 +20,11 @@ Môi trường này triển khai theo yêu cầu chỉ dùng gói miễn phí c�
 2. Với `fe`, chạy build theo `fe/vercel.json` và phục vụ thư mục `out`. Kiểm tra trang chủ, `/manifest.webmanifest` và `/sw.js` qua HTTPS. Giao diện hiện sử dụng chuyến đi mẫu lưu trong trình duyệt.
 3. Tạo hoặc chọn một Firebase project dành cho staging. Bật đăng nhập Email/Password, tạo Firestore và áp dụng Rules/indexes từ `be/firebase.json`. [Firebase Admin SDK](https://firebase.google.com/docs/admin/setup).
 4. Với `be`, dùng cấu hình `be/vercel.json` và đầu vào serverless `be/api/index.ts`. Các đường dẫn HTTP được chuyển vào Fastify. Đặt `APP_ORIGIN` bằng origin của Web/PWA, cấu hình `FIREBASE_PROJECT_ID`, `FIREBASE_WEB_API_KEY`, `CURSOR_SIGNING_SECRET` riêng ít nhất 32 ký tự và thông tin xác thực runtime `FIREBASE_CLIENT_EMAIL`, `FIREBASE_PRIVATE_KEY` trong Vercel. Cấu hình emulator chỉ dùng ở local và CI.
-5. Kiểm tra API `/health` và `/docs/`, sau đó dùng tài khoản thử để đăng ký, đăng nhập, tạo chuyến và thêm khoản chi. R2 là lưu trữ dự kiến cho ảnh hóa đơn khi luồng upload được tích hợp. [Cloudflare R2](https://developers.cloudflare.com/r2/).
+5. Kiểm tra API `/health` và `/docs/`, sau đó dùng tài khoản thử để đăng ký, đăng nhập, tạo chuyến và thêm khoản chi. Backend ảnh S10 mới kiểm local/Emulator; lựa chọn bucket/signing trên cloud thuộc cổng S18. Adapter mặc định là Cloud Storage for Firebase; R2 là phương án thay adapter nếu cần sau khi chốt yêu cầu môi trường. Xem [cấu hình và cổng smoke ảnh](RECEIPTS.md).
 
 ## 1. Kiến trúc triển khai
 
-Vercel host Web/PWA Next.js và API Node.js/Fastify. Firebase cung cấp Auth và Firestore. R2 dành cho ảnh hóa đơn. GitHub Actions chạy kiểm tra khi mở PR hoặc cập nhật `main`, còn Vercel có thể nhận thay đổi qua tích hợp Git.
+Vercel host Web/PWA Next.js và API Node.js/Fastify. Firebase cung cấp Auth và Firestore. S10 có backend ảnh với adapter Cloud Storage mặc định, chưa triển khai bucket thật; lựa chọn cloud tiếp tục tuân thủ ràng buộc staging miễn phí. GitHub Actions chạy kiểm tra khi mở PR hoặc cập nhật `main`, còn Vercel có thể nhận thay đổi qua tích hợp Git.
 
 Quy trình dưới đây mô tả bước mở rộng khi dùng Actions để điều phối staging, smoke test và đưa bản đã kiểm tra lên production. Khi chuyển sang deploy bằng CLI trong Actions, tắt deployment tự động trùng lặp từ Git integration.
 

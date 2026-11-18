@@ -8,7 +8,7 @@ Quyền platform admin tách khỏi quyền owner chuyến. Triển khai và ki�
 
 **Quản trị tài khoản và chuyến**
 
-- **Trạng thái** Chưa làm
+- **Trạng thái** Đã triển khai local/Emulator, còn cấu hình Google, lịch worker và smoke cloud
 - **Phụ thuộc** [S11](04_FRONTEND_APP.md#s11)
 - **Kết quả** Dựng quyền và phiên admin, API/UI tìm tài khoản và chuyến, suspend/resume và khóa/mở tài khoản qua worker Auth.
 - **Nghiệm thu** User thường bị chặn ở API và UI. Lệnh moderation có lý do, audit và trạng thái đồng bộ. Worker chịu được retry và lệnh khóa/mở đến gần nhau.
@@ -112,7 +112,7 @@ Quyền platform admin tách khỏi quyền owner chuyến. Triển khai và ki�
 
 **Hỗ trợ, audit và tổng quan quản trị**
 
-- **Trạng thái** Chưa làm
+- **Trạng thái** A10–A11 đã chạy trên Emulator. Hàng đợi, audit và tổng quan quản trị còn theo S15–S16.
 - **Phụ thuộc** [S15](#s15)
 - **Kết quả** Tạo ticket trong app, hàng đợi hỗ trợ, ghi chú nội bộ, tra audit và trang dashboard/trạng thái jobs.
 - **Nghiệm thu** Người gửi chỉ đọc ticket của họ. Admin xem được hàng đợi, audit và kết quả job theo quyền. Ghi chú nội bộ và thông tin nhạy cảm được giới hạn theo DTO.
@@ -124,6 +124,7 @@ Quyền platform admin tách khỏi quyền owner chuyến. Triển khai và ki�
 
 **A10 · API ticket của chính người gửi**
 
+- **Tiến độ** Đã triển khai và kiểm thử trên Emulator.
 - **Kết quả** User tạo và đọc ticket riêng với quota.
 - **Phạm vi file/module** User support routes, ticket/rate-limit schemas (mới).
 - **Việc làm** 5 tickets/ngày/UID transaction; category/message; membership check khi kèm tripId; list/detail scope UID; internal notes không vào DTO.
@@ -134,6 +135,7 @@ Quyền platform admin tách khỏi quyền owner chuyến. Triển khai và ki�
 
 **A11 · Form gửi lỗi trong app**
 
+- **Tiến độ** Đã nối giao diện người dùng với API và thử luồng gửi, gửi lại và xem của chính mình trên trình duyệt.
 - **Kết quả** Người dùng gửi mô tả và xem trạng thái xử lý.
 - **Phạm vi file/module** User support form/list/detail React (mới).
 - **Việc làm** Context trip tự điền khi hợp lệ; category/message, max length, quota feedback; không hỏi password/token; không upload file P0.

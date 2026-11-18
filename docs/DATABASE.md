@@ -25,14 +25,16 @@ Node API xác minh JWT rồi kiểm quyền trên dữ liệu. Mọi lệnh ghi 
 | Nhóm | Có trong code | Cần hoàn thiện |
 | --- | --- | --- |
 | Auth/user | Register, login, refresh JWT; bootstrap hồ sơ v1 dùng chung | Migration hồ sơ legacy [S05](slices/01_DATABASE_BE.md#s05) và quản trị tài khoản [S15](slices/05_ADMIN_HO_TRO.md#s15) |
-| Trip | Tạo và sửa metadata chuyến v1; moderation mặc định, counters và category totals; create/void expense cập nhật cùng transaction | Chốt/mở lại [S09](slices/02_NGHIEP_VU_BE.md#s09) |
-| Membership | Owner membership đủ timestamps và tripRef trong cùng transaction | Invite/join/remove/restore; API phân trang |
-| Participant | Owner và người thêm sau có participant/balance zero với metadata v1; S07 hỗ trợ đổi tên, active/inactive và link/unlink UID qua transaction | Invite/accept [S08](slices/02_NGHIEP_VU_BE.md#s08) |
-| Expense | Writer v1 lưu `splitInput`, shares, currency/receiptIds và void metadata; reader đọc được legacy `split`; create/void đồng bộ tổng chi và số dư | Sửa khoản chi [S09](slices/02_NGHIEP_VU_BE.md#s09), migration [S05](slices/01_DATABASE_BE.md#s05) và vòng đời ảnh [S10](slices/03_HOA_DON.md#s10) |
-| Settlement | Writer v1 tạo pending/confirm đủ currency, metadata nullable, actor/mode/timestamps; giữ mốc ledger lúc tạo | Hủy/đảo trả nợ [S09](slices/02_NGHIEP_VU_BE.md#s09) và migration [S05](slices/01_DATABASE_BE.md#s05) |
+| Trip | Tạo/sửa metadata, S09 archive/reopen với balance/pending checks và epoch, moderation mặc định, counters và category totals nguyên tử | Cloud smoke [S18](slices/06_VAN_HANH.md#s18) |
+| Membership | S08 join unlinked, remove/restore/tripRef và transfer-owner nguyên tử; giới hạn 50 UID all-time, giữ joinedAt/link khi khôi phục | Realtime/Rules read có kiểm thử [S17](slices/06_VAN_HANH.md#s17) |
+| Participant | Owner và người thêm sau có participant/balance zero với metadata v1; S07 đổi tên, active/inactive và link/unlink UID; S08 join không tự nhận participant | UI quản lý [S14](slices/04_FRONTEND_APP.md#s14) |
+| Expense | Writer v1 create/PATCH/void đồng bộ tổng chi/category/balances; S10 attach/detach receipt nguyên tử; metadata giữ ledgerVersion; reader đọc legacy `split` | Giao diện chi/ảnh [S12](slices/04_FRONTEND_APP.md#s12) |
+| Settlement | V1 đủ pending/confirm/cancel/void, giữ mốc ledger lúc tạo và metadata confirm sau void; cancel không đổi tiền | UI [S13](slices/04_FRONTEND_APP.md#s13), cloud smoke [S18](slices/06_VAN_HANH.md#s18) |
 | Balance/signal | Balance có `updatedAt` khi tạo và khi ghi tiền; signal giữ schemaVersion, revision và ledgerVersion theo root | Kiểm tra/đối soát [S04](slices/01_DATABASE_BE.md#s04), migration [S05](slices/01_DATABASE_BE.md#s05) và repair [S19](slices/06_VAN_HANH.md#s19) |
-| Audit/operation | Sáu mutation chuyến hiện có ghi audit v1 và operation chuẩn cùng transaction; hỗ trợ replay key legacy | Migration operation và baseline audit [S05](slices/01_DATABASE_BE.md#s05), tra kết quả operation [S06](slices/01_DATABASE_BE.md#s06) |
-| Receipt/invite/admin/support/jobs | Đã có mô tả trong tài liệu | Chưa có lifecycle/API/worker hoàn chỉnh |
+| Audit/operation | Mutation ghi audit/operation nguyên tử, hỗ trợ replay legacy và lookup S06; S10 thêm resource/action receipt, workflow reserve key trước finalize committed | UI hoạt động [S14](slices/04_FRONTEND_APP.md#s14), vận hành S19 |
+| Invite | S08 tạo/list/revoke/preview/accept; token trả một lần, lookup hash SHA-256; S09 archive tăng epoch, reopen không hồi sinh link | Cloud smoke [S18](slices/06_VAN_HANH.md#s18) |
+| Receipt/cleanup jobs | S10 intent/policy/quota, lease/hash/baseVersion/attempt, image processor, generation, attach/view/discard và worker dry-run/apply/checkpoint/retry | Bucket thật/IAM/CORS/policy smoke S18, scheduler S19 |
+| Admin/support/jobs còn lại | Đã có mô tả trong tài liệu | Chưa có lifecycle/API/worker hoàn chỉnh |
 | Index | Đã bổ sung file cấu hình trong lần cập nhật này | Deploy staging, đợi index ready và chạy query thật; API hiện vẫn chỉ lấy 20/30 bản gần nhất |
 | Dữ liệu mẫu | Đã bổ sung `pnpm --dir be db:seed` | Seed chỉ chạy emulator và đi qua API hiện có; không thay migration |
 
@@ -177,6 +179,8 @@ Mật khẩu chỉ do Firebase Auth quản lý. User profile không chứa `role
 
 Chỉ một membership active role owner khớp `ownerUid`. Archive chỉ thực hiện khi mọi balance net =0 và không còn settlement pending. Archive không xóa dữ liệu; reopen không hồi sinh invite cũ.
 
+S09 archive kiểm đủ balance cho từng participant và cả pending rows/counter trong transaction. `archivedAt` được đặt lúc archive, về null khi reopen; timestamp lần chốt trước giữ trong audit. Hai thao tác tăng trip.version/revision nhưng giữ ledgerVersion; chỉ archive tăng inviteEpoch.
+
 ### 5.4. Membership, participant và khóa liên kết
 
 | Collection | Trường đầy đủ ngoài schemaVersion | Ràng buộc |
@@ -309,6 +313,8 @@ Key UUID v4 unique trong namespace UID. Cùng key cùng command trả kết qu�
 
 Các trường cleanup bổ sung vào đặc tả ảnh cũ để worker biết thời điểm được xóa bytes và việc xóa đã hoàn tất. Chúng không tự kích hoạt TTL xóa document receipt.
 
+S10 dùng `users/{uid}/receiptWorkflows/{key}` chứa requestHash/tripId/receiptId/baseVersion/attemptId/state/leaseUntil/updatedAt để reserve key và continuation khi chưa có OperationDoc committed. Mọi writer kiểm reservation trong transaction; workflow không chứa policy, URL hay file bytes. `rateLimits/{sha256(scope/UID/trip/hour)}` giữ count/expiry cho quota cấp policy, không dùng TTL làm kiểm tra hạn. Worker có `maintenanceJobs/{uuid}` với trip scope/checkpoint/lease/retryPaths/failedPaths/attempts/summary; xóa staging lỗi sau ready có job pending riêng. [Luồng API và worker đã triển khai](RECEIPTS.md).
+
 ```text
 receipt-staging/{tripId}/{uploaderUid}/{receiptId}/original
 receipt-processed/{tripId}/{receiptId}/{processingAttemptId}.jpg
@@ -352,6 +358,7 @@ Không đưa lý do khóa user hoặc support nội bộ vào activity của nh�
 | --- | --- |
 | Auth job | uid; desiredDisabled boolean; moderationVersion>=1; status queued/running/succeeded/failed/superseded; availableAt; attempts integer>=0; leaseOwner string?; leaseUntil Timestamp?; lastErrorCode string?; createdBy UID; createdAt; updatedAt; completedAt Timestamp? |
 | Per-user lease | uid; jobId; owner string; leaseUntil Timestamp; updatedAt Timestamp |
+| `adminAuthReconciliation/current` | lastUid string hoặc null; updatedAt Timestamp. Checkpoint sweep có giới hạn theo document ID, đối chiếu Auth với desired state đã đồng bộ. |
 
 Đổi trạng thái app, desired Auth state, job và audit/operation trong Firestore transaction. Worker gọi Firebase Auth ngoài transaction, kiểm lại desired state/version trước khi hoàn tất. Khóa user có hiệu lực ngay qua UserDoc; mở user chỉ active sau khi Auth sync thành công. Job cũ không được mở lại một user vừa bị khóa bởi lệnh mới. Retry có backoff/attempt limit; failed được theo dõi trong admin system, không chạy lại vô hạn.
 
@@ -364,6 +371,12 @@ Không đưa lý do khóa user hoặc support nội bộ vào activity của nh�
 | schemaMigrations | migrationId string; checksum SHA-256; status running/interrupted/completed/completed_with_exceptions/failed; projectId string; releaseCommit string; cursor string?; processed integer; failed integer; exceptionCount integer; leaseOwner string?; leaseUntil Timestamp?; startedAt; updatedAt; completedAt Timestamp? | Một runner giữ lease; checkpoint theo document; rerun không áp delta tiền lần hai |
 
 `rateLimits` là lựa chọn lưu counter server cho scope cần dùng chung nhiều instance; quota 5 ticket/ngày phải có record riêng theo UID/ngày. Anti-abuse auth ở ingress/Firebase vẫn cần cấu hình riêng, không xem counter Firestore là cơ chế duy nhất. TTL chỉ dự kiến cho record tạm đã hết hạn; file index hiện chưa bật TTL policy.
+
+### 6.8. `trips/{tripId}/itinerary/current`
+
+Tài liệu lưu version, updatedAt, tối đa 100 hoạt động và 100 đề xuất. Chuyến cũ có lịch trình rỗng ở version 1 cho đến lần ghi đầu tiên. Mỗi thay đổi đọc và kiểm quyền hiện tại trong transaction. Lên lịch đề xuất cập nhật cả hai mảng cùng lúc. Transaction ghi revision, signal, operation và audit của chuyến. Sổ tiền dùng ledgerVersion riêng. Mảng hoạt động và đề xuất được miễn index.
+
+Báo lỗi của người dùng dùng collection `supportTickets` ở mục 6.4, index theo createdBy và createdAt, và quota 5 lượt/ngày theo múi giờ Việt Nam. Operation của báo lỗi có resourceType `supportTicket` và tripId null. Ngữ cảnh chuyến nằm trên báo lỗi, còn quyền đọc kết quả thuộc người gửi.
 
 ## 7. Transaction và toàn vẹn dữ liệu
 

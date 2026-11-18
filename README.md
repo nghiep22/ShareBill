@@ -1,6 +1,6 @@
 # ShareBill — Kế hoạch xây dựng app chia tiền du lịch
 
-**Trạng thái triển khai:** đã có Web/PWA mobile-first ở `fe/` và API ở `be/`, cùng môi trường staging Vercel Hobby và Firebase Spark. Giao diện tại `/` đã nối đăng ký/đăng nhập, chuyến đi, khoản chi (chia đều hoặc nhập từng phần, xem chi tiết, hủy) và quyết toán với API; `/demo/` vẫn là bản xem thử dùng dữ liệu trên trình duyệt. Thay đổi frontend mới đã kiểm tra với Firebase Emulator ở local, chưa triển khai lên Vercel. [Mở bản đang triển khai](https://sharebill-nghiep22.vercel.app/) · [Tài liệu API staging](https://sharebill-api-staging.vercel.app/docs/) · [Thiết lập staging](docs/CICD_DEPLOY.md).
+**Trạng thái triển khai** — Web/PWA mobile-first nằm trong `fe/` và API nằm trong `be/`. Trong mã nguồn hiện tại, `/` và `/live` dùng API cho tài khoản, chuyến đi, thành viên, lời mời, chi tiêu, quyết toán, lịch trình và báo lỗi. `/demo/` mở bản mẫu với dữ liệu trong trình duyệt. Môi trường staging hiện có dùng Vercel Hobby và Firebase Spark. [Hướng dẫn chạy frontend](fe/README.md) · [Mở bản đang triển khai](https://sharebill-nghiep22.vercel.app/) · [Tài liệu API staging](https://sharebill-api-staging.vercel.app/docs/) · [Thiết lập staging](docs/CICD_DEPLOY.md).
 
 Tài liệu thiết kế và triển khai, cập nhật ngày **16/11/2026**. Ngôn ngữ sản phẩm: tiếng Việt. Mục tiêu: một người có thể đi từ phân tích bài toán, làm frontend/backend, kiểm thử đến vận hành bản thật.
 
@@ -11,20 +11,22 @@ Tài liệu thiết kế và triển khai, cập nhật ngày **16/11/2026**. Ng
 | [Kế hoạch sản phẩm](docs/PRODUCT_PLAN.md) | Phạm vi MVP, hành trình người dùng, quy tắc tiền, quyền, kiến trúc, quyết định SQLite/Firebase | Cả FE và BE |
 | [Đặc tả Frontend](docs/FRONTEND.md) | Từng màn hình, form, component, state, API integration, mobile-first, PWA, offline, accessibility | FE |
 | [Đặc tả Backend](docs/BACKEND.md) | Schema Firestore, API, phân quyền, chia tiền, transaction, idempotency, ảnh hóa đơn, phương án SQLite | BE |
+| [Backend ảnh hóa đơn](docs/RECEIPTS.md) | API S10, upload/xem ảnh có hạn, lease xử lý ảnh, attach, cleanup và cổng kiểm tra bucket thật | BE, FE và vận hành |
 | [Thiết kế và hoàn thiện CSDL](docs/DATABASE.md) | Quan hệ và từ điển dữ liệu đầy đủ, index, ràng buộc, migration legacy, seed, backup/restore và kế hoạch hoàn thiện | BE, FE và vận hành |
 | [Website quản trị React/Node.js](docs/ADMIN_WEB.md) | UX đơn giản, dashboard, người dùng, chuyến đi, hỗ trợ, quyền quản trị và API Node.js | FE quản trị và BE |
 | [CI/CD và triển khai](docs/CICD_DEPLOY.md) | Môi trường, secrets, GitHub Actions, Vercel, Firebase Rules, release, rollback, backup, vận hành | Cả FE và BE |
 | [Lộ trình và kiểm thử](docs/ROADMAP_TESTING.md) | Công việc theo giai đoạn, dependency, acceptance criteria, dữ liệu mẫu, test matrix, checklist ra mắt | Cả FE và BE |
-| [20 lát cắt triển khai](docs/slices/README.md) | S01–S07 đã hoàn tất, còn 13 lát. Mỗi lát có phụ thuộc, phạm vi và tiêu chí nghiệm thu | Người trực tiếp triển khai |
+| [20 lát cắt triển khai](docs/slices/README.md) | S01–S10 có bằng chứng local, S11–S17 đã triển khai luồng và còn các cổng nghiệm thu | Người trực tiếp triển khai |
+| [Kế hoạch hoàn thiện và tiến độ](docs/KE_HOACH_HOAN_THIEN.md) | K01–K11, tiến độ M01–M12 và bằng chứng kiểm thử hiện tại | Cả FE, BE và vận hành |
 
 **Thứ tự đọc:** Product → Database → Frontend/Backend song song → CI/CD → Roadmap. Khi triển khai, Database là hợp đồng lưu trữ, Backend là hợp đồng API và công thức; phạm vi và quy tắc người dùng trong Product là chuẩn nghiệp vụ. Thay đổi hợp đồng phải cập nhật cả hai phía và test liên quan trong cùng PR.
 
-Lát tiếp theo là [S08 — Lời mời và vòng đời thành viên](docs/slices/02_NGHIEP_VU_BE.md#s08).
+Giao diện quản trị nằm ở `/admin`. Cấp quyền Google operator và chạy worker theo [hướng dẫn backend](be/README.md#quản-trị). Công việc tiếp tục tập trung nghiệm thu thiết bị thật, bucket ảnh staging và phát hành trong [kế hoạch hoàn thiện](docs/KE_HOACH_HOAN_THIEN.md).
 
 ## Hướng triển khai đề xuất
 
 - **Frontend:** thư mục `fe/` dành cho Next.js/React + TypeScript, responsive mobile-first, PWA và website quản trị React.
-- **Backend:** thư mục `be/` dùng Fastify + Node.js + TypeScript, API REST `/api/v1` và tương lai `/api/admin/v1`. Vercel hỗ trợ Fastify theo [tài liệu chính thức](https://vercel.com/docs/frameworks/backend/fastify).
+- **Backend:** thư mục `be/` dùng Fastify + Node.js + TypeScript, API REST `/api/v1` và `/api/admin/v1`. Vercel hỗ trợ Fastify theo [tài liệu chính thức](https://vercel.com/docs/frameworks/backend/fastify).
 - **Website quản trị:** giao diện React thuộc `fe/`, gọi API Node.js trong `be/`; quyền riêng theo [đặc tả quản trị](docs/ADMIN_WEB.md).
 - **Dữ liệu:** Firebase Authentication + Cloud Firestore; mọi thao tác ghi nghiệp vụ đi qua backend.
 - **Ảnh hóa đơn:** Cloud Storage for Firebase, bucket riêng tư, upload có kiểm soát.

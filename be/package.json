@@ -11,11 +11,14 @@
     "start": "node dist/index.js",
     "build": "tsc -p tsconfig.build.json",
     "check": "tsc --noEmit",
-    "emulators": "firebase emulators:start --project demo-sharebill --only auth,firestore",
-    "test:emulator": "vitest run --no-file-parallelism test/emulator.test.ts test/check-database.emulator.test.ts test/migration-users.emulator.test.ts test/migration-slices.emulator.test.ts test/pagination.emulator.test.ts test/management.emulator.test.ts",
+    "emulators": "firebase emulators:start --project demo-sharebill --only auth,firestore,storage",
+    "test:emulator": "vitest run --no-file-parallelism test/emulator.test.ts test/check-database.emulator.test.ts test/migration-users.emulator.test.ts test/migration-slices.emulator.test.ts test/pagination.emulator.test.ts test/management.emulator.test.ts test/membership.emulator.test.ts test/ledger-lifecycle.emulator.test.ts test/receipts.emulator.test.ts test/storage-rules.emulator.test.ts test/itinerary-support.emulator.test.ts test/admin.emulator.test.ts",
     "db:seed": "tsx scripts/seed-database.ts",
     "db:check": "tsx scripts/check-database.ts",
     "db:migrate": "tsx scripts/migrate-database.ts",
+    "receipts:cleanup": "tsx scripts/cleanup-receipts.ts",
+    "admin:grant": "tsx scripts/admin-grant.ts",
+    "admin:auth-worker": "tsx scripts/admin-auth-worker.ts",
     "test": "vitest run",
     "test:watch": "vitest"
   },
@@ -25,6 +28,7 @@
     "@fastify/swagger-ui": "^5.2.6",
     "fastify": "^5.6.0",
     "firebase-admin": "^13.6.0",
+    "sharp": "^0.35.5",
     "zod": "^4.1.0"
   },
   "devDependencies": {

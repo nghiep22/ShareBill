@@ -8,7 +8,7 @@ import { expenseDelta, applyBalanceDelta, applyExpenseTotals, type Balance, type
 import { suggestSettlements, applySettlement } from './domain/settlement.js';
 import { settlementInput, settlementDocumentSchema, createSettlementDocument, confirmationChanges } from './database/settlement.js';
 import { createAuditEvent } from './database/audit.js';
-import { createOperationDocument, readOperationResult } from './database/operation.js';
+import { createOperationDocument, readOperationResult, readOperationSnapshot } from './database/operation.js';
 
 const confirmInput = z.strictObject({ basedOnLedgerVersion: z.number().int().min(0) });
 const voidInput = z.strictObject({ reason: z.string().trim().min(1).max(300) });
@@ -65,7 +65,7 @@ export async function registerFinanceRoutes(app: FastifyInstance): Promise<void>
     const result = await store.runTransaction(async tx => {
       const opRef = store.doc(`users/${uid}/operations/${key}`), tripRef = store.doc(`trips/${tripId}`);
       const [op, trip, member, user, fromParticipant, toParticipant, fromBalanceSnap, toBalanceSnap] = await Promise.all([
-        tx.get(opRef), tx.get(tripRef), tx.get(store.doc(`trips/${tripId}/memberships/${uid}`)), tx.get(store.doc(`users/${uid}`)),
+        readOperationSnapshot(tx, opRef), tx.get(tripRef), tx.get(store.doc(`trips/${tripId}/memberships/${uid}`)), tx.get(store.doc(`users/${uid}`)),
         tx.get(store.doc(`trips/${tripId}/participants/${body.fromParticipantId}`)), tx.get(store.doc(`trips/${tripId}/participants/${body.toParticipantId}`)),
         tx.get(store.doc(`trips/${tripId}/balances/${body.fromParticipantId}`)), tx.get(store.doc(`trips/${tripId}/balances/${body.toParticipantId}`)),
       ]);
@@ -119,7 +119,7 @@ export async function registerFinanceRoutes(app: FastifyInstance): Promise<void>
     const result = await store.runTransaction(async tx => {
       const opRef = store.doc(`users/${uid}/operations/${key}`), tripRef = store.doc(`trips/${tripId}`), settlementRef = store.doc(`trips/${tripId}/settlements/${id}`);
       const [op, trip, member, user, settlement] = await Promise.all([
-        tx.get(opRef), tx.get(tripRef), tx.get(store.doc(`trips/${tripId}/memberships/${uid}`)), tx.get(store.doc(`users/${uid}`)), tx.get(settlementRef),
+        readOperationSnapshot(tx, opRef), tx.get(tripRef), tx.get(store.doc(`trips/${tripId}/memberships/${uid}`)), tx.get(store.doc(`users/${uid}`)), tx.get(settlementRef),
       ]);
       ensureMember(member, trip, user);
       const replay = readOperationResult(op.data(), command, uid, tripId);
@@ -129,14 +129,15 @@ export async function registerFinanceRoutes(app: FastifyInstance): Promise<void>
       if (settlement.get('version') !== expectedVersion) throw new ApiError(409, 'VERSION_CONFLICT', 'Lượt trả nợ đã thay đổi.');
       if (settlement.get('status') !== 'pending') throw new ApiError(409, 'INVALID_STATE_TRANSITION', 'Lượt trả nợ không còn chờ xác nhận.');
       const owner = member.get('role') === 'owner';
-      if (!owner && (member.get('participantId') !== settlement.get('toParticipantId') || settlement.get('createdBy') === uid)) throw new ApiError(403, 'FORBIDDEN', 'Chỉ người nhận xác nhận đã nhận tiền.');
+      const recipient = member.get('participantId') === settlement.get('toParticipantId') && settlement.get('createdBy') !== uid;
+      if (!owner && !recipient) throw new ApiError(403, 'FORBIDDEN', 'Chỉ người nhận xác nhận đã nhận tiền.');
       if (body.basedOnLedgerVersion !== trip.get('ledgerVersion')) throw new ApiError(409, 'LEDGER_CHANGED', 'Số dư đã thay đổi. Hãy kiểm tra lại.');
       const fromId = settlement.get('fromParticipantId') as string, toId = settlement.get('toParticipantId') as string, amount = settlement.get('amountMinor') as number;
       const [fromSnap, toSnap] = await Promise.all([tx.get(store.doc(`trips/${tripId}/balances/${fromId}`)), tx.get(store.doc(`trips/${tripId}/balances/${toId}`))]);
       const [from, to] = balancesFrom([fromSnap, toSnap]);
       if (!from || !to || from.netMinor >= 0 || to.netMinor <= 0 || amount > Math.min(-from.netMinor, to.netMinor)) throw new ApiError(422, 'SETTLEMENT_EXCEEDS_BALANCE', 'Số dư hiện tại không còn đủ cho lượt trả này.');
       const now = Timestamp.now(), revision = trip.get('revision') + 1, ledgerVersion = trip.get('ledgerVersion') + 1;
-      const mode = owner ? 'owner_on_behalf' as const : 'recipient' as const;
+      const mode = recipient ? 'recipient' as const : 'owner_on_behalf' as const;
       const response = { id, status: 'confirmed', version: expectedVersion + 1, confirmationMode: mode };
       const changes = confirmationChanges({ actorUid: uid, mode, version: expectedVersion, now });
       const beforeAudit = { id, fromParticipantId: fromId, toParticipantId: toId, amountMinor: amount,
@@ -175,7 +176,7 @@ export async function registerFinanceRoutes(app: FastifyInstance): Promise<void>
     const auditEventId = randomUUID();
     const result = await store.runTransaction(async tx => {
       const opRef = store.doc(`users/${uid}/operations/${key}`), tripRef = store.doc(`trips/${tripId}`), expenseRef = store.doc(`trips/${tripId}/expenses/${id}`);
-      const [op, trip, member, user, expense] = await Promise.all([tx.get(opRef), tx.get(tripRef), tx.get(store.doc(`trips/${tripId}/memberships/${uid}`)), tx.get(store.doc(`users/${uid}`)), tx.get(expenseRef)]);
+      const [op, trip, member, user, expense] = await Promise.all([readOperationSnapshot(tx, opRef), tx.get(tripRef), tx.get(store.doc(`trips/${tripId}/memberships/${uid}`)), tx.get(store.doc(`users/${uid}`)), tx.get(expenseRef)]);
       ensureMember(member, trip, user);
       const replay = readOperationResult(op.data(), command, uid, tripId);
       if (replay) return { outcome: replay, replayed: true };

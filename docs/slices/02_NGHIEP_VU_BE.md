@@ -54,10 +54,12 @@ Bổ sung các luồng quản lý chuyến, thành viên và giao dịch trên t
 
 **Lời mời và vòng đời thành viên**
 
-- **Trạng thái** Chưa làm
+- **Trạng thái** Hoàn tất trên Firebase Emulator; chưa triển khai cloud.
 - **Phụ thuộc** [S06](01_DATABASE_BE.md#s06), [S07](#s07)
 - **Kết quả** Tạo/list/revoke/preview/accept link mời, gỡ/khôi phục thành viên và chuyển quyền owner.
 - **Nghiệm thu** Kiểm hạn, quota, lượt cuối cạnh tranh và replay không lộ token. Người bị gỡ mất quyền dữ liệu. Chuyển quyền luôn để lại đúng một owner active.
+- **Đã làm** API tạo/list/revoke/preview/accept invite; token ngẫu nhiên 32 byte chỉ trả một lần, lookup SHA-256 và operation/audit không chứa raw token. List dùng cursor ký theo revision; preview chỉ trả tên chuyến/người mời/hạn. Accept transaction kiểm expiry/epoch/status/usage/quota 50 UID all-time, join unlinked; active join lại không tốn lượt, removed cần restore riêng. Có GET members, remove/restore giữ participant/link/tiền/joinedAt; remove và revoke vẫn được khi archived/suspended. Transfer-owner kiểm người nhận active, đã linked, đổi root và hai roles trong một commit; owner cũ còn quyền được replay.
+- **Kiểm chứng** `be/test/membership.emulator.test.ts`: 8 kịch bản gồm create/replay đồng thời không lộ token trong DB/log/list, paging và cursor stale, lượt dùng cuối và chỗ thứ 50 cạnh tranh, expired/revoked/epoch/archived/suspended, removed không đọc/ghi/rejoin/replay, restore và xử lý link cũ, transfer cạnh tranh và target removed/unlinked/disabled, remove cạnh tranh với ghi tiền. `checkDatabase` sạch trên các fixture nghiệp vụ; Swagger có 32 endpoints. Typecheck, unit/HTTP tests, build và toàn bộ Emulator suite đạt.
 
 <details>
 <summary>Các bước và tiêu chí chi tiết</summary>
@@ -138,10 +140,12 @@ Bổ sung các luồng quản lý chuyến, thành viên và giao dịch trên t
 
 **Sửa giao dịch và chốt chuyến**
 
-- **Trạng thái** Chưa làm
+- **Trạng thái** Hoàn tất trên Firebase Emulator; chưa triển khai cloud.
 - **Phụ thuộc** [S08](#s08)
 - **Kết quả** Hoàn thiện sửa khoản chi, hủy/đảo trả nợ và archive/reopen chuyến.
 - **Nghiệm thu** Delta cũ/mới cập nhật tiền đúng một lần. Chặn chốt khi còn số dư hoặc đề nghị pending. Lời mời cũ hết hiệu lực khi chốt và vẫn vô hiệu sau khi mở lại.
+- **Đã làm** `PATCH expenses/:id` nhận metadata riêng hoặc đủ block tiền, kiểm creator/owner/version; gộp delta mới–cũ theo participant, chuyển category totals, giữ all-time/active counts và settlement lịch sử. Chỉ amount/payer/shares thực sự đổi mới tăng ledgerVersion; block tiền mới yêu cầu người active, đảo bản cũ vẫn được khi inactive. Cancel pending giữ tiền/ledgerVersion; void confirmed chỉ owner có reason, đảo sent/received/net một lần và giữ metadata xác nhận. Archive đọc đủ balances/participants và cả pending counter/rows trong transaction, yêu cầu từng net=0; tăng inviteEpoch/version/revision, giữ ledgerVersion. Reopen đặt archivedAt=null, giữ epoch và link cũ vô hiệu. Cả năm API ghi audit/operation/signal cùng transaction và replay theo quyền hiện tại.
+- **Kiểm chứng** `be/test/ledger-lifecycle.emulator.test.ts`: 10 kịch bản kiểm số dư chuẩn, equal→exact, đổi amount/payer/category, metadata/category/no-op không tăng ledger, inactive cũ/mới, quyền và version cạnh tranh, expense edit sau confirm, cancel/confirm cạnh tranh, void partial đồng thời/replay, chốt/mở lại và epoch, archive/create cạnh tranh, pending counter lệch và balance thiếu/sai. `checkDatabase` sạch ở các fixture sau nghiệp vụ; 25 unit/HTTP tests và 33 Emulator tests đạt, typecheck/build đạt. Swagger mô tả 37 endpoints.
 
 <details>
 <summary>Các bước và tiêu chí chi tiết</summary>

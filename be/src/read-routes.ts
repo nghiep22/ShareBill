@@ -7,6 +7,7 @@ import { decodeCursor, encodeCursor, cursorValue, timestampPoint, type CursorSco
 import { expenseReadData } from './database/expense.js';
 import { auditEventSchema } from './database/audit.js';
 import { operationDocumentSchema } from './database/operation.js';
+import { requireActiveProfile } from './services/trip-access.js';
 
 const idSchema = z.strictObject({ tripId: z.uuid(), id: z.uuid().optional() });
 const keySchema = z.strictObject({ key: z.uuid() });
@@ -52,10 +53,13 @@ function activityDto(snapshot: FirebaseFirestore.QueryDocumentSnapshot) {
     revision: null, ledgerVersion: null,
     createdAt: raw.createdAt instanceof Timestamp ? raw.createdAt.toDate().toISOString() : null };
   const event = parsed.data;
+  const amount = (value: unknown) => value && typeof value === 'object' && 'amountMinor' in value && typeof value.amountMinor === 'number'
+    ? value.amountMinor : null;
   return { eventId: snapshot.id, action: event.action, actorUid: event.actorUid,
     actorDisplayNameSnapshot: event.actorDisplayNameSnapshot, entityType: event.entityType,
     entityId: event.entityId, reason: event.reason, revision: event.revision,
-    ledgerVersion: event.ledgerVersion, createdAt: event.createdAt.toDate().toISOString() };
+    ledgerVersion: event.ledgerVersion, createdAt: event.createdAt.toDate().toISOString(),
+    amountBeforeMinor: amount(event.before), amountAfterMinor: amount(event.after) };
 }
 function scope(kind: CursorScope['kind'], uid: string, sort: string,
   filters: Record<string, string | null>, tripId?: string): CursorScope {
@@ -187,12 +191,27 @@ export async function registerReadRoutes(app: FastifyInstance): Promise<void> {
     if (value.canonicalPath !== undefined && !operationDocumentSchema.safeParse(value).success) {
       throw new ApiError(409, 'OPERATION_RESULT_UNAVAILABLE', 'Không thể xác định kết quả thao tác.');
     }
+    if (value.resourceType === 'supportTicket') {
+      const ticketId = z.uuid().safeParse(value.resourceId);
+      if (!ticketId.success || value.tripId !== null || !(value.committedAt instanceof Timestamp)) {
+        throw new ApiError(409, 'OPERATION_RESULT_UNAVAILABLE', 'Không thể xác định báo cáo của thao tác.');
+      }
+      if (value.actorUid !== uid) throw new ApiError(404, 'OPERATION_UNKNOWN', 'Không tìm thấy thao tác.');
+      await store.runTransaction(async tx => {
+        const [profile, ticket] = await Promise.all([tx.get(store.doc(`users/${uid}`)), tx.get(store.doc(`supportTickets/${ticketId.data}`))]);
+        requireActiveProfile(profile);
+        if (!ticket.exists || ticket.get('createdBy') !== uid) throw new ApiError(404, 'OPERATION_UNKNOWN', 'Không tìm thấy thao tác.');
+      }, { readOnly: true });
+      return { data: { status: 'completed', tripId: null, resourceType: 'supportTicket', resourceId: ticketId.data,
+        committedAt: value.committedAt.toDate().toISOString() } };
+    }
     const tripId = value.tripId ?? (value.path === '/api/v1/trips' ? value.response?.id : null);
     if (!z.uuid().safeParse(tripId).success) throw new ApiError(409, 'OPERATION_RESULT_UNAVAILABLE', 'Không thể xác định chuyến của thao tác.');
     await store.runTransaction(async tx => { await access(tx, store, uid, tripId); }, { readOnly: true });
     if (value.actorUid !== undefined && value.actorUid !== uid) throw new ApiError(404, 'OPERATION_UNKNOWN', 'Không tìm thấy thao tác.');
     const resourceId = value.resourceId ?? value.response?.id;
-    if (!z.uuid().safeParse(resourceId).success) throw new ApiError(409, 'OPERATION_RESULT_UNAVAILABLE', 'Không thể xác định kết quả thao tác.');
+    const resourceSchema = value.resourceType === 'membership' ? z.string().min(1).max(128).regex(/^[^/]+$/) : z.uuid();
+    if (!resourceSchema.safeParse(resourceId).success) throw new ApiError(409, 'OPERATION_RESULT_UNAVAILABLE', 'Không thể xác định kết quả thao tác.');
     const path: unknown = value.canonicalPath ?? value.path;
     if (typeof path !== 'string' || !(value.committedAt instanceof Timestamp)) {
       throw new ApiError(409, 'OPERATION_RESULT_UNAVAILABLE', 'Không thể xác định kết quả thao tác.');

@@ -1,0 +1,177 @@
+# ShareBill — Khảo sát hiện trạng và kế hoạch hoàn thiện
+
+Ngày khảo sát 18/11/2026 · Phạm vi mã trong workspace, giao diện và API local, Firebase Emulator, bộ thiết kế `GiaoDien` và đặc tả nghiệp vụ.
+
+## Tiến độ triển khai ngày 18/11/2026
+
+Đã sửa K01–K09 trong mã nguồn. K01, K02, K04 và K05 có kiểm thử Chromium trong repo. K03 có kiểm thử transaction và cạnh tranh với tạo settlement. K06 được kiểm với owner nhận tiền do member tạo. K08 kiểm membership active mở lời mời hết lượt và tiếp tục chặn người ngoài.
+
+| Module | Kết quả đã triển khai | Phần còn cần nghiệm thu |
+| --- | --- | --- |
+| M01 | URL có tripId và bộ lọc. Form khoản chi/cài đặt giữ snapshot cùng version, cho đối chiếu và chọn cách áp lại. Lịch trình, chuyển chủ và quyết toán giữ version lúc mở. Khóa thao tác và dấu vân tay request lưu theo API/UID trong sessionStorage, tra operation sau reload. | Kiểm trên các trình duyệt đích và khi thiết bị chặn storage. Retry tự động cùng key yêu cầu cùng nội dung và version. Khi đã đổi nội dung, dùng bảng khôi phục để kiểm tra giao dịch trước. |
+| M02 | Tạo/sửa múi giờ, ngày mặc định theo chuyến, nhóm tùy chọn khi tạo chuyến. Trạng thái tạm khóa riêng. Khôi phục link sau đăng nhập, dọn dữ liệu khi phiên mất hiệu lực hoặc đổi tài khoản. | Smoke Auth trên staging và thiết bị thật. |
+| M03 | Chặn đổi liên kết của participant có pending ở cả chiều gửi/nhận trong transaction. UI dẫn tới lịch sử để xử lý. Người đã tham gia mở được chuyến từ lời mời hết lượt. | Nghiệm thu lời mời trên thiết bị thật. |
+| M04 | Form nhanh mặc định Khác, mục Thêm thông tin, kiểm ngày ngoài khoảng chuyến. Giữ bản nhập khi xung đột và chỉ gửi các trường metadata đã đổi. | Thử với ít nhất 5 người mới theo tiêu chí 60 giây. |
+| M05 | Nhãn nhận tiền/xác nhận thay khớp API và lịch sử. Cho nhập cặp khác hợp lệ và trả một phần, tiếp tục hiện gợi ý khi có pending. Chỉ báo cân bằng khi snapshot đầy đủ. Hành trình chi → trả nợ → xác nhận → chốt có E2E hai tài khoản. | Smoke trên staging với cùng bản FE/API. |
+| M06 | Luồng upload/finalize/attach/discard, retry, Rules và cleanup đã có kiểm thử. Lưu khoản chi vẫn dùng được sau lỗi upload. | Bucket thật, IAM ký, CORS, URL hết hạn và camera thiết bị thật. |
+| M07 | Giữ ngày và bản nhập lịch trình, phát hiện version đổi và yêu cầu kiểm lại trước khi áp. Nhật ký có link đúng chuyến. | Nghiệm thu nhiều ngày và giới hạn 100 hoạt động/đề xuất trên điện thoại. |
+| M08 | Báo lỗi của người gửi nhận trạng thái từ workflow quản trị. Nội dung ghi chú nội bộ giữ riêng. Có E2E người dùng → operator → người gửi. | Smoke staging. |
+| M09 | Trang /admin, Google sign-in trong bộ nhớ, grant server-only, recent auth, dashboard, tra cứu, quản trị chuyến/tài khoản, ticket, ghi chú phân trang, audit, system và jobs. Worker Auth có lease theo UID, retry, kiểm desired state/version và sweep đối soát. CLI grant mặc định dry-run. | Cấu hình Google provider/domain, cấp operator thật, lịch chạy worker và smoke cloud. |
+| M10 | Opt-in thiết bị tin cậy. IndexedDB tách API/UID/chuyến cho snapshot tối thiểu và nháp thêm khoản chi, hạn đọc 24 giờ. Xóa khi tắt, đăng xuất, tài khoản bị khóa hoặc chuyến mất quyền. Ngoại tuyến chỉ soạn, người dùng kiểm lại và bấm lưu khi có mạng. PWA hỏi trước khi cập nhật. | Safari iOS, Chrome Android, cài từ HTTPS, bàn phím và trình đọc màn hình trên thiết bị thật. Nháp sửa khoản chi và ảnh upload chưa được lưu ngoại tuyến. |
+| M11 | 29 unit/HTTP, 54 Emulator và 6 Chromium E2E đã đạt trên local. CI có kiểm TypeScript, build, Emulator, browser và tải lại PWA khi offline. OpenAPI có 67 thao tác. | Kết quả thực thi GitHub Actions trên commit đẩy lên và smoke cloud. |
+| M12 | Có runbook, cấu hình và các công cụ checker/migration/cleanup/worker để đưa lên môi trường đã chọn. | Deploy cùng commit, index cloud, lịch workers/backup, diễn tập restore/rollback và nghiệm thu phát hành. |
+
+Đã chọn polling REST có kiểm quyền mỗi 30 giây khi tab đang hiện để theo dõi revision. Chuyển màn hình, quay lại foreground và có mạng trở lại đều kiểm dữ liệu lại. Khi revision đổi, app tải lại snapshot và query đang mở. Cách triển khai này giữ toàn bộ truy cập dữ liệu nghiệp vụ qua backend. Quy tắc Firestore client tiếp tục deny. Thời gian thấy thay đổi giữa hai thiết bị phụ thuộc vòng polling và kết nối.
+
+Mặc định chỉ dấu vân tay request, key và thời điểm được lưu cho khôi phục lệnh trong tab. Bản nháp nội dung và snapshot cần opt-in riêng. Snapshot ngoại tuyến chỉ hỗ trợ tổng quan, số dư và soạn khoản chi mới, gắn với phiên còn hiệu lực trên tab. Giao diện quản trị dùng phiên Google trong bộ nhớ. Tải lại trang quản trị yêu cầu đăng nhập Google lại.
+
+Bản build và kiểm thử ở trên dùng dữ liệu synthetic trên Firebase Emulator. Môi trường local hiện có cấu hình demo. Chưa có bằng chứng deploy của đợt sửa này, bucket staging ký thật, Google provider cloud, thiết bị vật lý hoặc diễn tập phục hồi. Các tiêu chí này còn mở và dự án tiếp tục ở trạng thái chuẩn bị phát hành.
+
+Nguồn triển khai [E2E](../fe/test/workspace.test.mjs) · [Admin tests](../be/test/admin.emulator.test.ts) · [Worker](../be/src/services/admin-auth-jobs.ts) · [Dữ liệu thiết bị](../fe/src/private-device.ts) · [CI](../.github/workflows/backend-ci.yml) · [Hướng dẫn quản trị](../be/README.md#quản-trị).
+
+## 1. Kết luận khảo sát ban đầu
+
+**Luồng chính đã chạy được trên dữ liệu API local. Dự án chưa đạt chuẩn phát hành MVP/P0.** Hai tài khoản có thể tạo chuyến, mời và liên kết thành viên, ghi chi phí, xác nhận trả nợ, chốt hoặc mở lại chuyến. Lịch trình đã dùng dữ liệu chung của chuyến và báo lỗi đã lưu theo tài khoản gửi. Ba điểm chặn ra mắt là ghi đè sau xung đột, tạo trùng khi mất phản hồi rồi tải lại và thay đổi quyền xác nhận khoản trả nợ đang chờ. Xem các lỗi K01–K03 ở mục 3.
+
+Frontend dùng Next.js/React và TypeScript, backend dùng Fastify, Firebase Auth và Firestore. Mã hiện tại có 46 thao tác trong OpenAPI. `/` và `/live` mở giao diện gọi API. `/demo/` dùng dữ liệu và ảnh mẫu lưu cục bộ. Nhiều thay đổi vẫn nằm trong working tree, vì vậy phạm vi báo cáo là mã đang có trên máy. Trạng thái deploy, cấu hình cloud và dữ liệu staging chưa được đối chiếu trong lần khảo sát. [Frontend](../fe/README.md) · [OpenAPI](../be/openapi.json) · [Triển khai](CICD_DEPLOY.md)
+
+Các mẫu trong `GiaoDien` bao phủ tổng quan, chi tiêu, form khoản chi, số dư, thành viên, lời mời, cài đặt và lịch trình theo vai trò. Giao diện hiện có đủ điểm vào cho các nhóm màn hình này. Cần đánh giá nghiệm thu bằng hành vi trên API, đặc biệt ở phân quyền, dữ liệu đồng thời, lỗi mạng và thao tác trên điện thoại. [Mẫu và hệ thống thiết kế](../GiaoDien/GiaoDien) · [Mục tiêu nghiệp vụ P0](PRODUCT_PLAN.md#3-phân-kỳ-tính-năng)
+
+**Cách đọc bảng.** “Đã chạy” nghĩa là có đường đi qua UI và API hoặc có kiểm chứng trên Emulator. “Còn thiếu” là phần còn thiếu trong hành trình hoặc trong bằng chứng nghiệm thu. **P0** chặn phát hành chính thức. **P1** là cải tiến sau khi các cổng P0 đạt hoặc theo quyết định sản phẩm.
+
+## 2. Bản đồ màn hình và nghiệp vụ hiện có
+
+| Nhóm màn hình | Đã có trong mã hiện tại | Đánh giá đối với MVP |
+| --- | --- | --- |
+| Đăng nhập, đăng ký, tài khoản | Email/mật khẩu, làm mới token, đăng xuất, đi tiếp từ lời mời | Đường đi chính đã chạy. Cần nghiệm thu phiên hết hạn, phiên bị khóa, đổi tài khoản và khôi phục điểm vào sau đăng nhập. |
+| Danh sách chuyến, tạo chuyến, tổng quan, cài đặt | Chuyến mở/đã chốt, phân trang, tạo và chỉnh metadata, tổng chi và số dư cá nhân, chốt/mở lại | Đúng mô hình chuyến. Thiếu định danh chuyến trong URL màn hình con, xử lý trạng thái khóa rõ ràng và UI múi giờ của chuyến. |
+| Thành viên, tài khoản truy cập, lời mời | Participant tách membership, thêm người chưa có tài khoản, liên kết, gỡ/khôi phục, chuyển chủ, link có hạn | Đúng mô hình quyền cơ bản. Đổi liên kết khi có khoản trả nợ đang chờ và vào lại qua link hết lượt cần xử lý. |
+| Chi tiêu, thêm/sửa, chi tiết, hủy | Lọc/phân trang, một người trả, chia đều hoặc nhập riêng, preview, sửa metadata và phần tiền, lý do hủy | Sổ tiền có kiểm thử. UI còn sai lệch khi quay lại danh sách, khi tải lại sau xung đột và khi thử lại sau tải lại trang. Form nhanh chưa đạt bố cục P0. |
+| Ảnh hóa đơn | Chọn/chụp, upload intent, gửi file, finalize, gắn/gỡ, mở bằng URL có hạn, cleanup CLI | Đã chạy với Storage adapter kiểm thử. Còn cổng bucket ký thật, CORS, IAM, hết hạn, upload lỗi và kiểm trên thiết bị thật. |
+| Số dư, gợi ý, lịch sử chuyển tiền | Số dư từ server, chi tiết đã ứng/chịu/chuyển/nhận, tạo từ gợi ý, xác nhận/hủy/đảo | Đúng nền tảng ledger. Cần hoàn tất trả một phần cho cặp hợp lệ ngoài gợi ý và thống nhất cách hiện pending, xác nhận thay, lịch sử. |
+| Lịch trình và hoạt động | Chủ chuyến quản lý hoạt động, thành viên đề xuất, chủ chuyến duyệt, thay đổi có version và lịch sử | Đã chạy với hai tài khoản. Cần chuẩn hóa xung đột, cập nhật đa thiết bị và kiểm mobile cho chuyến nhiều ngày. |
+| Trợ giúp và báo lỗi | Gửi chung hoặc kèm chuyến, mã báo lỗi, trạng thái và phân trang riêng theo người gửi | Khâu người dùng đã chạy. Còn hàng đợi và thao tác xử lý cho quản trị viên. |
+| PWA, ngoại tuyến | Manifest, icons, cache khung app, offline demo | Chưa có nháp giao dịch và snapshot opt-in cho app thật. Cần thử cài, cập nhật và đăng xuất trên thiết bị thật. |
+| Quản trị | Có đặc tả, trường trạng thái kiểm soát, index chuẩn bị và dữ liệu báo lỗi | Chưa có route `/admin`, API `/api/admin/v1`, quyền operator và workflow vận hành. |
+
+Nguồn đối chiếu [Điều hướng app thật](../fe/src/connected-workspace.tsx) · [Phạm vi API](../be/src/create-app.ts) · [Đặc tả từng màn hình](FRONTEND.md#5-đặc-tả-màn-hình) · [Quản trị](ADMIN_WEB.md).
+
+## 3. Điểm lệch cần sửa
+
+### Đã tái hiện trên local/Emulator
+
+| Mã | Mức | Tái hiện và tác động | Đạt khi |
+| --- | --- | --- | --- |
+| K01 | P0 | Hai phiên mở khoản chi. Phiên B lưu tiêu đề mới. Phiên A gặp 409 và bấm **Tải lại**. API trả nội dung mới nhưng form vẫn hiện giá trị ban đầu. Lưu lần nữa ghi đè bản B bằng dữ liệu cũ. [Form và thao tác tải lại](../fe/src/connected-workspace.tsx#L185) · [Giá trị khởi tạo form](../fe/src/expense.tsx#L171) | Form tải bản mới từ response đã hoàn tất, mang đúng version của dữ liệu đang hiển thị. Bản nhập của A còn để đối chiếu. A phải xác nhận các trường muốn áp lại. |
+| K02 | P0 | Cho server commit khoản chi rồi làm mất phản hồi. Tải lại trang và nhập lại cùng khoản. Hai request dùng hai key và sinh hai khoản chi. Retry trong cùng phiên đang mở có cơ chế giữ key, nhưng bảng key nằm trong bộ nhớ. [Client gửi lệnh](../fe/src/api-client.ts#L131) · [Tra operation](../be/src/read-routes.ts#L186) | Sau reload, app tìm được thao tác chưa rõ kết quả, kiểm tra operation hoặc gửi lại cùng key, body và version. Fixture chỉ có một khoản chi và một lần thay đổi ledger. |
+| K03 | P0 | Có settlement pending tới participant đã liên kết. Chủ chuyến gỡ liên kết của tài khoản cũ rồi gắn tài khoản mới vào cùng participant. Tài khoản mới xác nhận được khoản tạo trước khi đổi liên kết. Điều này lệch quy tắc hủy và lập lại pending khi đổi quyền xác nhận. [Liên kết participant](../be/src/services/participant-link.ts) · [Kiểm quyền xác nhận](../be/src/finance-routes.ts#L111) · [Nghiệp vụ thành viên](PRODUCT_PLAN.md#42-những-ràng-buộc-về-thành-viên) | API báo rõ khi có pending liên quan tới liên kết cũ hoặc mới. Owner có lối hủy khoản rồi lập lại. Test cạnh tranh đổi link với tạo/xác nhận settlement giữ đúng quyền. |
+| K04 | P0 | Lọc **Ăn uống**, mở một khoản rồi quay lại. Ô lọc hiện **Tất cả** trong khi API vẫn trả danh mục **Ăn uống**. [Bộ lọc UI](../fe/src/dashboard.tsx#L117) · [Bộ lọc request](../fe/src/connected-workspace.tsx#L135) | Nhãn bộ lọc, query và kết quả luôn khớp khi back, reload hoặc đổi chuyến. |
+| K05 | P0 | Mở URL chi tiết khoản chi ở tab mới đã đăng nhập nhưng chưa chọn chuyến. App yêu cầu chọn chuyến vì URL chỉ có expenseId và tripId được lấy từ phiên của tab. [Chọn chuyến và dựng query](../fe/src/connected-workspace.tsx#L115) | Link xác định đúng chuyến và bản ghi, back giữ đúng ngữ cảnh, quyền truy cập tiếp tục do API xác thực. |
+
+### Phát hiện qua đối chiếu mã và đặc tả
+
+- **K06 · Xác nhận trả nợ và nhãn vai trò.** Backend ghi `owner_on_behalf` cho mọi lần owner xác nhận, trong khi UI có thể hiện **Tôi đã nhận tiền** khi owner là người nhận. Chốt ma trận owner tự nhận, owner xác nhận thay, member nhận và người tạo đề nghị. Dùng cùng ma trận cho nhãn nút, kiểm quyền, lý do và hiển thị audit. [Mã xác nhận](../be/src/finance-routes.ts#L128) · [Nhãn giao diện](../fe/src/dashboard.tsx#L293)
+- **K07 · Trả một phần và gợi ý.** Form đang mở từ cặp gợi ý, dù API nhận mọi cặp đủ điều kiện. UI ẩn cả cặp nếu tìm thấy pending trong trang đang tải, kể cả khi pending chỉ là một phần. Đặc tả cho phép nhiều pending và kiểm dư nợ lúc xác nhận. Cần hiện số dư thật, tổng đang chờ và hành động riêng cho cặp khác hợp lệ. [Lọc gợi ý](../fe/src/connected-workspace.tsx#L175) · [Quy tắc settlement](PRODUCT_PLAN.md#55-trả-nợ-và-chốt-chuyến)
+- **K08 · Lời mời tới người đã tham gia.** API accept có nhánh `already-member`, nhưng preview từ chối link hết lượt trước khi giao diện tới bước accept. Cần đường mở chuyến cho membership active, kể cả trường hợp mở lại link đã dùng hết lượt, và giữ phản hồi tối thiểu đối với người ngoài. [Preview và accept](../be/src/invite-routes.ts#L128)
+- **K09 · Trải nghiệm nhập nhanh.** Ngày, danh mục, ghi chú và ảnh đang trải ngay trên form. Mặc định danh mục hiện là **Ăn uống**. Đặc tả đặt mặc định **Khác**, gộp phần tùy chọn dưới **Thêm thông tin**, dùng ngày theo múi giờ chuyến và hỏi lại nếu ngày chi nằm ngoài khoảng chuyến. [Form](../fe/src/expense.tsx#L209) · [Mặc định danh mục](../fe/src/ui.tsx#L37) · [Tiêu chí nhập nhanh](PRODUCT_PLAN.md#63-nguyên-tắc-dễ-dùng-bắt-buộc)
+- **K10 · Trạng thái dữ liệu và quyền khi nhiều máy cùng mở chuyến.** UI có làm mới thủ công, API kiểm quyền trên request và backend ghi revision/signal. App chưa tự nhận thay đổi từ thiết bị khác. Cần thời điểm cập nhật hiển thị được, kiểm lại khi quay lại app và xóa view/cache của chuyến khi phát hiện mất quyền. [Query và làm mới](../fe/src/api-queries.ts) · [Rules hiện hành](../be/firestore.rules) · [Đặc tả S17](slices/06_VAN_HANH.md#s17)
+- **K11 · Theo dõi tiến độ theo mã.** README và danh mục lát cắt vẫn nói S11–S14 “Chưa làm”, trong khi nhiều màn hình đã gọi API. S11–S14 nên ghi “đã nối API, còn các hạng mục nghiệm thu”. A10–A11 đã có. S15, phần quản trị S16 và S17–S20 còn cổng riêng. [Danh mục lát cắt](slices/README.md) · [A10–A11](slices/05_ADMIN_HO_TRO.md#a10)
+
+## 4. Kế hoạch theo module
+
+### M01 · Điều hướng, trạng thái lệnh và xung đột — P0
+
+- Dùng một nguồn dữ liệu cho tripId, resourceId và bộ lọc theo link/màn hình. Định nghĩa back và đích sau đăng nhập, hỗ trợ URL hash hiện có qua lớp tương thích. Khi đổi chuyến, dọn dữ liệu và trạng thái thao tác của chuyến trước.
+- Ghép form với snapshot/version đã tải. Khi 409, giữ bản nhập, tải bản server riêng và cho người dùng so sánh trước khi áp lại. Ưu tiên khoản chi và cài đặt chuyến, sau đó áp cho thành viên, lịch trình và quyết toán.
+- Lưu định danh thao tác chưa rõ kết quả theo UID và chuyến. Dùng tra operation và retry cùng ý định. Phân biệt **Đang gửi**, **Chưa gửi**, **Chưa xác định kết quả**, **Đã lưu**. Đặt vòng đời xóa và dữ liệu tối thiểu theo chính sách thiết bị của M10.
+- **Nghiệm thu:** K01, K02, K04, K05 thành test tự động. Bấm Lưu liên tục, mất phản hồi, reload, back/forward và đổi chuyến cho kết quả trên server đúng ý định. [Client API](../fe/src/api-client.ts) · [Workspace](../fe/src/connected-workspace.tsx)
+
+### M02 · Tài khoản, chuyến và tổng quan — P0
+
+- Hoàn thiện trạng thái phiên hết hạn, user bị khóa và đăng nhập lại. Chọn đích tiếp tục trong các route nội bộ hợp lệ. Xóa dữ liệu hiển thị của tài khoản cũ khi đăng xuất hoặc đổi UID.
+- Hoàn thiện UI tạo/sửa theo thứ tự tên chuyến và tên người tạo trước, tùy chọn địa điểm/ngày/ghi chú sau. Lấy múi giờ của chuyến cho ngày mặc định trong khoản chi, quyết toán và lịch trình. VND là đơn vị của MVP.
+- Phân biệt **Đang mở**, **Đã chốt**, **Tạm khóa**. Tổng quan dùng tổng chi và số dư từ server, có đường vào rõ cho thành viên chưa liên kết và chuyến chưa có chi tiêu. Xử lý trang danh sách lọc rỗng nhưng còn cursor.
+- **Nghiệm thu:** Người mới tạo chuyến tối thiểu, thêm người, xem số dư cá nhân, mở lại link từ tab mới. Xác minh các trạng thái có dữ liệu, rỗng, đang tải, hết phiên, mất quyền và lỗi mạng. [Màn hình tài khoản và chuyến](../fe/src/screens.tsx) · [Mô hình chuyến](../be/src/database/trip.ts)
+
+### M03 · Thành viên, danh tính và lời mời — P0
+
+- Giữ hai danh sách **Người chia tiền** và **Tài khoản truy cập**. Nêu đúng tác động của ngừng dùng participant, gỡ quyền truy cập, đổi liên kết, khôi phục và chuyển chủ. Giữ phần tiền và lịch sử của người đã tham gia.
+- Sửa K03 trong transaction. API kiểm pending liên quan cùng lúc với version và liên kết. UI đưa tới đúng khoản pending cần giải quyết.
+- Sửa K08 và hoàn thiện link hợp lệ/hết hạn/thu hồi/hết lượt, hai người tranh lượt cuối và yêu cầu tạo link bị mất phản hồi. Raw token hiện một lần, link nằm trong fragment và được bỏ khỏi URL sau luồng tham gia.
+- **Nghiệm thu:** Chủ chuyến thêm người chưa có tài khoản và ghi chi phí ngay. Người mới chỉ được ghi nhận dưới danh tính đã gắn. Người đã bị gỡ bị chặn đọc/ghi dù cầm URL cũ, cùng một tài khoản tham gia lại hợp lệ chỉ có một membership. [API thành viên](../be/src/membership-routes.ts) · [API lời mời](../be/src/invite-routes.ts)
+
+### M04 · Chi tiêu và form nhanh — P0
+
+- Sửa K01/K02/K04 và K09. Mở form mặc định với tên, số tiền, người trả, người chia và chia đều. Đặt cách chia riêng, ngày, danh mục, ghi chú, ảnh ở chỗ dễ mở. Giải thích chênh lệch chia ngay cạnh tổng và cho phép share 0 theo đặc tả.
+- Cho xem chi tiết người trả, phần chia, liệu khoản chi đã hủy và hành động đúng quyền. Khi sửa tiền hoặc hủy sau khi đã quyết toán, nêu tác động đến số dư và gợi ý. Metadata thuần giữ nguyên cách chia cũ, kể cả người đã inactive.
+- Giữ đồng nhất làm tròn theo ID và VND nguyên giữa preview và server. Cho người dùng kiểm ngày ngoài phạm vi, thông tin share và người trả. Xác nhận số tiền khi gửi lại sau offline.
+- **Nghiệm thu:** ≥4/5 người chưa dùng app thêm khoản chia đều trong 60 giây lần đầu, không cần giải thích trực tiếp. So lại 100.000đ chia 3, 1đ chia 3, chia chính xác có phần 0, payer ngoài danh sách chia, sửa/hủy có và không có settlement. [Nghiệp vụ và fixture](ROADMAP_TESTING.md#5-dữ-liệu-mẫu-chuẩn-để-febe-đối-chiếu) · [Backend khoản chi](../be/src/ledger-routes.ts)
+
+### M05 · Số dư, quyết toán, lịch sử và chốt chuyến — P0
+
+- Xử lý K06/K07. Hiển thị tổng đã ứng, phần chịu, đã chuyển, đã nhận và số dư. Phân biệt gợi ý, pending và giao dịch xác nhận. Cho chọn cặp hợp lệ ngoài gợi ý, nhập khoản trả một phần và xem giới hạn theo số dư mới nhất. Chỉ hiển thị **Đã cân bằng** khi snapshot số dư đầy đủ.
+- Thống nhất xác nhận nhận tiền, xác nhận thay, hủy pending và đảo confirmed. Khi ledger đổi, yêu cầu kiểm lại cặp/số tiền. Trong chi tiết và lịch sử, hiện ngày, tác nhân, trạng thái và xác nhận thay khi có.
+- Chốt chỉ khi tất cả net = 0 và hết pending. Hiển thị khoản đang cản chốt và đường xử lý. Sau chốt, giao diện chuyển chỉ xem, hỗ trợ thao tác thu hồi quyền và mở lại đúng vai trò.
+- **Nghiệm thu:** Fixture 1.170.000đ cho net An +480.000đ, Bình −240.000đ, Chi −240.000đ. Pending giữ các net đó, xác nhận 120.000đ từ Chi cho An đưa An về +360.000đ và Chi về −120.000đ. Kiểm xác nhận cạnh tranh, hủy/đảo, audit và chốt đúng điều kiện. [Quy tắc tiền](PRODUCT_PLAN.md#5-quy-tắc-nghiệp-vụ-tiền) · [Backend quyết toán](../be/src/finance-routes.ts)
+
+### M06 · Ảnh hóa đơn — P0
+
+- Hoàn thiện tình trạng chọn ảnh, tải, kiểm ảnh, sẵn sàng, đính kèm và lỗi. Giữ form và cho phép lưu khoản chi khi tải ảnh gặp lỗi. Retry finalize giữ key và version ban đầu. URL xem chỉ nằm trong bộ nhớ khi mở ảnh.
+- Chốt kho lưu trữ phù hợp ngân sách staging đã ghi trong dự án. Kiểm bucket riêng tư, quyền ký, origin CORS và tình huống thiếu quyền. Có hướng dẫn bật môi trường rõ ràng và kiểm ảnh trên camera/trình duyệt thật.
+- **Nghiệm thu:** Kiểm 0–3 ảnh, sai loại, quá dung lượng, ảnh hỏng, mất mạng giữa upload và finalize, đính kèm đúng một khoản, gỡ ảnh, hết hạn URL, người ngoài hoặc bị gỡ quyền, cleanup giữ ảnh đang gắn. Thực hiện smoke với bucket staging đã chọn. [Hợp đồng và cổng bucket](RECEIPTS.md) · [Tích hợp frontend](../fe/src/api-data.ts#L174)
+
+### M07 · Lịch trình và nhật ký chuyến — P0 cho luồng đang có, P1 cho mở rộng
+
+- Áp cách xử lý xung đột của M01 cho lịch trình, giữ ngày đang xem và sửa logic tải lại. Kiểm UI khi chuyến nhiều ngày, trạng thái đã chốt/bị khóa và khi tới giới hạn 100 hoạt động/100 đề xuất của snapshot hiện tại.
+- Giữ workflow đề xuất → lên lịch/từ chối. Xóa hoạt động đã lên từ đề xuất đưa đề xuất về chờ duyệt. Hiện tác nhân, thời gian, thay đổi tiền trước/sau và link trở về đúng chuyến trong nhật ký.
+- **Nghiệm thu:** Hai thiết bị thấy cùng lịch sau cập nhật, quyền chủ chuyến/thành viên đúng, thao tác đồng thời có kết quả rõ, đối soát tiền sau sửa lịch vẫn đạt. Lịch nhắc sự kiện và chức năng mở rộng xếp P1. [API lịch trình](../be/src/itinerary-routes.ts) · [Giao diện lịch trình](../fe/src/trip.tsx)
+
+### M08 · Báo lỗi người dùng — P0
+
+- Giữ mã và trạng thái theo tài khoản đã gửi. Hoàn tất mục xác nhận ngữ cảnh chuyến và khôi phục thao tác khi mất mạng theo M01. Chuẩn hóa phản hồi hết 5 lượt trong ngày theo giờ Việt Nam.
+- Kết nối hiển thị trạng thái với hàng đợi M09. Khi operator đổi trạng thái, người gửi xem được kết quả trong lịch sử của mình. Trả DTO người dùng theo allowlist, nội dung nội bộ chỉ dùng trong khu vực quản trị.
+- **Nghiệm thu:** Ticket kèm chuyến kiểm membership khi gửi, retry trả cùng mã, cursor thuộc đúng UID, tài khoản khác không đọc được chi tiết, trạng thái đi được từ **Mới gửi** đến **Đã xử lý** qua UI quản trị. [API báo lỗi](../be/src/support-routes.ts) · [Giao diện hỗ trợ](../fe/src/api-support.tsx)
+
+### M09 · Website và API quản trị — P0
+
+- Làm guard trước UI. Dùng danh tính và vai trò platform riêng, theo hợp đồng đăng nhập quản trị, allowlist, recent auth và audit đã đặc tả. Giới hạn dữ liệu quản trị theo quyền và mục đích.
+- Thứ tự triển khai: phiên/guard → tra người dùng và chuyến → hàng đợi ticket, ghi chú nội bộ và đổi trạng thái → khóa/mở user hoặc chuyến → audit, dashboard và tình trạng jobs.
+- Với khóa/mở tài khoản, dùng job đồng bộ Auth có version/lease và retry theo trạng thái mới nhất. Màn hình hiển thị **Đang đồng bộ**, **Thành công** hoặc **Lỗi** theo kết quả job. Với khóa chuyến, dùng trạng thái kiểm soát riêng với chốt chuyến.
+- **Nghiệm thu:** Tài khoản thường bị chặn ở API và UI. Operator xử lý ticket từ danh sách tới chi tiết, đổi trạng thái, ghi chú và thấy audit. Kiểm khóa/mở cạnh tranh, thu hồi quyền admin, metadata ít nhất cần thiết và kiểm thử lỗi truy cập ledger/ảnh riêng tư từ admin. [Đặc tả quản trị](ADMIN_WEB.md) · [S15–S16](slices/05_ADMIN_HO_TRO.md)
+
+### M10 · Đồng bộ, bản nháp và PWA — P0
+
+- Làm mới có kiểm soát khi app trở lại foreground và khi phiên hoặc quyền đổi. Chốt cách nhận revision theo S17. Nếu dùng Firebase listener, chỉ cấp đọc signal và own membership theo quyền đã xác minh.
+- Lưu nháp và snapshot theo UID, thiết bị tin cậy opt-in, có thời điểm đồng bộ và hành động xóa. Khi có mạng, tải lại quyền, người chia, phiên bản và cho người dùng xác nhận gửi.
+- Kiểm nâng phiên bản PWA khi đang soạn, cài từ HTTPS, Safari iOS, Chrome Android, màn hình hẹp, bàn phím, focus, đọc màn hình và trạng thái chạm. Service worker dùng danh sách tài nguyên công khai được phép cache.
+- **Nghiệm thu:** Thoát app, mất mạng hoặc update vẫn có bản nháp đủ điều kiện. Dữ liệu tài khoản khác, token, API riêng và URL ký ngắn hạn không đi vào cache dùng chung. Thu hồi quyền kích hoạt dọn dữ liệu của chuyến ở app. [Service worker](../fe/scripts/prepare-pwa.mjs) · [S17](slices/06_VAN_HANH.md#s17)
+
+### M11 · Toàn vẹn dữ liệu, kiểm thử và CI — P0
+
+- Đưa browser tests vào repo và CI, dùng Emulator và fixture độc lập. Giữ bộ unit, API, Rules, migration và kiểm thử cạnh tranh đang có. Bổ sung fixture K01–K05, quyền theo vai trò, một hành trình chi → trả nợ → chốt và một hành trình báo lỗi → xử lý quản trị.
+- Dùng lại checker và migration dry-run để kiểm dữ liệu legacy, tổng tiền, balances và audit. Ghi checkpoint, kết quả đối soát và phương án tương thích khi nâng schema. Kiểm cả thao tác không rõ kết quả sau retry.
+- **Nghiệm thu:** PR có kiểm TypeScript, build, API/Emulator và browser E2E có thể chạy lại từ checkout sạch. Khóa phát hành khi có lỗi tiền, quyền, giao dịch trùng hoặc dữ liệu sau phục hồi lệch. [Workflow hiện tại](../.github/workflows/backend-ci.yml) · [Checker](../be/scripts/check-database.ts) · [Ma trận kiểm thử](ROADMAP_TESTING.md#7-test-matrix-bắt-buộc)
+
+### M12 · Staging, vận hành và phát hành — P0
+
+- Chốt bản build FE/API cùng commit, origin API theo môi trường, indexes, Rules, thông tin phiên bản và smoke Auth/ảnh/admin/API trên staging. Xác định index đã sẵn sàng bằng query thật.
+- Thiết lập lịch cleanup, backup, checker/đối soát, giám sát và đầu mối xử lý. Diễn tập restore cô lập cho dữ liệu Firestore, Auth và ảnh. Đo khả năng phục hồi và đối chiếu ledger, quyền và idempotency sau restore.
+- **Nghiệm thu:** Có bằng chứng smoke với đúng bản staging, một lần diễn tập restore và rollback, log an toàn không chứa token, link ký hoặc nội dung ticket và ghi nhận các điều kiện phát hành. [CI/CD](CICD_DEPLOY.md) · [S18–S20](slices/06_VAN_HANH.md#s18)
+
+## 5. Thứ tự triển khai đề xuất
+
+| Đợt | Công việc | Cổng bàn giao |
+| --- | --- | --- |
+| 1. An toàn tiền và quyền | M01, K03 của M03, các nhánh xác nhận ở M05. Đưa test tái hiện vào M11 ngay trong từng PR. | K01–K03 hết tái hiện trên FE/API/DB. Test khóa dữ liệu cũ, thao tác trùng và đổi quyền xác nhận chuyển xanh. |
+| 2. Hoàn chỉnh app người dùng | M02–M05, M07, M08. Chuẩn bị M06 và chốt thiết kế M10. | Hai tài khoản chạy một chuyến từ tạo đến chốt, nhập chi theo tiêu chí dễ dùng, báo lỗi có mã và đúng quyền đọc. |
+| 3. Quản trị và thiết bị thật | M09, M10, M11. Smoke ký ảnh staging của M06 có thể chuẩn bị song song khi đã có kho lưu trữ được chọn. | Operator xử lý được ticket từ app, PWA đạt kịch bản offline/reconnect, browser E2E có trong CI. |
+| 4. Diễn tập và phát hành | M12 với bản FE/API cùng commit, data synthetic ở staging. | Đạt smoke trên staging, kiểm thiết bị thật, đối soát và restore/rollback. Phạm vi production được chốt sau các kiểm chứng này. |
+
+Ba PR đầu nên xử lý lần lượt K01, K02 và K03, với test tái hiện kèm từng bản sửa. Mỗi PR ghi tình huống sửa, tiêu chí nghiệm thu, kết quả test và phiên bản staging nếu có. Đồng bộ trạng thái thực tế trong README, OpenAPI và các lát cắt khi đóng hạng mục. Chia theo phần trăm/trọng số, CSV, OCR, đa tiền tệ và native/push đã có trong phạm vi P1/P2. Thanh toán thật cần quyết định phạm vi riêng. [Phân kỳ sản phẩm](PRODUCT_PLAN.md#3-phân-kỳ-tính-năng)
+
+## 6. Bằng chứng kiểm tra của lần khảo sát
+
+- Kiểm TypeScript và build frontend/backend đều đạt. Chạy lại được 29 bài unit/HTTP và 45 bài Firebase Emulator. Test Swagger xác nhận 46 thao tác đăng ký theo OpenAPI.
+- Hai hành trình trình duyệt với dữ liệu thử trên Emulator đã qua: chuyến/chi tiêu/quyết toán và lịch trình/báo lỗi. Dùng hai tài khoản riêng để kiểm lời mời, quyền và việc từ chối mở ticket của người khác.
+- Dùng dữ liệu kiểm thử local để tái hiện K01–K05. Các script trình duyệt chỉ phục vụ khảo sát, CI hiện tại chưa có bộ test browser trong repo.
+- Bằng chứng ảnh hóa đơn hiện dựa trên adapter kiểm thử và Storage Rules Emulator. Cổng IAM/CORS/ký URL trên bucket thật, thiết bị vật lý và staging theo commit cần kiểm trong M06/M12. [Workflow hiện có](../.github/workflows/backend-ci.yml) · [Phạm vi kiểm thử hóa đơn](RECEIPTS.md#kiểm-chứng-và-cổng-cloud)

@@ -4,6 +4,7 @@
   "installCommand": "npx --yes pnpm@11.25.0 install --frozen-lockfile --prod=false",
   "buildCommand": "npx --yes pnpm@11.25.0 build",
   "outputDirectory": "out",
+  "cleanUrls": true,
   "headers": [
     {
       "source": "/sw.js",

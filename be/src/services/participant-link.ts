@@ -17,7 +17,7 @@ export async function planParticipantLink(input: {
   targetUid: string; participantId: string | null; now: Timestamp;
 }): Promise<ParticipantLinkPlan> {
   const { tx, tripRef, member, targetUid, participantId, now } = input;
-  const oldId = member.get('participantId') as string | null;
+  const oldId = (member.get('participantId') as string | null | undefined) ?? null;
   const linkRef = tripRef.collection('participantLinks').doc(targetUid);
   const previousRef = oldId ? tripRef.collection('participants').doc(oldId) : null;
   const targetRef = participantId ? tripRef.collection('participants').doc(participantId) : null;
@@ -32,6 +32,16 @@ export async function planParticipantLink(input: {
   }
   if (participantId && (!target?.exists || target.get('linkedUid') !== null)) {
     throw new ApiError(409, 'PARTICIPANT_ALREADY_LINKED', 'Người này đã được liên kết hoặc không tồn tại.');
+  }
+  const ids = [oldId, participantId].filter((id): id is string => id !== null);
+  const pending = tripRef.collection('settlements').where('status', '==', 'pending');
+  const [sent, received] = await Promise.all([
+    tx.get(pending.where('fromParticipantId', 'in', ids).limit(1)),
+    tx.get(pending.where('toParticipantId', 'in', ids).limit(1)),
+  ]);
+  if (!sent.empty || !received.empty) {
+    throw new ApiError(409, 'PENDING_SETTLEMENTS_FOR_PARTICIPANT',
+      'Người chia tiền có khoản chuyển đang chờ. Hãy xử lý các khoản đó trước khi đổi liên kết.');
   }
   const version = member.get('version');
   if (!Number.isSafeInteger(version) || version < 1) {

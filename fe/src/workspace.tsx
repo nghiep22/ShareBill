@@ -1,105 +1,130 @@
 'use client';
 
-import { CalendarDays, LayoutGrid, ReceiptText, Scale, Settings2, Users, WalletCards } from 'lucide-react';
-import { useEffect, useRef, useState, useSyncExternalStore } from 'react';
-import { Balances, Expenses, Members, Overview } from './dashboard';
+import { useEffect, useRef, useState } from 'react';
+import { Balances, Expenses, Overview, Settlements } from './dashboard';
 import { ExpenseDetail, ExpenseForm } from './expense';
-import { initialDemo, me, memberFor, type Demo } from './model';
-import { Invite, Itinerary, Settings } from './trip';
-import { Avatar, PageTitle } from './ui';
+import { initialWorkspace, loadWorkspace, resetWorkspace, saveWorkspace, WorkspaceChanged, type LocalWorkspace } from './local-workspace';
+import { Members } from './members';
+import { newId, record, type Demo } from './model';
+import { Account, ActivityScreen, CreateTrip, Offline, SignIn, Support, Trips } from './screens';
+import { Invite, Itinerary, Join, Settings } from './trip';
+import { PageTitle } from './ui';
+import type { UpdateTrip } from './trip-command';
 
-const tabs = [
-  { id: 'tong-quan', label: 'Tổng quan', Icon: LayoutGrid },
-  { id: 'chi-tieu', label: 'Chi tiêu', Icon: ReceiptText },
-  { id: 'so-du', label: 'Số dư', Icon: Scale },
-  { id: 'thanh-vien', label: 'Thành viên', Icon: Users },
-];
-const extra = [
-  { id: 'lich-trinh', label: 'Lịch trình', Icon: CalendarDays },
-  { id: 'cai-dat', label: 'Cài đặt', Icon: Settings2 },
-];
-const storageKey = 'sharebill-demo-v1';
-
-function subscribe(listener: () => void) {
-  window.addEventListener('hashchange', listener);
-  return () => window.removeEventListener('hashchange', listener);
-}
-
-function Brand() {
-  return <a className="brand" href="#tong-quan" aria-label="ShareBill, về tổng quan">
-    <span className="brand-icon"><WalletCards size={23} strokeWidth={2.1} aria-hidden /></span><strong>Share<span>Bill</span></strong>
-  </a>;
-}
-
-function Navigation({ desktop, active }: { desktop?: boolean; active: string }) {
-  return <nav className={desktop ? 'side-nav' : 'bottom-nav'} aria-label={desktop ? 'Điều hướng chuyến đi' : 'Điều hướng chính'}>
-    {(desktop ? [...tabs, ...extra] : tabs).map(({ id, label, Icon }) =>
-      <a key={id} href={`#${id}`} aria-current={active === id ? 'page' : undefined}>
-        <span className="nav-icon"><Icon size={21} strokeWidth={active === id ? 2.3 : 1.8} aria-hidden /></span><span>{label}</span>
-      </a>)}
-  </nav>;
-}
+import { useHash, WorkspaceShell } from './workspace-shell';
 
 export function Workspace() {
-  const hash = useSyncExternalStore(subscribe, () => window.location.hash.slice(1), () => '');
-  const [route = '', id] = hash.split('/');
+  const hash = useHash();
+  const [route = 'tong-quan', id] = (hash || 'tong-quan').split('/');
   const selectedExpense = route === 'khoan-chi' || route === 'sua-khoan-chi';
   const form = route === 'them-khoan-chi' || route === 'sua-khoan-chi';
-  const active = selectedExpense || form ? 'chi-tieu' : route || 'tong-quan';
-  const [data, setData] = useState<Demo>(initialDemo);
+  const [state, setState] = useState<LocalWorkspace>(initialWorkspace);
   const [loaded, setLoaded] = useState(false);
-  const [storageError, setStorageError] = useState(false);
-  const main = useRef<HTMLElement>(null);
-  const lastHash = useRef(hash);
+  const [storageError, setStorageError] = useState<'failed' | 'changed'>();
+  const writes = useRef(Promise.resolve());
+  const persistedVersion = useRef<string | undefined>(undefined);
 
-  useEffect(() => {
+  async function refreshWorkspace() {
+    await writes.current;
     try {
-      const saved = localStorage.getItem(storageKey);
-      if (saved) {
-        const parsed = JSON.parse(saved) as Demo;
-        if (parsed.trip && Array.isArray(parsed.members) && Array.isArray(parsed.expenses) &&
-            Array.isArray(parsed.plans) && Array.isArray(parsed.settlements)) setData(parsed);
-      }
+      const saved = await loadWorkspace();
+      persistedVersion.current = saved.revision;
+      setState(saved);
+      setStorageError(undefined);
     } catch {
-      setStorageError(true);
-    } finally {
-      setLoaded(true);
-    }
-    if (process.env.NODE_ENV === 'production' && 'serviceWorker' in navigator) {
-      void navigator.serviceWorker.register('/sw.js').catch(() => {});
-    }
-  }, []);
-
-  useEffect(() => {
-    if (lastHash.current === hash) return;
-    lastHash.current = hash;
-    window.scrollTo(0, 0);
-    main.current?.focus({ preventScroll: true });
-  }, [hash]);
-
-  function update(next: Demo) {
-    setData(next);
-    try {
-      localStorage.setItem(storageKey, JSON.stringify(next));
-      setStorageError(false);
-    } catch {
-      setStorageError(true);
+      setStorageError('failed');
     }
   }
 
+  useEffect(() => {
+    let mounted = true;
+    loadWorkspace().then(saved => {
+      if (mounted) {
+        persistedVersion.current = saved.revision;
+        setState(saved);
+      }
+    })
+      .catch(() => { if (mounted) setStorageError('failed'); })
+      .finally(() => { if (mounted) setLoaded(true); });
+    return () => { mounted = false; };
+  }, []);
+
+  function commit(next: LocalWorkspace) {
+    setState(next);
+    const snapshot = { ...next, revision: newId() };
+    writes.current = writes.current.then(async () => {
+      try {
+        await saveWorkspace(snapshot, persistedVersion.current);
+        persistedVersion.current = snapshot.revision;
+        setStorageError(undefined);
+      } catch (error) {
+        setStorageError(error instanceof WorkspaceChanged ? 'changed' : 'failed');
+      }
+    });
+  }
+
+  const data = state.trips[state.selected] ?? initialWorkspace.trips[initialWorkspace.selected];
+  const update: UpdateTrip = (next, _command, onSaved) => {
+    commit({ ...state, trips: { ...state.trips, [state.selected]: next } });
+    onSaved?.();
+  };
   const expense = data.expenses.find(item => item.id === id);
   let content: React.ReactNode;
-  if (!loaded && active !== 'tong-quan') {
-    content = <p role="status" className="empty">Đang mở chuyến đi…</p>;
+
+  if (!loaded) {
+    content = <p role="status" className="empty">Đang mở ShareBill…</p>;
   } else {
     switch (route) {
+      case 'chuyen-di':
+        content = <Trips state={state} onOpen={key => { commit({ ...state, selected: key }); window.location.hash = 'tong-quan'; }} />;
+        break;
+      case 'tao-chuyen':
+        content = <CreateTrip profile={state.profile} onCreate={(trip, name) => {
+          const key = newId();
+          const ownerId = newId();
+          const next = record({ trip, ownerId, viewerId: ownerId, members: [{ id: ownerId, name, tone: 0, linked: true }], expenses: [], settlements: [], plans: [] }, 'Tạo chuyến đi', trip.name);
+          commit({ ...state, selected: key, trips: { ...state.trips, [key]: next } });
+          window.location.hash = 'tong-quan';
+        }} />;
+        break;
+      case 'dang-nhap':
+      case 'dang-ky':
+        content = <SignIn key={route} registering={route === 'dang-ky'} onSubmit={profile => {
+          commit({ ...state, profile });
+          window.location.hash = 'chuyen-di';
+        }} />;
+        break;
+      case 'tai-khoan':
+        content = <Account profile={state.profile} onSignOut={() => commit({ ...state, profile: undefined })}
+          onReset={async () => {
+            await writes.current;
+            const snapshot = { ...initialWorkspace, revision: newId() };
+            await resetWorkspace(snapshot, persistedVersion.current);
+            persistedVersion.current = snapshot.revision;
+            setState(snapshot);
+            setStorageError(undefined);
+            window.location.hash = 'tong-quan';
+          }} />;
+        break;
+      case 'tro-giup':
+        content = <Support reports={state.reports ?? []} onReport={report => commit({ ...state, reports: [report, ...(state.reports ?? [])] })} />;
+        break;
+      case 'ngoai-tuyen': content = <Offline />; break;
       case 'chi-tieu': content = <Expenses data={data} />; break;
       case 'so-du': content = <Balances data={data} update={update} />; break;
+      case 'quyet-toan': content = <Settlements data={data} update={update} />; break;
       case 'thanh-vien': content = <Members data={data} update={update} />; break;
       case 'lich-trinh': content = <Itinerary data={data} update={update} />; break;
+      case 'hoat-dong': content = <ActivityScreen data={data} />; break;
       case 'cai-dat': content = <Settings data={data} update={update} />; break;
-      case 'loi-moi':
-      case 'tham-gia': content = <Invite key={route} data={data} preview={route === 'tham-gia'} />; break;
+      case 'loi-moi': content = <Invite data={data} update={update} />; break;
+      case 'tham-gia':
+        content = <Join key={hash} state={state} token={id} onJoin={(key, next) => {
+          commit({ ...state, selected: key, trips: { ...state.trips, [key]: next } });
+          window.history.replaceState(null, '', '#tong-quan');
+          window.dispatchEvent(new Event('hashchange'));
+        }} />;
+        break;
       case 'them-khoan-chi':
       case 'sua-khoan-chi':
       case 'khoan-chi':
@@ -107,32 +132,16 @@ export function Workspace() {
         else if (form) content = <ExpenseForm key={hash} data={data} expense={expense} update={update} />;
         else if (expense) content = <ExpenseDetail key={expense.id} data={data} expense={expense} update={update} />;
         break;
-      default: content = <Overview data={data} />;
+      case 'tong-quan': content = <Overview data={data} />; break;
+      default: content = <PageTitle title="Không tìm thấy màn hình" back="#tong-quan" />;
     }
   }
 
-  return <div className={`workspace ${form ? 'workspace-form' : ''}`}>
-    <aside className="sidebar">
-      <Brand />
-      <p className="sidebar-trip">{data.trip.name}</p>
-      <Navigation desktop active={active} />
-      <div className="sidebar-footer"><Avatar member={memberFor(data, me)} /><div><strong>{memberFor(data, me)?.name}</strong><span>Bản xem thử</span></div></div>
-    </aside>
-    <div className="app">
-      <header className="app-header">
-        <div className="mobile-brand"><Brand /></div>
-        <div className="app-breadcrumb"><span>Chuyến đi</span><span aria-hidden>/</span><strong>{data.trip.name}</strong></div>
-        <div className="header-actions">
-          <a className="tag demo-tag" href="/">Dữ liệu thật</a>
-          <a className="icon-button" href="#lich-trinh" aria-label="Lịch trình" aria-current={route === 'lich-trinh' ? 'page' : undefined}><CalendarDays size={21} aria-hidden /></a>
-          <a className="icon-button" href="#cai-dat" aria-label="Cài đặt chuyến đi" aria-current={route === 'cai-dat' ? 'page' : undefined}><Settings2 size={22} aria-hidden /></a>
-        </div>
-      </header>
-      <main className={`main ${active === 'tong-quan' ? 'main-overview' : ''}`} tabIndex={-1} ref={main}>
-        {storageError && <p className="inline-note error" role="status">Trình duyệt chưa lưu được dữ liệu xem thử trên thiết bị.</p>}
-        {content}
-      </main>
-    </div>
-    {!form && <Navigation active={active} />}
-  </div>;
+  return <WorkspaceShell hash={hash} route={route} data={data} profileName={state.profile?.name} preview>
+    {storageError && <div className="inline-note error workspace-notice" role="status">
+      {storageError === 'changed' ? <>Dữ liệu đã thay đổi ở tab khác. <button className="text-button" onClick={() => void refreshWorkspace()}>Mở bản mới nhất</button></>
+        : <>Trình duyệt chưa lưu được dữ liệu trên thiết bị. <button className="text-button" onClick={() => commit(state)}>Thử lưu lại</button></>}
+    </div>}
+    {content}
+  </WorkspaceShell>;
 }
