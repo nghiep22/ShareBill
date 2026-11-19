@@ -78,8 +78,35 @@ test('authentication has no demo entry point and PWA retires cached preview page
   await heading(page, 'Đăng nhập');
   assert.equal(await page.locator('a[href*="/demo"]').count(), 0);
   assert.equal(await page.getByText(/xem thử|bản mẫu|hồ sơ mẫu/i).count(), 0);
+  let authSubmissions = 0;
+  page.on('request', request => {
+    if (request.method() === 'POST' && /\/auth\/(login|register)$/.test(new URL(request.url()).pathname)) authSubmissions++;
+  });
+  await page.getByLabel('Email', { exact: true }).fill('visibility-fixture@example.test');
+  const password = page.getByLabel('Mật khẩu', { exact: true });
+  await password.fill('Visibility-Fixture-123!');
+  assert.equal(await password.getAttribute('type'), 'password');
+  await page.getByRole('button', { name: 'Hiện mật khẩu', exact: true }).click();
+  assert.equal(await password.getAttribute('type'), 'text');
+  assert.equal(await password.inputValue(), 'Visibility-Fixture-123!');
+  const hide = page.getByRole('button', { name: 'Ẩn mật khẩu', exact: true });
+  assert.equal(await hide.getAttribute('aria-pressed'), 'true');
+  await hide.press('Enter');
+  assert.equal(await password.getAttribute('type'), 'password');
+  assert.equal(authSubmissions, 0);
+  await heading(page, 'Đăng nhập');
   await page.getByRole('link', { name: 'Chưa có tài khoản? Đăng ký', exact: true }).click();
   await heading(page, 'Tạo tài khoản');
+  assert.equal(await password.getAttribute('type'), 'password');
+  assert.equal(await password.inputValue(), '');
+  await page.getByLabel('Tên hiển thị').fill('Visibility Fixture');
+  await page.getByLabel('Email', { exact: true }).fill('visibility-fixture@example.test');
+  await password.fill('Registration-Fixture-123!');
+  await page.getByRole('button', { name: 'Hiện mật khẩu', exact: true }).click();
+  assert.equal(await password.getAttribute('type'), 'text');
+  await page.getByRole('button', { name: 'Ẩn mật khẩu', exact: true }).click();
+  assert.equal(await password.inputValue(), 'Registration-Fixture-123!');
+  assert.equal(authSubmissions, 0);
   assert.equal(await page.getByRole('link', { name: 'Đăng nhập', exact: true }).count(), 1);
   assert.equal(await page.getByText(/xem thử|bản mẫu|hồ sơ mẫu/i).count(), 0);
   if (process.env.SHAREBILL_PWA_TEST === '1') {

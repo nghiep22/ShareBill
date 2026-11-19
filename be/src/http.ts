@@ -1,6 +1,7 @@
 import type { FastifyReply, FastifyRequest } from 'fastify';
 import { auth, db } from './firebase.js';
 import type { OperationOutcome } from './database/operation.js';
+import { failureCode } from './logging.js';
 
 export class ApiError extends Error {
   constructor(public status: number, public code: string, message: string) { super(message); }
@@ -47,6 +48,7 @@ export function sendOperationResult(reply: FastifyReply, { outcome, replayed }: 
 
 export function sendError(error: unknown, _request: FastifyRequest, reply: FastifyReply): void {
   if (error instanceof ApiError) {
+    if (error.status >= 500) reply.log.error({ event: 'http.request.failed', errorCode: failureCode(error) }, 'request failed');
     reply.status(error.status).send({ error: { code: error.code, message: error.message } });
     return;
   }
@@ -61,6 +63,6 @@ export function sendError(error: unknown, _request: FastifyRequest, reply: Fasti
     reply.status(statusCode).send({ error: { code: 'INVALID_REQUEST', message: 'Yêu cầu không hợp lệ.' } });
     return;
   }
-  reply.log.error(error);
+  reply.log.error({ event: 'http.request.failed', errorCode: failureCode(error) }, 'request failed');
   reply.status(500).send({ error: { code: 'INTERNAL_ERROR', message: 'Đã có lỗi. Vui lòng thử lại.' } });
 }

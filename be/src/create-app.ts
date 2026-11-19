@@ -1,4 +1,3 @@
-import Fastify from 'fastify';
 import cors from '@fastify/cors';
 import swagger from '@fastify/swagger';
 import swaggerUi from '@fastify/swagger-ui';
@@ -19,8 +18,9 @@ import { registerItineraryRoutes } from './itinerary-routes.js';
 import { registerSupportRoutes } from './support-routes.js';
 import { registerAdminRoutes } from './admin-routes.js';
 import { releaseIdentity } from './release.js';
+import { createServer } from './logging.js';
 
-export async function buildApp(app = Fastify({ logger: true }), options: { receipts?: ReceiptService } = {}) {
+export async function buildApp(app = createServer(), options: { receipts?: ReceiptService } = {}) {
   const release = releaseIdentity();
   const origins = (process.env.APP_ORIGIN ?? 'http://localhost:3000').split(',').map(value => value.trim()).filter(Boolean);
   const specPath = fileURLToPath(new URL('../openapi.json', import.meta.url));
@@ -34,6 +34,11 @@ export async function buildApp(app = Fastify({ logger: true }), options: { recei
     reply.header('X-Request-Id', request.id);
     if (request.url.startsWith('/api/v1/') || request.url.startsWith('/api/admin/v1/')) reply.header('Cache-Control', 'private, no-store');
     return payload;
+  });
+  app.addHook('onResponse', async (request, reply) => {
+    request.log.info({ event: 'http.request.completed', method: request.method,
+      routeTemplate: request.routeOptions.url ?? 'unmatched', statusCode: reply.statusCode,
+      durationMs: reply.elapsedTime, environment: release.environment, releaseSha: release.commit }, 'request completed');
   });
   await app.register(swagger, { mode: 'static', specification: { path: specPath, baseDir: dirname(specPath) } });
   await app.register(swaggerUi, {

@@ -1,7 +1,7 @@
 'use client';
 
-import { ArrowRight, CalendarDays, ChevronRight, History, Luggage, MapPin, Plus, WalletCards } from 'lucide-react';
-import { useState, type FormEvent } from 'react';
+import { ArrowRight, CalendarDays, ChevronRight, Eye, EyeOff, History, Luggage, MapPin, Plus, WalletCards } from 'lucide-react';
+import { useId, useState, type FormEvent } from 'react';
 import type { LocalWorkspace, Profile } from './local-workspace';
 import { activeExpenses, dateRange, defaultTimezone, nameOf, type Demo, type Trip } from './model';
 import { Amount, Empty, PageTitle } from './ui';
@@ -101,6 +101,8 @@ export function CreateTrip({ profile, onCreate, remote }: { profile?: Profile; o
 
 export function SignIn({ registering, onSubmit }: { registering: boolean; onSubmit: (profile: Profile, password: string) => void }) {
   const [error, setError] = useState('');
+  const [passwordVisible, setPasswordVisible] = useState(false);
+  const passwordId = useId();
   function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const fields = new FormData(event.currentTarget);
@@ -117,7 +119,15 @@ export function SignIn({ registering, onSubmit }: { registering: boolean; onSubm
       <form className="form-stack field-card auth-fields" onSubmit={submit}>
         {registering && <label>Tên hiển thị<input name="name" autoComplete="name" maxLength={80} required /></label>}
         <label>Email<input name="email" type="email" autoComplete="email" placeholder="ban@example.com" maxLength={254} required /></label>
-        <label>Mật khẩu<input name="password" type="password" minLength={registering ? 8 : 1} autoComplete={registering ? 'new-password' : 'current-password'} required /></label>
+        <div className="password-field">
+          <label htmlFor={passwordId}>Mật khẩu</label>
+          <div className="password-control">
+            <input id={passwordId} name="password" type={passwordVisible ? 'text' : 'password'} minLength={registering ? 8 : 1} autoComplete={registering ? 'new-password' : 'current-password'} required />
+            <button className="password-toggle" type="button" aria-label={passwordVisible ? 'Ẩn mật khẩu' : 'Hiện mật khẩu'} aria-pressed={passwordVisible} aria-controls={passwordId} onClick={() => setPasswordVisible(visible => !visible)}>
+              {passwordVisible ? <EyeOff size={20} aria-hidden /> : <Eye size={20} aria-hidden />}
+            </button>
+          </div>
+        </div>
         {error && <p className="error" role="alert">{error}</p>}
         <button className="primary-button">{registering ? 'Tạo tài khoản' : 'Đăng nhập'} <ArrowRight size={17} aria-hidden /></button>
       </form>

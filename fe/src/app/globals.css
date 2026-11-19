@@ -349,6 +349,11 @@ input[type="radio"], input[type="checkbox"] { min-height: 0; width: 16px; height
 .auth-page > .field-card { padding: 22px; }
 .auth-page h1 { font-size: 30px; letter-spacing: -.045em; }
 .auth-fields { padding: 0; }
+.password-field { display: grid; gap: 5px; min-width: 0; font-size: 13px; font-weight: 670; }
+.password-control { position: relative; }
+.password-control input { padding-inline-end: 52px; }
+.password-toggle { position: absolute; inset-block-start: 1px; inset-inline-end: 1px; display: grid; place-items: center; width: 44px; min-height: 44px; padding: 0; border: 0; border-radius: 8px; background: transparent; color: var(--muted); cursor: pointer; }
+.password-toggle:hover { color: var(--teal); background: #eef7f5; }
 .timeline-event { grid-template-columns: 43px 14px minmax(0, 1fr); }
 .timeline-card { display: flex; align-items: flex-start; justify-content: space-between; gap: 7px; }
 .timeline-card > div:first-child { min-width: 0; overflow-wrap: anywhere; }

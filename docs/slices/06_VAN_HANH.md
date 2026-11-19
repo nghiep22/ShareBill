@@ -130,10 +130,12 @@ Triển khai hiện tại dùng REST signal kiểm quyền mỗi 30 giây khi ta
 
 **Workers, backup, restore và sửa sai lệch**
 
-- **Trạng thái** Chưa làm
+- **Trạng thái** Đang làm: log HTTP có allowlist và mã request. Còn lịch workers, backup/restore, repair và cảnh báo
 - **Phụ thuộc** [S18](#s18)
 - **Kết quả** Lập lịch worker và reconcile, cấu hình backup, triển khai repair projection có kiểm soát, diễn tập restore và thiết lập cảnh báo.
 - **Nghiệm thu** Kiểm retry/lease, backup có scope, restore đo RPO/RTO và repair chỉ áp khi version còn khớp. Checker sau repair đạt và cảnh báo đến người phụ trách.
+
+[Log HTTP và cách tra lỗi](../OPERATIONS_LOGGING.md) đã có trong runtime; không ghi query/body/exception tự do. Các kiểm thử riêng kiểm dữ liệu riêng tư và mã request.
 
 <details>
 <summary>Các bước và tiêu chí chi tiết</summary>

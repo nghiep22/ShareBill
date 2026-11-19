@@ -24,7 +24,7 @@ Cập nhật 19/11/2026. **S01–S10 có kiểm chứng local/Emulator. S11–S1
 | [S16](05_ADMIN_HO_TRO.md#s16) | Hỗ trợ, audit và tổng quan quản trị | Đã triển khai local, còn nghiệm thu | [S15](05_ADMIN_HO_TRO.md#s15) |
 | [S17](06_VAN_HANH.md#s17) | CI browser, realtime và offline | Đã triển khai local, còn nghiệm thu | [S12](04_FRONTEND_APP.md#s12), [S13](04_FRONTEND_APP.md#s13) |
 | [S18](06_VAN_HANH.md#s18) | Cloud staging và smoke test | FE/API/Auth/tiền/index đạt cloud, còn Google/ảnh/thiết bị thật | [S16](05_ADMIN_HO_TRO.md#s16), [S17](06_VAN_HANH.md#s17) |
-| [S19](06_VAN_HANH.md#s19) | Workers, backup, restore và sửa sai lệch | Chưa làm | [S18](06_VAN_HANH.md#s18) |
+| [S19](06_VAN_HANH.md#s19) | Workers, backup, restore và sửa sai lệch | Đã có log HTTP và request ID; còn workers/backup/restore/repair/cảnh báo | [S18](06_VAN_HANH.md#s18) |
 | [S20](06_VAN_HANH.md#s20) | Nghiệm thu và phát hành production | Chưa làm | [S14](04_FRONTEND_APP.md#s14), [S19](06_VAN_HANH.md#s19) |
 
 ## Cách thực hiện và cập nhật tiến độ
