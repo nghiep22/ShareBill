@@ -23,6 +23,8 @@ Tài liệu thiết kế và triển khai, cập nhật ngày **16/11/2026**. Ng
 
 Giao diện quản trị nằm ở `/admin`. Cấp quyền Google operator và chạy worker theo [hướng dẫn backend](be/README.md#quản-trị). Công việc tiếp tục tập trung nghiệm thu thiết bị thật, bucket ảnh staging và phát hành trong [kế hoạch hoàn thiện](docs/KE_HOACH_HOAN_THIEN.md).
 
+S18 đã có [công cụ kiểm cấu hình và smoke bản triển khai](docs/STAGING_SMOKE.md), diễn tập trên local. Lệnh `pnpm smoke --help` xem cách kiểm FE/API cùng SHA, CORS, Auth và luồng tiền synthetic. Staging cloud của đợt mã mới còn cần deploy và nghiệm thu.
+
 ## Hướng triển khai đề xuất
 
 - **Frontend:** thư mục `fe/` dành cho Next.js/React + TypeScript, responsive mobile-first, PWA và website quản trị React.

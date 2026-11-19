@@ -1,8 +1,10 @@
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { createRequire } from 'node:module';
+import { writeFile } from 'node:fs/promises';
 import { after, before, test } from 'node:test';
 import { chromium, request } from 'playwright';
+import { runSmoke, smokeConfig } from '../../scripts/smoke.mjs';
 
 const web = 'http://localhost:3000';
 const api = 'http://localhost:3001/api/v1/';
@@ -60,6 +62,20 @@ async function fixture(t) {
 function heading(page, name) {
   return page.getByRole('heading', { name, exact: true }).first().waitFor({ timeout: 10000 });
 }
+
+test('S18 smoke validates the built web/API release and archives its isolated ledger fixture', { skip: process.env.SHAREBILL_PWA_TEST !== '1' }, async () => {
+  assert.match(process.env.RELEASE_COMMIT ?? '', /^[a-f0-9]{40}$/i, 'Set RELEASE_COMMIT for the FE build, API runtime and browser suite');
+  const email = randomUUID() + '@example.test';
+  const password = 'SmokeFixture-' + randomUUID();
+  await call('auth/register', null, { method: 'POST', body: { email, password, displayName: 'Release smoke fixture' } });
+  const config = smokeConfig(['--api-url', 'http://localhost:3001', '--web-url', web, '--environment', 'local',
+    '--project', 'demo-sharebill', '--commit', process.env.RELEASE_COMMIT, '--exercise']);
+  const report = await runSmoke(config, { env: { SMOKE_EMAIL: email, SMOKE_PASSWORD: password } });
+  if (process.env.SHAREBILL_SMOKE_REPORT) {
+    await writeFile(process.env.SHAREBILL_SMOKE_REPORT, JSON.stringify(report, null, 2) + '\n', { mode: 0o600 });
+  }
+  assert.equal(report.passed, true, JSON.stringify(report));
+});
 
 test('K01 keeps edits across refresh and applies only the explicitly retained changes', async t => {
   const { page, session, expenses, screen, create } = await fixture(t);

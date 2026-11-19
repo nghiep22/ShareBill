@@ -14,6 +14,7 @@ import { createExpenseDocument } from './database/expense.js';
 import { createAuditEvent } from './database/audit.js';
 import { createOperationDocument, readOperationResult, readOperationSnapshot } from './database/operation.js';
 import { readTripActor } from './services/trip-access.js';
+import type { releaseIdentity } from './release.js';
 
 function parse<T>(schema: { safeParse: (value: unknown) => { success: true; data: T } | { success: false } }, body: unknown): T {
   const result = schema.safeParse(body);
@@ -26,8 +27,11 @@ function params(value: unknown): { tripId: string } {
   if (!result.success) throw new ApiError(404, 'NOT_FOUND', 'Không tìm thấy chuyến đi.');
   return result.data;
 }
-export async function registerRoutes(app: FastifyInstance): Promise<void> {
-  app.get('/health', async () => ({ status: 'ok', service: 'sharebill-be' }));
+export async function registerRoutes(app: FastifyInstance, release: ReturnType<typeof releaseIdentity>): Promise<void> {
+  app.get('/health', async (_request, reply) => {
+    reply.header('Cache-Control', 'no-store');
+    return { status: 'ok', service: 'sharebill-be', release };
+  });
 
   app.post('/api/v1/trips', async (request, reply) => {
     const uid = await requireUser(request);

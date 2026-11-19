@@ -4,6 +4,8 @@ Ngày khảo sát 18/11/2026 · Phạm vi mã trong workspace, giao diện và A
 
 ## Tiến độ triển khai ngày 18/11/2026
 
+Cập nhật 19/11: bắt đầu S18 với release identity FE/API, kiểm cấu hình cloud từ lúc khởi tạo/build và CLI smoke mặc định chỉ đọc. Luồng exercise đã diễn tập trên static FE + API + Emulator, gồm replay, cursor, quyết toán và chốt chuyến riêng. Đã đồng bộ lockfile Firebase frontend để frozen install đạt. Có 7 hành trình browser đạt local; chưa chạy Actions hoặc deploy đợt mã này. Xem [runbook S18 và các cổng còn mở](STAGING_SMOKE.md).
+
 Đã sửa K01–K09 trong mã nguồn. K01, K02, K04 và K05 có kiểm thử Chromium trong repo. K03 có kiểm thử transaction và cạnh tranh với tạo settlement. K06 được kiểm với owner nhận tiền do member tạo. K08 kiểm membership active mở lời mời hết lượt và tiếp tục chặn người ngoài.
 
 | Module | Kết quả đã triển khai | Phần còn cần nghiệm thu |

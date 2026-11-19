@@ -2,6 +2,8 @@
 
 Tài liệu thiết lập staging và kế hoạch đưa ShareBill vào vận hành.
 
+Ngày 19/11/2026 đã bổ sung [release identity, kiểm cấu hình cloud và CLI smoke S18](STAGING_SMOKE.md), có diễn tập local. Các domain staging bên dưới mô tả môi trường đã có; chưa có bằng chứng chúng đang chạy đợt mã mới. Build/deploy đúng SHA rồi chạy smoke trước khi ghi nhận cổng cloud đạt.
+
 Repo tách Web/PWA Next.js ở `fe/` và API Fastify ở `be/`. Hai thư mục có cấu hình Vercel riêng. GitHub Actions kiểm tra các gói trong cùng monorepo.
 
 ## Môi trường staging hiện tại

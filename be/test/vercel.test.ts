@@ -23,7 +23,7 @@ describe('Vercel HTTP entrypoint', () => {
   it('serves health and OpenAPI using the original request paths', async () => {
     const health = await fetch(`${origin}/health`);
     expect(health.status).toBe(200);
-    expect(await health.json()).toEqual({ status: 'ok', service: 'sharebill-be' });
+    expect(await health.json()).toMatchObject({ status: 'ok', service: 'sharebill-be', release: { environment: 'local' } });
     const document = await fetch(`${origin}/docs/json`);
     expect(document.status).toBe(200);
     expect(await document.json()).toMatchObject({ openapi: '3.0.3' });

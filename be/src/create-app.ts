@@ -18,8 +18,10 @@ import { registerAuthRoutes } from './auth-routes.js';
 import { registerItineraryRoutes } from './itinerary-routes.js';
 import { registerSupportRoutes } from './support-routes.js';
 import { registerAdminRoutes } from './admin-routes.js';
+import { releaseIdentity } from './release.js';
 
 export async function buildApp(app = Fastify({ logger: true }), options: { receipts?: ReceiptService } = {}) {
+  const release = releaseIdentity();
   const origins = (process.env.APP_ORIGIN ?? 'http://localhost:3000').split(',').map(value => value.trim()).filter(Boolean);
   const specPath = fileURLToPath(new URL('../openapi.json', import.meta.url));
   await app.register(cors, {
@@ -41,7 +43,7 @@ export async function buildApp(app = Fastify({ logger: true }), options: { recei
   });
   app.setErrorHandler(sendError);
   await registerAuthRoutes(app);
-  await registerRoutes(app);
+  await registerRoutes(app, release);
   await registerFinanceRoutes(app);
   await registerReadRoutes(app);
   await registerManagementRoutes(app);

@@ -1,6 +1,6 @@
 # ShareBill — 20 lát cắt triển khai
 
-Cập nhật 18/11/2026. **S01–S10 có kiểm chứng local/Emulator. S11–S17 đã có luồng trong mã nguồn và còn các cổng nghiệm thu.** Tiến độ hiện tại theo [kế hoạch hoàn thiện](../KE_HOACH_HOAN_THIEN.md).
+Cập nhật 19/11/2026. **S01–S10 có kiểm chứng local/Emulator. S11–S17 đã có luồng trong mã nguồn và còn các cổng nghiệm thu. S18 đã có công cụ smoke, chưa nghiệm thu cloud.** Tiến độ hiện tại theo [kế hoạch hoàn thiện](../KE_HOACH_HOAN_THIEN.md).
 
 ## Thứ tự triển khai
 
@@ -23,7 +23,7 @@ Cập nhật 18/11/2026. **S01–S10 có kiểm chứng local/Emulator. S11–S1
 | [S15](05_ADMIN_HO_TRO.md#s15) | Quản trị tài khoản và chuyến | Đã triển khai local, còn nghiệm thu | [S11](04_FRONTEND_APP.md#s11) |
 | [S16](05_ADMIN_HO_TRO.md#s16) | Hỗ trợ, audit và tổng quan quản trị | Đã triển khai local, còn nghiệm thu | [S15](05_ADMIN_HO_TRO.md#s15) |
 | [S17](06_VAN_HANH.md#s17) | CI browser, realtime và offline | Đã triển khai local, còn nghiệm thu | [S12](04_FRONTEND_APP.md#s12), [S13](04_FRONTEND_APP.md#s13) |
-| [S18](06_VAN_HANH.md#s18) | Cloud staging và smoke test | Chưa làm | [S16](05_ADMIN_HO_TRO.md#s16), [S17](06_VAN_HANH.md#s17) |
+| [S18](06_VAN_HANH.md#s18) | Cloud staging và smoke test | Công cụ đạt local, chưa nghiệm thu cloud | [S16](05_ADMIN_HO_TRO.md#s16), [S17](06_VAN_HANH.md#s17) |
 | [S19](06_VAN_HANH.md#s19) | Workers, backup, restore và sửa sai lệch | Chưa làm | [S18](06_VAN_HANH.md#s18) |
 | [S20](06_VAN_HANH.md#s20) | Nghiệm thu và phát hành production | Chưa làm | [S14](04_FRONTEND_APP.md#s14), [S19](06_VAN_HANH.md#s19) |
 

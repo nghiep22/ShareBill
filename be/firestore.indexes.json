@@ -5,8 +5,6 @@
     { "collectionGroup": "expenses", "queryScope": "COLLECTION", "fields": [{ "fieldPath": "status", "order": "ASCENDING" }, { "fieldPath": "category", "order": "ASCENDING" }, { "fieldPath": "occurredOn", "order": "DESCENDING" }] },
     { "collectionGroup": "expenses", "queryScope": "COLLECTION", "fields": [{ "fieldPath": "status", "order": "ASCENDING" }, { "fieldPath": "payerParticipantId", "order": "ASCENDING" }, { "fieldPath": "occurredOn", "order": "DESCENDING" }] },
     { "collectionGroup": "settlements", "queryScope": "COLLECTION", "fields": [{ "fieldPath": "status", "order": "ASCENDING" }, { "fieldPath": "createdAt", "order": "DESCENDING" }] },
-    { "collectionGroup": "settlements", "queryScope": "COLLECTION", "fields": [{ "fieldPath": "status", "order": "ASCENDING" }, { "fieldPath": "fromParticipantId", "order": "ASCENDING" }] },
-    { "collectionGroup": "settlements", "queryScope": "COLLECTION", "fields": [{ "fieldPath": "status", "order": "ASCENDING" }, { "fieldPath": "toParticipantId", "order": "ASCENDING" }] },
     { "collectionGroup": "users", "queryScope": "COLLECTION", "fields": [{ "fieldPath": "status", "order": "ASCENDING" }, { "fieldPath": "createdAt", "order": "DESCENDING" }] },
     { "collectionGroup": "trips", "queryScope": "COLLECTION", "fields": [{ "fieldPath": "status", "order": "ASCENDING" }, { "fieldPath": "createdAt", "order": "DESCENDING" }] },
     { "collectionGroup": "trips", "queryScope": "COLLECTION", "fields": [{ "fieldPath": "moderationStatus", "order": "ASCENDING" }, { "fieldPath": "createdAt", "order": "DESCENDING" }] },
@@ -17,7 +15,9 @@
     { "collectionGroup": "maintenanceJobs", "queryScope": "COLLECTION", "fields": [{ "fieldPath": "status", "order": "ASCENDING" }, { "fieldPath": "availableAt", "order": "ASCENDING" }] },
     { "collectionGroup": "receipts", "queryScope": "COLLECTION_GROUP", "fields": [{ "fieldPath": "status", "order": "ASCENDING" }, { "fieldPath": "expiresAt", "order": "ASCENDING" }] },
     { "collectionGroup": "receipts", "queryScope": "COLLECTION_GROUP", "fields": [{ "fieldPath": "status", "order": "ASCENDING" }, { "fieldPath": "updatedAt", "order": "ASCENDING" }] },
-    { "collectionGroup": "receipts", "queryScope": "COLLECTION_GROUP", "fields": [{ "fieldPath": "status", "order": "ASCENDING" }, { "fieldPath": "processingLeaseUntil", "order": "ASCENDING" }] }
+    { "collectionGroup": "receipts", "queryScope": "COLLECTION_GROUP", "fields": [{ "fieldPath": "status", "order": "ASCENDING" }, { "fieldPath": "processingLeaseUntil", "order": "ASCENDING" }] },
+    { "collectionGroup": "settlements", "queryScope": "COLLECTION", "fields": [{ "fieldPath": "status", "order": "ASCENDING" }, { "fieldPath": "fromParticipantId", "order": "ASCENDING" }] },
+    { "collectionGroup": "settlements", "queryScope": "COLLECTION", "fields": [{ "fieldPath": "status", "order": "ASCENDING" }, { "fieldPath": "toParticipantId", "order": "ASCENDING" }] }
   ],
   "fieldOverrides": [
     { "collectionGroup": "expenses", "fieldPath": "note", "indexes": [] },

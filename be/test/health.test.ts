@@ -6,7 +6,8 @@ describe('HTTP', () => {
     const app = await buildApp();
     const response = await app.inject({ method: 'GET', url: '/health' });
     expect(response.statusCode).toBe(200);
-    expect(response.json()).toEqual({ status: 'ok', service: 'sharebill-be' });
+    expect(response.json()).toMatchObject({ status: 'ok', service: 'sharebill-be', release: { environment: 'local' } });
+    expect(response.headers['cache-control']).toBe('no-store');
     await app.close();
   });
 

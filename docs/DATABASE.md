@@ -38,7 +38,7 @@ Node API xác minh JWT rồi kiểm quyền trên dữ liệu. Mọi lệnh ghi 
 | Index | Đã bổ sung file cấu hình trong lần cập nhật này | Deploy staging, đợi index ready và chạy query thật; API hiện vẫn chỉ lấy 20/30 bản gần nhất |
 | Dữ liệu mẫu | Đã bổ sung `pnpm --dir be db:seed` | Seed chỉ chạy emulator và đi qua API hiện có; không thay migration |
 
-File [firestore.indexes.json](../be/firestore.indexes.json) chứa 16 composite index của thiết kế P0 và 15 field exemption. Có index cho chức năng chưa code để hai phía có hợp đồng rõ ràng; không có nghĩa API tương ứng đã tồn tại.
+File [firestore.indexes.json](../be/firestore.indexes.json) chứa 18 composite index của thiết kế P0 và 17 field exemption, gồm hai index pending theo participant và hai exemption lịch trình. Có index cho chức năng chưa code để hai phía có hợp đồng rõ ràng; không có nghĩa API tương ứng đã tồn tại.
 
 ## 3. Quan hệ và cây dữ liệu
 
@@ -400,7 +400,7 @@ Tạo/sửa/void tác động tiền tăng `ledgerVersion` đúng một lần; m
 
 ## 8. Query, index và phân trang
 
-File thực thi: [be/firestore.indexes.json](../be/firestore.indexes.json); đã nối trong [be/firebase.json](../be/firebase.json). Bảng dưới mô tả 16 composite index theo đúng thứ tự file. Tất cả là COLLECTION scope, trừ ba index receipt dùng COLLECTION_GROUP để worker tìm xuyên chuyến.
+File thực thi: [be/firestore.indexes.json](../be/firestore.indexes.json); đã nối trong [be/firebase.json](../be/firebase.json). Bảng dưới mô tả 18 composite index theo đúng thứ tự file. Tất cả là COLLECTION scope, trừ ba index receipt dùng COLLECTION_GROUP để worker tìm xuyên chuyến.
 
 | Mã | Collection | Equality filter | Sort chính | Mục đích |
 | --- | --- | --- | --- | --- |
@@ -420,6 +420,8 @@ File thực thi: [be/firestore.indexes.json](../be/firestore.indexes.json); đã
 | IX14 | receipts (group) | status | expiresAt ASC | Intent hết hạn |
 | IX15 | receipts (group) | status | updatedAt ASC | Ready/failed cũ, ứng viên cleanup |
 | IX16 | receipts (group) | status | processingLeaseUntil ASC | Lease processing hết hạn |
+| IX17 | settlements | status | fromParticipantId ASC | Pending theo người gửi khi đổi liên kết |
+| IX18 | settlements | status | toParticipantId ASC | Pending theo người nhận khi đổi liên kết |
 
 Query mặc định hiện tại `orderBy(createdAt DESC)` và `orderBy(joinedAt DESC)` không có equality filter dùng single-field index mặc định. Exact lookup UID/tripId dùng document path; exact `emailLower == value` không sort dùng single-field index mặc định. Activity/note list chỉ sort createdAt cũng dùng single-field. Không disable các field này.
 

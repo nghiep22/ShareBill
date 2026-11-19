@@ -74,10 +74,12 @@ Triển khai hiện tại dùng REST signal kiểm quyền mỗi 30 giây khi ta
 
 **Cloud staging và smoke test**
 
-- **Trạng thái** Chưa làm
+- **Trạng thái** Đã có kiểm cấu hình, release identity và smoke CLI; đã diễn tập local. Chưa deploy/nghiệm thu cloud
 - **Phụ thuộc** [S16](05_ADMIN_HO_TRO.md#s16), [S17](#s17)
 - **Kết quả** Cấu hình Firebase/Vercel staging, deploy BE/FE/admin và smoke các index/cursor trên Firestore thật.
 - **Nghiệm thu** Health, Auth, preflight, luồng browser và admin guard đạt trên staging đúng SHA. Chạy query sau khi index ready và lưu kết quả.
+
+[Công cụ và runbook smoke S18](../STAGING_SMOKE.md) kiểm FE/API cùng SHA/project/môi trường, CORS, guard và luồng tiền trong chuyến synthetic riêng. Kết quả Emulator không thay bằng chứng IAM/index/Google/bucket cloud.
 
 <details>
 <summary>Các bước và tiêu chí chi tiết</summary>
