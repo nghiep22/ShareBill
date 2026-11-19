@@ -108,7 +108,7 @@ export function ConnectedWorkspace() {
     </div>;
   } else {
     const registering = route === 'dang-ky';
-    content = <SignIn remote key={route} registering={registering} onSubmit={(profile, password) => {
+    content = <SignIn key={route} registering={registering} onSubmit={(profile, password) => {
       auth.run(() => api.signIn(profile.email, password, registering ? profile.name : undefined), () => {
         const invite = pendingInvite.current;
         pendingInvite.current = undefined;

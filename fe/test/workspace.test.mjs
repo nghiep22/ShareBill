@@ -63,6 +63,40 @@ function heading(page, name) {
   return page.getByRole('heading', { name, exact: true }).first().waitFor({ timeout: 10000 });
 }
 
+test('authentication has no demo entry point and PWA retires cached preview pages', async t => {
+  const context = await browser.newContext();
+  t.after(() => context.close());
+  const page = await context.newPage();
+  if (process.env.SHAREBILL_PWA_TEST === '1') {
+    await page.goto(web + '/release.json');
+    await page.evaluate(async () => {
+      const cache = await caches.open('sharebill-shell-removed-demo');
+      await cache.put('/demo/', new Response('Legacy preview', { headers: { 'content-type': 'text/html' } }));
+    });
+  }
+  await page.goto(web + '/#dang-nhap');
+  await heading(page, 'Đăng nhập');
+  assert.equal(await page.locator('a[href*="/demo"]').count(), 0);
+  assert.equal(await page.getByText(/xem thử|bản mẫu|hồ sơ mẫu/i).count(), 0);
+  await page.getByRole('link', { name: 'Chưa có tài khoản? Đăng ký', exact: true }).click();
+  await heading(page, 'Tạo tài khoản');
+  assert.equal(await page.getByRole('link', { name: 'Đăng nhập', exact: true }).count(), 1);
+  assert.equal(await page.getByText(/xem thử|bản mẫu|hồ sơ mẫu/i).count(), 0);
+  if (process.env.SHAREBILL_PWA_TEST === '1') {
+    const cachedDemoPages = await page.evaluate(async () => {
+      await navigator.serviceWorker.ready;
+      if (!navigator.serviceWorker.controller) await new Promise(resolve => navigator.serviceWorker.addEventListener('controllerchange', resolve, { once: true }));
+      const requests = await Promise.all((await caches.keys()).map(async name => (await caches.open(name)).keys()));
+      return requests.flat().filter(request => new URL(request.url).pathname.startsWith('/demo')).length;
+    });
+    assert.equal(cachedDemoPages, 0);
+    await context.setOffline(true);
+    await page.goto(web + '/demo/');
+    await heading(page, 'Đăng nhập');
+    assert.equal(new URL(page.url()).pathname, '/');
+  }
+});
+
 test('S18 smoke validates the built web/API release and archives its isolated ledger fixture', { skip: process.env.SHAREBILL_PWA_TEST !== '1' }, async () => {
   assert.match(process.env.RELEASE_COMMIT ?? '', /^[a-f0-9]{40}$/i, 'Set RELEASE_COMMIT for the FE build, API runtime and browser suite');
   const email = randomUUID() + '@example.test';

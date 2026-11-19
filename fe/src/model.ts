@@ -74,7 +74,6 @@ export type Demo = {
 };
 
 export const me = 'an';
-const everyone = ['an', 'binh', 'chi'];
 export const newId = () => Array.from(crypto.getRandomValues(new Uint8Array(12)), byte => byte.toString(16).padStart(2, '0')).join('');
 
 export function splitEqually(amount: number, ids: string[]) {
@@ -83,32 +82,6 @@ export function splitEqually(amount: number, ids: string[]) {
   const remainder = amount % ids.length;
   return Object.fromEntries(ids.map((id, index) => [id, base + Number(index < remainder)]));
 }
-
-export const initialDemo: Demo = {
-  trip: { name: 'Đà Lạt 3N2Đ', place: 'Đà Lạt, Lâm Đồng', start: '2026-12-20', end: '2026-12-22', closed: false, cover: true },
-  members: [
-    { id: me, name: 'An', tone: 0, linked: true },
-    { id: 'binh', name: 'Bình', tone: 1, linked: true },
-    { id: 'chi', name: 'Chi', tone: 2 },
-  ],
-  expenses: [
-    { id: 'hotel', title: 'Khách sạn', amount: 900000, payer: me, date: '2026-12-20', category: 'stay', note: 'Hai đêm tại Đà Lạt', mode: 'equal', shares: splitEqually(900000, everyone), createdBy: me },
-    { id: 'dinner', title: 'Ăn tối', amount: 180000, payer: 'binh', date: '2026-12-20', category: 'food', note: 'Lẩu gà lá é', mode: 'equal', shares: splitEqually(180000, everyone), createdBy: 'binh' },
-    { id: 'scooter', title: 'Thuê xe máy', amount: 150000, payer: me, date: '2026-12-20', category: 'transport', note: 'Đã đổi phương tiện di chuyển.', mode: 'equal', shares: splitEqually(150000, everyone), voided: true, createdBy: me },
-  ],
-  settlements: [],
-  plans: [
-    { id: 'arrival', day: '2026-12-20', time: '09:00', title: 'Đến Đà Lạt', place: 'Bến xe liên tỉnh Đà Lạt', note: 'Tập trung ở cổng chính để đón xe về homestay.' },
-    { id: 'check-in', day: '2026-12-20', time: '14:00', title: 'Nhận phòng và nghỉ ngơi', place: 'The Wilder-nest' },
-    { id: 'market', day: '2026-12-20', time: '18:30', title: 'Ăn tối và dạo chợ đêm', place: 'Chợ Đà Lạt' },
-    { id: 'cafe', day: '2026-12-21', time: '09:00', title: 'Cà phê và ngắm đồi thông', place: 'Trại Mát' },
-  ],
-  ideas: [{ id: 'garden', title: 'Ghé vườn hoa Cẩm Tú Cầu', by: 'binh' }],
-  activity: [
-    { id: 'activity-dinner', at: '2026-11-16T10:20:00+07:00', title: 'Thêm khoản chi', detail: 'Ăn tối · 180.000đ', actor: 'binh', href: '#khoan-chi/dinner' },
-    { id: 'activity-hotel', at: '2026-11-16T09:00:00+07:00', title: 'Thêm khoản chi', detail: 'Khách sạn · 900.000đ', actor: me, href: '#khoan-chi/hotel' },
-  ],
-};
 
 const number = new Intl.NumberFormat('vi-VN');
 export const money = (amount: number) => `${number.format(amount)}đ`;

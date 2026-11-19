@@ -1,11 +1,10 @@
 'use client';
 
-import { CalendarDays, Check, Clipboard, History, Link2, LockKeyhole, MapPin, Pencil, Plus, RotateCcw, Send, Smartphone, Trash2, Users } from 'lucide-react';
+import { CalendarDays, Check, History, Link2, LockKeyhole, MapPin, Pencil, Plus, RotateCcw, Send, Smartphone, Trash2, Users } from 'lucide-react';
 import { useRef, useState, type FormEvent } from 'react';
-import type { LocalWorkspace } from './local-workspace';
 import {
   balances, canWrite, dateLabel, dateRange, isOwner, nameOf, newId, ownerOf, record,
-  settlementStatus, today, viewerOf, type Demo, type InviteLink, type Plan,
+  settlementStatus, today, viewerOf, type Demo, type Plan,
 } from './model';
 import { readTripFields, TripFields } from './screens';
 import { Dialog, Empty, PageTitle } from './ui';
@@ -134,113 +133,6 @@ export function Itinerary({ data, update, loading }: { data: Demo; update: Updat
       }}>Xóa hoạt động</button>
     </Dialog>}
   </>;
-}
-
-const inviteDate = new Intl.DateTimeFormat('vi-VN', { dateStyle: 'short', timeStyle: 'short', timeZone: 'Asia/Ho_Chi_Minh' });
-const usable = (invite: InviteLink) => !invite.revoked && invite.expiresAt > Date.now() && invite.uses < invite.limit;
-
-export function Invite({ data, update }: { data: Demo; update: (next: Demo) => void }) {
-  const [notice, setNotice] = useState('');
-  const [revealed, setRevealed] = useState('');
-  const [revoke, setRevoke] = useState<InviteLink | null>(null);
-  if (!isOwner(data)) return <PageTitle title="Chỉ chủ chuyến có thể quản lý lời mời" back="#thanh-vien" />;
-
-  function create(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    const fields = new FormData(event.currentTarget);
-    const invite = { token: newId(), expiresAt: Date.now() + Number(fields.get('days')) * 86400000, limit: Number(fields.get('limit')), uses: 0 };
-    update(record({ ...data, invites: [invite, ...(data.invites ?? [])] }, 'Tạo lời mời', data.trip.name, '#loi-moi'));
-    setRevealed(invite.token);
-    setNotice('');
-  }
-
-  async function copy(url: string) {
-    try {
-      await navigator.clipboard.writeText(url);
-      setNotice('Đã sao chép liên kết.');
-    } catch {
-      setNotice('Chọn đường dẫn trong ô bên dưới để sao chép.');
-    }
-  }
-
-  const visible = data.invites?.find(invite => invite.token === revealed && usable(invite));
-  const url = visible ? new URL('#tham-gia/' + visible.token, window.location.href).href : '';
-  return <div className="form-page detail-page">
-    <PageTitle title="Mời bạn vào chuyến đi" description={data.trip.name} back="#thanh-vien" />
-    {!data.trip.closed && <form className="card field-card" onSubmit={create}>
-      <h2><Link2 size={20} aria-hidden /> Tạo liên kết mời</h2>
-      <p>Lời mời dùng thử có hiệu lực trong trình duyệt đã tạo liên kết.</p>
-      <div className="field-pair">
-        <label>Thời hạn<select name="days" defaultValue="7"><option value="1">1 ngày</option><option value="3">3 ngày</option><option value="7">7 ngày</option></select></label>
-        <label>Số lượt tham gia<input type="number" name="limit" min="1" max="20" defaultValue="5" required /></label>
-      </div>
-      <button className="primary-button">Tạo liên kết</button>
-    </form>}
-    {visible && <section className="card field-card">
-      <h2>Liên kết vừa tạo</h2>
-      <label>Đường dẫn tham gia<input value={url} readOnly onFocus={event => event.currentTarget.select()} /></label>
-      <div className="button-pair"><button className="secondary-button" onClick={() => void copy(url)}><Clipboard size={17} aria-hidden /> Sao chép</button>
-        <a className="primary-button" href={'#tham-gia/' + visible.token}>Xem trước lời mời</a></div>
-      {notice && <p role="status">{notice}</p>}
-    </section>}
-    <section className="card field-card">
-      <h2>Quản lý liên kết</h2>
-      {!(data.invites ?? []).length && <p>Chưa tạo lời mời nào.</p>}
-      {(data.invites ?? []).map((invite, index) => <div key={invite.token} className="idea-row">
-        <div><strong>Lời mời {data.invites!.length - index}</strong><p>{invite.uses}/{invite.limit} lượt · Hết hạn {inviteDate.format(invite.expiresAt)}</p></div>
-        {usable(invite) ? <button className="text-button" onClick={() => setRevoke(invite)}>Thu hồi</button>
-          : <span className="tag">{invite.revoked ? 'Đã thu hồi' : invite.uses >= invite.limit ? 'Hết lượt' : 'Hết hạn'}</span>}
-      </div>)}
-    </section>
-    {revoke && <Dialog title="Thu hồi lời mời?" onClose={() => setRevoke(null)}>
-      <p>Liên kết này sẽ hết hiệu lực ngay. Những người đã tham gia vẫn có trong danh sách thành viên.</p>
-      <button className="danger-button" onClick={() => {
-        update(record({ ...data, invites: (data.invites ?? []).map(invite => invite.token === revoke.token ? { ...invite, revoked: true } : invite) }, 'Thu hồi lời mời', data.trip.name, '#loi-moi'));
-        setRevoke(null);
-      }}>Thu hồi liên kết</button>
-    </Dialog>}
-  </div>;
-}
-
-export function Join({ state, token, onJoin }: { state: LocalWorkspace; token?: string; onJoin: (id: string, data: Demo) => void }) {
-  const [error, setError] = useState('');
-  const match = Object.entries(state.trips).find(([, data]) => data.invites?.some(invite => invite.token === token));
-  const invite = match?.[1].invites?.find(item => item.token === token);
-  if (!match || !invite || !usable(invite) || match[1].trip.closed) return <div className="form-page">
-    <PageTitle title="Lời mời tham gia" back="#chuyen-di" />
-    <div className="card field-card"><h2>Liên kết không còn sử dụng được</h2><p>Mở liên kết dùng thử bằng trình duyệt đã tạo lời mời hoặc tạo lời mời mới.</p><a className="secondary-button" href="#chuyen-di">Về danh sách chuyến đi</a></div>
-  </div>;
-
-  const [id, data] = match;
-  const activeInvite = invite;
-  function join(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    if (!usable(activeInvite)) { setError('Liên kết không còn sử dụng được.'); return; }
-    const name = String(new FormData(event.currentTarget).get('name')).trim();
-    if (!name) { setError('Nhập tên hiển thị trong chuyến.'); return; }
-    if (data.members.some(member => member.name.toLocaleLowerCase('vi') === name.toLocaleLowerCase('vi'))) {
-      setError('Tên này đã có trong chuyến. Nhập tên khác để thử tham gia.');
-      return;
-    }
-    const member = { name, id: newId(), tone: data.members.length, linked: true };
-    onJoin(id, record({ ...data, members: [...data.members, member], viewerId: member.id,
-      invites: (data.invites ?? []).map(item => item.token === token ? { ...item, uses: item.uses + 1 } : item),
-    }, 'Tham gia chuyến đi', name, '#thanh-vien'));
-  }
-
-  return <div className="form-page detail-page">
-    <PageTitle title="Lời mời tham gia" back={state.selected === id && isOwner(data) ? '#loi-moi' : '#chuyen-di'} />
-    <section className="card invite-card">
-      <div className={'trip-cover invite-cover' + (data.trip.cover ? '' : ' cover-plain')}><span className="trip-status"><span /> Lời mời dùng thử</span><h2>{data.trip.name}</h2></div>
-      <form className="field-card" onSubmit={join}>
-        {data.trip.place && <p><MapPin size={16} aria-hidden /> {data.trip.place}</p>}
-        <p><CalendarDays size={16} aria-hidden /> {dateRange(data.trip)}</p>
-        <label>Tên của bạn trong chuyến<input name="name" defaultValue={state.profile?.name} maxLength={80} required /></label>
-        {error && <p className="error" role="alert">{error}</p>}
-        <button className="primary-button"><Users size={18} aria-hidden /> Tham gia chuyến đi</button>
-      </form>
-    </section>
-  </div>;
 }
 
 export function Settings({ data, update, disabled }: { data: Demo; update: UpdateTrip; disabled?: boolean }) {

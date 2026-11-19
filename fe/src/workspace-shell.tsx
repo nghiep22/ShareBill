@@ -92,8 +92,8 @@ function Navigation({ desktop, active, data }: { desktop?: boolean; active: stri
   </nav>;
 }
 
-export function WorkspaceShell({ hash, route, data, profileName, preview, publicPage, refresh, children }: {
-  hash: string; route: string; data?: Demo; profileName?: string; preview?: boolean; publicPage?: boolean; refresh?: () => void; children: ReactNode;
+export function WorkspaceShell({ hash, route, data, profileName, publicPage, refresh, children }: {
+  hash: string; route: string; data?: Demo; profileName?: string; publicPage?: boolean; refresh?: () => void; children: ReactNode;
 }) {
   const form = route === 'them-khoan-chi' || route === 'sua-khoan-chi';
   const active = route === 'khoan-chi' || form ? 'chi-tieu' : route === 'quyet-toan' ? 'so-du' : route;
@@ -123,7 +123,7 @@ export function WorkspaceShell({ hash, route, data, profileName, preview, public
       <a className="sidebar-help" href="#tro-giup" aria-current={route === 'tro-giup' ? 'page' : undefined}><CircleHelp size={19} aria-hidden /> Trợ giúp</a>
       <a className="sidebar-footer" href="#tai-khoan">
         {viewer ? <Avatar member={viewer} /> : <span className="avatar"><UserRound size={17} aria-hidden /></span>}
-        <div><strong>{profileName ?? viewer?.name ?? 'Tài khoản'}</strong><span>{data && (isOwner(data) ? 'Chủ chuyến' : 'Thành viên')}{preview && ' · Bản xem thử'}</span></div><ChevronRight size={17} aria-hidden />
+        <div><strong>{profileName ?? viewer?.name ?? 'Tài khoản'}</strong><span>{data && (isOwner(data) ? 'Chủ chuyến' : 'Thành viên')}</span></div><ChevronRight size={17} aria-hidden />
       </a>
     </aside>}
     <div className="app">
@@ -131,8 +131,7 @@ export function WorkspaceShell({ hash, route, data, profileName, preview, public
         <div className={publicPage ? undefined : 'mobile-brand'}><Brand target={home} /></div>
         {!publicPage && <div className="app-breadcrumb"><a href="#chuyen-di">Chuyến đi</a>{data && <><ChevronRight size={15} aria-hidden /><strong>{data.trip.name}</strong></>}</div>}
         <div className="header-actions">
-          {preview && <span className="tag mint preview-tag"><span /> Bản xem thử</span>}
-          {publicPage ? <a className="secondary-button compact" href="/demo/">Xem bản mẫu</a> : <>
+          {publicPage ? <a className="secondary-button compact" href={route === 'dang-ky' ? '#dang-nhap' : '#dang-ky'}>{route === 'dang-ky' ? 'Đăng nhập' : 'Đăng ký'}</a> : <>
             <a className="icon-button mobile-trips" href="#chuyen-di" aria-label="Danh sách chuyến đi"><Luggage size={21} aria-hidden /></a>
             {data && <a className="icon-button" href={tripHref(data, 'hoat-dong')} aria-label="Hoạt động chuyến đi" aria-current={route === 'hoat-dong' ? 'page' : undefined}><History size={21} aria-hidden /></a>}
             {refresh && <button className="icon-button refresh-button" onClick={refresh} aria-label="Làm mới dữ liệu"><RefreshCw size={19} aria-hidden /></button>}
@@ -141,8 +140,7 @@ export function WorkspaceShell({ hash, route, data, profileName, preview, public
         </div>
       </header>
       <main className={'main' + (active === 'tong-quan' && data ? ' main-overview' : '')} tabIndex={-1} ref={main}>
-        {!online && (preview ? <a className="inline-note workspace-notice" href="#ngoai-tuyen"><WifiOff size={17} aria-hidden /> Ngoại tuyến · Dữ liệu trên thiết bị</a>
-          : <p className="inline-note workspace-notice" role="status"><WifiOff size={17} aria-hidden /> Ngoại tuyến · Cần kết nối mạng để đồng bộ</p>)}
+        {!online && <p className="inline-note workspace-notice" role="status"><WifiOff size={17} aria-hidden /> Ngoại tuyến · Cần kết nối mạng để đồng bộ</p>}
         {activateUpdate && <p className="inline-note workspace-notice" role="status">Có phiên bản ShareBill mới.
           <button className="text-button" onClick={() => setConfirmUpdate(true)}>Cập nhật</button></p>}
         {children}

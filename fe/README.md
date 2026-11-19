@@ -1,6 +1,6 @@
 # Frontend ShareBill
 
-Ứng dụng người dùng là Web/PWA mobile-first, viết bằng Next.js và TypeScript. Trang `/` và đường dẫn tương thích `/live` dùng API ShareBill. Trang `/demo/` dùng dữ liệu mẫu và các giao diện tham khảo trong [GiaoDien](../GiaoDien/GiaoDien).
+Ứng dụng người dùng là Web/PWA mobile-first, viết bằng Next.js và TypeScript. Trang `/` và đường dẫn tương thích `/live` dùng API ShareBill. Đã gỡ bản xem thử, dữ liệu mẫu khởi tạo và chức năng lưu hồ sơ mẫu. Link `/demo` cũ chuyển về ứng dụng chính trên Vercel và qua service worker.
 
 ## Chạy giao diện
 
@@ -11,7 +11,7 @@ pnpm install
 pnpm --dir fe dev
 ```
 
-Để dùng dữ liệu API tại `http://localhost:3000`, chạy [Firebase Emulator và backend](../be/README.md#chạy-local). Nếu chưa chạy backend, mở `http://localhost:3000/demo/` để thử chuyến Đà Lạt và các thao tác cục bộ. Hồ sơ, chuyến đi, lời mời và ảnh của bản mẫu lưu trong trình duyệt.
+Để dùng ứng dụng tại `http://localhost:3000`, chạy [Firebase Emulator và backend](../be/README.md#chạy-local), sau đó đăng ký hoặc đăng nhập. Các thao tác nghiệp vụ cần API.
 
 Để thử cài PWA và tải lại khi mất mạng, dừng máy chủ dev rồi chạy bản production.
 
@@ -28,7 +28,7 @@ Khi có phiên bản mới, app hỏi trước khi tải lại. Khi thử trên 
 
 Backend nằm trong `../be`. Hợp đồng API của người dùng và quản trị nằm ở [BACKEND.md](../docs/BACKEND.md) và [ADMIN_WEB.md](../docs/ADMIN_WEB.md).
 
-Giao diện chính gọi REST cho tài khoản, chuyến đi, thành viên, lời mời, chi tiêu, quyết toán, lịch trình, hỗ trợ và lịch sử. Phiên đăng nhập được lưu trong `sessionStorage` của tab. Bản dùng thử tiếp tục lưu riêng trong IndexedDB. Trên localhost, API mặc định dùng cổng 3001. Đặt `NEXT_PUBLIC_SHAREBILL_API_URL` khi build nếu cần chỉ định API khác.
+Giao diện chính gọi REST cho tài khoản, chuyến đi, thành viên, lời mời, chi tiêu, quyết toán, lịch trình, hỗ trợ và lịch sử. Phiên đăng nhập được lưu trong `sessionStorage` của tab. Trên localhost, API mặc định dùng cổng 3001. Đặt `NEXT_PUBLIC_SHAREBILL_API_URL` khi build nếu cần chỉ định API khác.
 
 Trong **Lịch trình**, chủ chuyến thêm, sửa, xóa hoạt động và duyệt đề xuất. Thành viên có quyền truy cập chuyến xem lịch trình và đề xuất điểm đến. Mở **Trợ giúp và báo lỗi** từ **Tài khoản**, hoặc mở **Báo lỗi về chuyến đi** trong cài đặt chuyến để kèm ngữ cảnh. Người gửi tra mã và trạng thái trong **Báo lỗi của tôi**. Operator xử lý tại `/admin`. [Hướng dẫn quản trị](../be/README.md#quản-trị)
 
@@ -36,7 +36,7 @@ Link màn hình chuyến có dạng `/#chuyen/{tripId}/khoan-chi/{expenseId}?cat
 
 ## Kiểm thử trình duyệt và quản trị
 
-`pnpm --dir fe test:browser` chạy 6 hành trình bằng Playwright với frontend cổng 3000, API 3001 và Emulator 8080/9099. Cài Chromium bằng `pnpm --dir fe exec playwright install chromium`. Trên Windows có thể đặt `PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH` tới Chrome. Đặt `SHAREBILL_PWA_TEST=1` khi kiểm bản static production để kiểm cả reload offline và hành trình thứ 7 cho smoke S18; đặt cùng `RELEASE_COMMIT` khi build FE, chạy API và chạy bộ test. [Hướng dẫn smoke và cấu hình cloud](../docs/STAGING_SMOKE.md).
+`pnpm --dir fe test:browser` chạy 7 hành trình bằng Playwright với frontend cổng 3000, API 3001 và Emulator 8080/9099. Cài Chromium bằng `pnpm --dir fe exec playwright install chromium`. Trên Windows có thể đặt `PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH` tới Chrome. Đặt `SHAREBILL_PWA_TEST=1` khi kiểm bản static production để kiểm cả reload offline và hành trình thứ 8 cho smoke S18; đặt cùng `RELEASE_COMMIT` khi build FE, chạy API và chạy bộ test. [Hướng dẫn smoke và cấu hình cloud](../docs/STAGING_SMOKE.md).
 
 Trang `/admin` dùng Google sign-in và quyền server trong `platformAdmins/{uid}`. Sao chép các trường Firebase public trong [.env.example](.env.example) và đặt giá trị của môi trường khi build. Với project demo trên localhost, Google popup dùng Auth Emulator. Môi trường cloud cần Google provider và authorized domains đã cấu hình. Phiên quản trị nằm trong bộ nhớ, đăng nhập lại sau reload. API kiểm quyền ở mỗi request và yêu cầu xác thực trong 10 phút cho lệnh ghi.
 

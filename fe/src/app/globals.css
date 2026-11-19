@@ -298,8 +298,6 @@ input[type="radio"], input[type="checkbox"] { min-height: 0; width: 16px; height
 .trip-switcher small, .trip-switcher strong { display: block; }
 .trip-switcher small { color: var(--muted); font-size: 11px; }
 .trip-switcher .tile-icon { width: 36px; height: 36px; color: var(--teal); background: var(--mint); }
-.preview-tag { gap: 5px; font-size: 11px; padding: 5px 9px; }
-.preview-tag > span { width: 6px; height: 6px; border-radius: 50%; background: #188e76; }
 .workspace-notice { display: flex; align-items: center; gap: 8px; }
 .page-title { gap: 10px; }
 .page-title h1 { line-height: 1.15; }
@@ -363,7 +361,6 @@ input[type="radio"], input[type="checkbox"] { min-height: 0; width: 16px; height
 .idea-row p { font-size: 12px; margin-top: 3px; }
 .inline-form { display: flex; gap: 8px; }
 .inline-form button { flex: none; }
-.role-preview { max-width: 325px; }
 .member-actions { display: grid; gap: 8px; }
 dialog { width: min(490px, calc(100% - 28px)); max-height: calc(100dvh - 32px); overflow: auto; padding: 18px; border: 1px solid var(--line); border-radius: 18px; color: var(--ink); background: var(--paper); box-shadow: 0 16px 56px rgb(15 23 42 / 20%); }
 dialog[open] { display: grid; gap: 13px; }
@@ -406,7 +403,6 @@ button:disabled { cursor: not-allowed; opacity: .65; }
   .brand strong { font-size: 18px; }
   .brand-icon { width: 32px; height: 32px; }
   .app-header { gap: 4px; }
-  .preview-tag { font-size: 10px; padding-inline: 6px; }
   .timeline-card { flex-wrap: wrap; }
 }
 

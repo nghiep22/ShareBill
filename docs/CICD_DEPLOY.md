@@ -8,7 +8,7 @@ Repo tách Web/PWA Next.js ở `fe/` và API Fastify ở `be/`. Hai thư mục c
 
 ## Môi trường staging hiện tại
 
-- Web/PWA ở [sharebill-nghiep22.vercel.app](https://sharebill-nghiep22.vercel.app/), thuộc tài khoản Vercel Hobby. Trang chính dùng API thật; `/demo/` giữ dữ liệu mẫu trong trình duyệt.
+- Web/PWA ở [sharebill-nghiep22.vercel.app](https://sharebill-nghiep22.vercel.app/), thuộc tài khoản Vercel Hobby. Trang chính dùng API thật; bản xem thử đã được gỡ, `/demo` chuyển về ứng dụng chính.
 - API ở [sharebill-api-staging.vercel.app](https://sharebill-api-staging.vercel.app/health), có tài liệu tương tác tại [/docs/](https://sharebill-api-staging.vercel.app/docs/).
 - Firebase project `sharebill-staging` dùng Spark, bật đăng nhập Email/Password và Firestore Standard tại `asia-southeast1` (Singapore). Rules và indexes lấy từ `be/`.
 - Runtime API dùng service account `sharebill-api@sharebill-staging.iam.gserviceaccount.com` với `roles/datastore.user` và `roles/firebaseauth.admin`. Thông tin xác thực nằm trong secrets của Vercel.

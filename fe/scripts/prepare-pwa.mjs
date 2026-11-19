@@ -17,14 +17,14 @@ for (const path of ['_next/static', 'icons']) {
 }
 
 const hash = createHash('sha256');
-for (const path of ['/index.html', '/demo.html', ...assets.sort()]) {
+for (const path of ['/index.html', ...assets.sort()]) {
   hash.update(path).update(await readFile(new URL(path.slice(1), out)));
 }
 const cache = 'sharebill-shell-' + hash.digest('hex').slice(0, 16);
 
 const worker = `
 const CACHE = ${JSON.stringify(cache)};
-const ASSETS = ${JSON.stringify(['/', '/demo', ...assets])};
+const ASSETS = ${JSON.stringify(['/', ...assets])};
 const shell = new Set(ASSETS);
 
 self.addEventListener('install', event => {
@@ -47,8 +47,12 @@ self.addEventListener('activate', event => {
 self.addEventListener('fetch', event => {
   const url = new URL(event.request.url);
   if (event.request.method !== 'GET' || url.origin !== self.location.origin) return;
-  const page = url.pathname === '/demo/' ? '/demo' : url.pathname;
-  if (event.request.mode === 'navigate' && (page === '/' || page === '/demo')) {
+  if (event.request.mode === 'navigate' && (url.pathname === '/demo' || url.pathname === '/demo/')) {
+    event.respondWith(Promise.resolve(Response.redirect(self.location.origin + '/', 302)));
+    return;
+  }
+  const page = url.pathname;
+  if (event.request.mode === 'navigate' && page === '/') {
     event.respondWith(caches.open(CACHE).then(cache => cache.match(page).then(response => response || fetch(event.request))));
   } else if (shell.has(url.pathname)) {
     event.respondWith(caches.open(CACHE).then(cache => cache.match(url.pathname).then(response => response || fetch(event.request))));

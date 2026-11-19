@@ -1,6 +1,6 @@
 'use client';
 
-import { Eye, Link2, Settings2, ShieldCheck, UserPlus, Users } from 'lucide-react';
+import { Link2, Settings2, ShieldCheck, UserPlus, Users } from 'lucide-react';
 import { useState, type FormEvent } from 'react';
 import { balances, canWrite, isOwner, nameOf, newId, ownerOf, record, viewerOf, type Demo, type Member } from './model';
 import { Amount, Avatar, Dialog, Empty, PageTitle } from './ui';
@@ -35,7 +35,7 @@ export function Members({ data, update, accounts }: { data: Demo; update: Update
 
   function apply(action: 'owner' | 'inactive' | 'unlink' | 'link' | 'activate') {
     if (!owner || !selected || selected.id === ownerOf(data)) return;
-    const labels = { owner: 'Chuyển quyền chủ chuyến', inactive: 'Ngừng dùng thành viên', unlink: 'Gỡ tài khoản', link: 'Liên kết tài khoản dùng thử', activate: 'Khôi phục thành viên' };
+    const labels = { owner: 'Chuyển quyền chủ chuyến', inactive: 'Ngừng dùng thành viên', unlink: 'Gỡ tài khoản', link: 'Liên kết tài khoản', activate: 'Khôi phục thành viên' };
     const members = data.members.map(member => member.id !== selected.id ? member : {
       ...member, linked: action === 'unlink' ? false : action === 'link' ? true : member.linked,
       inactive: action === 'inactive' ? true : action === 'activate' ? false : member.inactive,
@@ -59,12 +59,6 @@ export function Members({ data, update, accounts }: { data: Demo; update: Update
     <section className="card field-card">
       <h2><ShieldCheck size={20} aria-hidden /> Quyền trong chuyến</h2>
       <p><strong>{data.remote && !data.ownerId ? 'Chủ chuyến' : nameOf(data, ownerOf(data))}</strong> quản lý thành viên, lời mời và chốt chuyến. Thành viên có tài khoản có thể ghi khoản chi.</p>
-      {!data.remote && <label className="role-preview"><span><Eye size={17} aria-hidden /> Xem theo vai trò dùng thử</span>
-        <select value={viewerOf(data)} onChange={event => { setEditing(null); update({ ...data, viewerId: event.target.value }); }}>
-          {data.members.filter(member => member.linked && !member.inactive).map(member =>
-            <option key={member.id} value={member.id}>{nameOf(data, member.id)} · {member.id === ownerOf(data) ? 'Chủ chuyến' : 'Thành viên'}</option>)}
-        </select>
-      </label>}
     </section>
     <div className="section-heading"><h2><Users size={20} aria-hidden /> Danh sách thành viên</h2>
       {canEdit && <button className="secondary-button" onClick={() => edit('new')}><UserPlus size={17} aria-hidden /> Thêm người</button>}</div>
