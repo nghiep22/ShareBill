@@ -3,13 +3,14 @@
 import { CalendarDays, Check, History, Link2, LockKeyhole, MapPin, Pencil, Plus, RotateCcw, Send, Smartphone, Trash2, Users } from 'lucide-react';
 import { useRef, useState, type FormEvent } from 'react';
 import {
-  balances, canWrite, dateLabel, dateRange, isOwner, nameOf, newId, ownerOf, record,
-  settlementStatus, today, viewerOf, type Demo, type Plan,
+  canWrite, dateLabel, dateRange, isOwner, nameOf, newId, ownerOf, record,
+  today, viewerOf, type Demo, type Plan,
 } from './model';
 import { readTripFields, TripFields } from './screens';
 import { Dialog, Empty, PageTitle } from './ui';
 import type { ItineraryChange, UpdateTrip } from './trip-command';
 import { tripHref } from './workspace-route';
+import { financialSnapshot } from './finance-view';
 
 export function Itinerary({ data, update, loading }: { data: Demo; update: UpdateTrip; loading?: boolean }) {
   const first = data.trip.start || data.plans[0]?.day || today(data.trip.timezone);
@@ -144,9 +145,7 @@ export function Settings({ data, update, disabled }: { data: Demo; update: Updat
   const owner = isOwner(data);
   const editing = owner && canWrite(data);
   const conflict = Boolean(form.version !== undefined && data.remote && data.remote.version > form.version);
-  const exactBalances = !data.remote || data.remote.balances.length === data.members.length;
-  const settled = exactBalances && Object.values(balances(data)).every(total => total === 0) &&
-    (data.remote ? data.remote.pendingCount === 0 : data.settlements.every(item => settlementStatus(item) !== 'pending'));
+  const settled = financialSnapshot(data).balanced;
 
   function loadVersion(keepChanges: boolean) {
     const server = data.trip;

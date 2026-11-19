@@ -12,20 +12,21 @@ import {
 import { Amount, Avatar, CategoryIcon, Dialog, Empty, PageTitle } from './ui';
 import type { UpdateTrip } from './trip-command';
 import { tripHref } from './workspace-route';
+import { financialSnapshot } from './finance-view';
+import { parsePositiveMoney } from './money-input';
 
 const sortExpenses = (a: Expense, b: Expense) => b.date.localeCompare(a.date);
 
 function ExpenseRow({ expense, data }: { expense: Expense; data: Demo }) {
   const me = viewerOf(data);
   const share = expense.shares[me] ?? 0;
-  const net = (expense.payer === me ? expense.amount : 0) - share;
   return <a className={'list-row expense-row' + (expense.voided ? ' voided' : '')} href={tripHref(data, 'khoan-chi', expense.id)}>
     <CategoryIcon category={expense.category} />
     <div className="row-text"><strong>{expense.title}</strong>
       <span>{expense.voided ? 'Đã hủy' : nameOf(data, expense.payer) + ' đã trả'} <span aria-hidden>·</span> {categories[expense.category]}</span>
     </div>
     <div className="row-end expense-money"><strong><Amount value={expense.amount} /></strong>
-      {!expense.voided && net !== 0 && <small className={net < 0 ? 'negative' : 'positive'}><Amount value={net} signed /></small>}
+      {!expense.voided && me && <small>Phần của bạn: <Amount value={share} /></small>}
     </div>
     <ChevronRight className="row-chevron" size={16} aria-hidden />
   </a>;
@@ -44,7 +45,9 @@ export function Overview({ data, loadingExpenses, loadingTransfers }: { data: De
   const members = data.members.filter(member => !member.inactive);
   const expenses = activeExpenses(data).sort(sortExpenses);
   const me = viewerOf(data);
-  const net = balances(data)[me] ?? 0;
+  const finance = financialSnapshot(data);
+  const personal = finance.lines[me];
+  const net = personal?.netMinor ?? 0;
   const transfers = suggestions(data);
   const pending = data.remote?.pendingCount ?? data.settlements.filter(item => settlementStatus(item) === 'pending').length;
   return <>
@@ -79,17 +82,17 @@ export function Overview({ data, loadingExpenses, loadingTransfers }: { data: De
       <a className="summary-card summary-total" href={tripHref(data, 'chi-tieu')}>
         <span className="summary-top"><span className="tile-icon summary-icon"><Wallet size={18} aria-hidden /></span><ArrowUpRight size={17} aria-hidden /></span>
         <span className="summary-label">Tổng chi tiêu</span>
-        <strong><Amount value={data.remote?.total ?? expenses.reduce((sum, expense) => sum + expense.amount, 0)} /></strong>
+        <strong>{finance.complete ? <Amount value={data.remote!.total} /> : 'Chưa đủ dữ liệu'}</strong>
       </a>
       <a className="summary-card" href={tripHref(data, 'chi-tieu')}>
         <span className="summary-top"><span className="tile-icon summary-icon"><ReceiptText size={18} aria-hidden /></span><ArrowUpRight size={17} aria-hidden /></span>
         <span className="summary-label">Phần chi của bạn</span>
-        <strong>{me ? <Amount value={data.remote?.balances.find(item => item.participantId === me)?.owedMinor ?? expenses.reduce((sum, expense) => sum + (expense.shares[me] ?? 0), 0)} /> : 'Chưa liên kết'}</strong>
+        <strong>{!me ? 'Chưa liên kết' : personal ? <Amount value={personal.owedMinor} /> : 'Chưa đủ dữ liệu'}</strong>
       </a>
       <a className={'summary-card personal' + (net < 0 ? ' negative-card' : '')} href={tripHref(data, 'so-du')}>
         <span className="summary-top"><span className="tile-icon summary-icon"><ArrowDownLeft size={19} aria-hidden /></span><ArrowUpRight size={17} aria-hidden /></span>
-        <span className="summary-label">{me ? netLabel(net) : 'Số dư của bạn'}</span>
-        <strong>{me ? <Amount value={Math.abs(net)} /> : 'Chưa liên kết'}</strong>
+        <span className="summary-label">{personal ? netLabel(net) : 'Số dư của bạn'}</span>
+        <strong>{!me ? 'Chưa liên kết' : personal ? <Amount value={Math.abs(net)} /> : 'Chưa đủ dữ liệu'}</strong>
       </a>
     </div>
     <div className="overview-sections">
@@ -104,7 +107,7 @@ export function Overview({ data, loadingExpenses, loadingTransfers }: { data: De
         <div className="section-heading"><h2 id="suggest-title">Gợi ý quyết toán</h2><a className="text-button" href={tripHref(data, 'so-du')}>Xem số dư <ChevronRight size={16} aria-hidden /></a></div>
         <div className="rows">{loadingTransfers ? <Empty>Đang tải gợi ý…</Empty> : transfers.length
           ? transfers.slice(0, 3).map(transfer => <div key={transfer.from + '-' + transfer.to} className="list-row"><TransferRow data={data} transfer={transfer} /></div>)
-          : <Empty>{pending ? 'Có khoản chuyển đang chờ xác nhận.' : 'Các thành viên đã cân bằng.'}</Empty>}
+          : <Empty>{finance.balanced ? 'Các thành viên đã cân bằng.' : pending ? 'Có khoản chuyển đang chờ xác nhận.' : 'Chưa có gợi ý đầy đủ. Mở Số dư để kiểm tra và ghi khoản chuyển.'}</Empty>}
         </div>
       </section>
     </div>
@@ -172,19 +175,20 @@ export function Expenses({ data, filters, onFilter, onMore, loading }: {
   </>;
 }
 
-export function Balances({ data, update, loading }: { data: Demo; update: UpdateTrip; loading?: boolean }) {
+export function Balances({ data, update, loading, disabled }: { data: Demo; update: UpdateTrip; loading?: boolean; disabled?: boolean }) {
   const [selected, setSelected] = useState<{ transfer?: Transfer; ledgerVersion?: number }>();
   const [from, setFrom] = useState('');
   const [to, setTo] = useState('');
   const [error, setError] = useState('');
-  const totals = balances(data);
+  const finance = financialSnapshot(data);
+  const totals = finance.net;
   const transfers = suggestions(data);
   const me = viewerOf(data);
   const net = totals[me] ?? 0;
-  const complete = data.members.every(member => Object.hasOwn(totals, member.id));
+  const complete = finance.complete;
   const hasPersonal = complete && Object.hasOwn(totals, me);
   const pending = data.remote?.pendingCount ?? data.settlements.filter(item => settlementStatus(item) === 'pending').length;
-  const allSettled = complete && Object.values(totals).every(total => total === 0) && pending === 0;
+  const allSettled = finance.balanced;
   const debtors = data.members.filter(member => totals[member.id] < 0 && (isOwner(data) || member.id === me));
   const creditors = data.members.filter(member => totals[member.id] > 0);
   const cap = Math.min(-(totals[from] ?? 0), totals[to] ?? 0);
@@ -200,9 +204,9 @@ export function Balances({ data, update, loading }: { data: Demo; update: Update
 
   function save(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (!selected || !transfer || stale || !complete) return;
-    const amount = Number(new FormData(event.currentTarget).get('amount'));
-    if (!Number.isSafeInteger(amount) || amount < 1 || amount > transfer.amount) { setError('Nhập số tiền trong khoảng cho phép.'); return; }
+    if (!selected || !transfer || stale || !complete || disabled) return;
+    const amount = parsePositiveMoney(String(new FormData(event.currentTarget).get('amount') ?? ''));
+    if (amount === undefined || amount > transfer.amount) { setError('Nhập số nguyên VND từ 1đ đến ' + money(transfer.amount) + ', ví dụ 10.000.'); return; }
     const entry: Settlement = { ...transfer, amount, id: newId(), confirmed: false, date: today(data.trip.timezone), recordedBy: me };
     update(record({ ...data, settlements: [entry, ...data.settlements] }, 'Ghi nhận chuyển tiền', nameOf(data, entry.from) + ' → ' + nameOf(data, entry.to) + ' · ' + money(amount), '#quyet-toan'),
       { type: 'record-settlement', transfer: entry, ledgerVersion: selected.ledgerVersion }, () => { setSelected(undefined); window.location.hash = tripHref(data, 'quyet-toan'); });
@@ -218,41 +222,36 @@ export function Balances({ data, update, loading }: { data: Demo; update: Update
       {pending > 0 && <a className="text-button" href={tripHref(data, 'quyet-toan')}>{pending} khoản đang chờ xác nhận <ChevronRight size={15} aria-hidden /></a>}
     </div>
     <section>
-      <div className="section-heading"><h2>Số dư thành viên</h2><span className="tag">{data.members.length} người</span></div>
+      <div className="section-heading"><h2>Số tiền của từng thành viên</h2><span className="tag">{data.members.length} người</span></div>
+      <p className="inline-note money-explainer">Phải chịu là tổng phần được chia từ các khoản chi. Cần trả / được nhận đã trừ tiền ứng và các khoản chuyển được xác nhận.</p>
       <div className="card rows">{data.members.map(member => {
         const total = totals[member.id];
-        const remote = data.remote?.balances.find(item => item.participantId === member.id);
-        const expenses = activeExpenses(data);
-        const paid = remote?.paidMinor ?? expenses.filter(expense => expense.payer === member.id).reduce((sum, expense) => sum + expense.amount, 0);
-        const share = remote?.owedMinor ?? expenses.reduce((sum, expense) => sum + (expense.shares[member.id] ?? 0), 0);
-        const entries = data.settlements.filter(item => settlementStatus(item) === 'confirmed');
-        const sent = remote?.sentMinor ?? entries.filter(item => item.from === member.id).reduce((sum, item) => sum + item.amount, 0);
-        const received = remote?.receivedMinor ?? entries.filter(item => item.to === member.id).reduce((sum, item) => sum + item.amount, 0);
+        const row = finance.lines[member.id];
         if (total === undefined) return <div className="list-row" key={member.id}><Avatar member={member} />
           <div className="row-text"><strong>{member.name}</strong><span>Chưa có dữ liệu số dư</span></div></div>;
-        return <details className="balance-detail" key={member.id}>
-          <summary className="list-row"><Avatar member={member} />
-            <span className="row-text"><strong>{nameOf(data, member.id)}{member.id === me ? ' (bạn)' : ''}</strong><span>{total > 0 ? 'Được nhận' : total < 0 ? 'Cần trả' : 'Đã cân bằng'}</span></span>
-            <strong className={'row-end ' + (total < 0 ? 'negative' : total > 0 ? 'positive' : '')}><Amount value={total} signed /></strong><ChevronRight size={16} aria-hidden />
-          </summary>
-          <dl className="balance-breakdown">{[['Đã ứng', paid], ['Phần chi', share], ['Đã gửi', sent], ['Đã nhận', received]].map(([label, value]) =>
+        return <section className="balance-member" aria-label={'Số dư của ' + nameOf(data, member.id)} key={member.id}>
+          <div className="list-row"><Avatar member={member} />
+            <span className="row-text"><strong>{nameOf(data, member.id)}{member.id === me ? ' (bạn)' : ''}{member.inactive && ' · Ngừng dùng'}</strong><span>{total > 0 ? 'Được nhận' : total < 0 ? 'Cần trả' : 'Đã cân bằng'}</span></span>
+            <strong className={'row-end ' + (total < 0 ? 'negative' : total > 0 ? 'positive' : '')}><Amount value={Math.abs(total)} /></strong>
+          </div>
+          <dl className="balance-breakdown">{[['Phải chịu', row.owedMinor], ['Đã ứng', row.paidMinor], ['Đã chuyển', row.sentMinor], ['Đã nhận', row.receivedMinor]].map(([label, value]) =>
             <div key={label}><dt>{label}</dt><dd><Amount value={Number(value)} /></dd></div>)}</dl>
-        </details>;
+        </section>;
       })}</div>
     </section>
     <section>
       <div className="section-heading"><h2>Gợi ý chuyển tiền</h2>
         {complete && canWrite(data) && debtors.length > 0 && creditors.length > 0 &&
-          <button className="secondary-button compact" onClick={() => open()}>Ghi khoản chuyển khác</button>}
+          <button className="secondary-button compact" disabled={disabled} onClick={() => open()}>Ghi khoản chuyển khác</button>}
       </div>
       {loading && <p role="status">Đang tải gợi ý chuyển tiền…</p>}
-      {!loading && !transfers.length && <div className="card empty-stack"><CircleCheck size={26} aria-hidden /><Empty>{allSettled ? 'Mọi người đã cân bằng.' : pending ? 'Các khoản còn lại đang chờ xác nhận.' : 'Chưa có gợi ý cho số dư hiện tại.'}</Empty>
+      {!loading && !transfers.length && <div className="card empty-stack">{allSettled ? <CircleCheck size={26} aria-hidden /> : <Wallet size={26} aria-hidden />}<Empty>{allSettled ? 'Mọi người đã cân bằng.' : pending ? 'Các khoản còn lại đang chờ xác nhận.' : 'Chưa có gợi ý cho số dư hiện tại.'}</Empty>
         {allSettled && !data.trip.closed && isOwner(data) && <a className="secondary-button" href={tripHref(data, 'cai-dat')}>Chốt chuyến đi</a>}
       </div>}
       {pending > 0 && <p className="inline-note">Các khoản đang chờ vẫn nằm ngoài số tiền đã xác nhận. Kiểm tra lịch sử trước khi ghi thêm khoản chuyển.</p>}
       <div className="transfer-grid">{!loading && complete && transfers.map(suggestion => <div className="card transfer-card" key={suggestion.from + '-' + suggestion.to}>
         <div className="list-row"><TransferRow data={data} transfer={suggestion} /></div>
-        {canWrite(data) && (isOwner(data) || suggestion.from === me) && <button className="soft-button transfer-button" onClick={() => open(suggestion)}><ArrowDownUp size={16} aria-hidden /> Ghi nhận đã chuyển</button>}
+        {canWrite(data) && (isOwner(data) || suggestion.from === me) && <button className="soft-button transfer-button" disabled={disabled} onClick={() => open(suggestion)}><ArrowDownUp size={16} aria-hidden /> Ghi nhận đã chuyển</button>}
       </div>)}</div>
     </section>
     {selected && <Dialog title="Ghi nhận đã chuyển tiền" onClose={() => setSelected(undefined)}>
@@ -262,11 +261,11 @@ export function Balances({ data, update, loading }: { data: Demo; update: Update
           <label>Người chuyển<select aria-label="Người chuyển" value={from} onChange={event => setFrom(event.target.value)}>{debtors.map(member => <option value={member.id} key={member.id}>{nameOf(data, member.id)}</option>)}</select></label>
           <label>Người nhận<select aria-label="Người nhận" value={to} onChange={event => setTo(event.target.value)}>{creditors.map(member => <option value={member.id} key={member.id}>{nameOf(data, member.id)}</option>)}</select></label>
         </div>}
-        {transfer && <label>Số tiền đã chuyển (VND)<input key={transfer.from + '/' + transfer.to} type="number" name="amount" min="1" max={transfer.amount} defaultValue={selected.transfer?.amount} required /></label>}
+        {transfer && <label>Số tiền đã chuyển (VND)<input key={transfer.from + '/' + transfer.to} inputMode="numeric" name="amount" placeholder="Ví dụ: 10.000" defaultValue={selected.transfer?.amount} required /></label>}
         {transfer && <p>Tối đa {money(transfer.amount)}</p>}
         {stale && <p className="error" role="alert">Số dư đã thay đổi. Đóng hộp thoại rồi kiểm tra khoản chuyển mới.</p>}
         {error && <p className="error" role="alert">{error}</p>}
-        <button className="primary-button" disabled={stale || !transfer || !complete}>Ghi nhận</button>
+        <button className="primary-button" disabled={disabled || stale || !transfer || !complete}>Ghi nhận</button>
       </form>
     </Dialog>}
   </>;
@@ -274,8 +273,8 @@ export function Balances({ data, update, loading }: { data: Demo; update: Update
 
 export type SettlementFilter = 'pending' | 'confirmed' | 'cancelled' | 'void';
 
-export function Settlements({ data, update, onMore, loading, remoteFilter, onFilter }: {
-  data: Demo; update: UpdateTrip; onMore?: () => void; loading?: boolean; remoteFilter?: SettlementFilter; onFilter?: (status: SettlementFilter) => void;
+export function Settlements({ data, update, onMore, loading, remoteFilter, onFilter, disabled }: {
+  data: Demo; update: UpdateTrip; onMore?: () => void; loading?: boolean; remoteFilter?: SettlementFilter; onFilter?: (status: SettlementFilter) => void; disabled?: boolean;
 }) {
   const [localFilter, setLocalFilter] = useState<SettlementFilter>('pending');
   const filter = remoteFilter ?? localFilter;
@@ -299,7 +298,7 @@ export function Settlements({ data, update, onMore, loading, remoteFilter, onFil
 
   function save(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (!selected || stale) return;
+    if (!selected || stale || disabled || !financialSnapshot(data).complete) return;
     const { item, status } = selected;
     if (status === 'confirmed' && ((totals[item.from] ?? 0) > -item.amount || (totals[item.to] ?? 0) < item.amount)) {
       setError('Số dư đã thay đổi. Hãy hủy khoản chuyển này và xem gợi ý mới.');
@@ -348,7 +347,7 @@ export function Settlements({ data, update, onMore, loading, remoteFilter, onFil
       <form className="field-card dialog-fields" onSubmit={save}>
         {selected.status === 'void' && <label>Lý do<input name="reason" maxLength={300} required /></label>}
         {(error || stale) && <p className="error" role="alert">{stale ? 'Số dư đã thay đổi. Đóng hộp thoại và kiểm tra lại.' : error}</p>}
-        <div className="button-pair"><button type="button" className="secondary-button" onClick={() => setSelected(null)}>Quay lại</button><button disabled={Boolean(stale)} className={selected.status === 'confirmed' ? 'primary-button' : 'danger-button'}>Xác nhận</button></div>
+        <div className="button-pair"><button type="button" className="secondary-button" onClick={() => setSelected(null)}>Quay lại</button><button disabled={disabled || Boolean(stale) || !financialSnapshot(data).complete} className={selected.status === 'confirmed' ? 'primary-button' : 'danger-button'}>Xác nhận</button></div>
       </form>
     </Dialog>}
   </>;

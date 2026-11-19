@@ -4,6 +4,8 @@ Ngày khảo sát 18/11/2026 · Phạm vi mã trong workspace, giao diện và A
 
 ## Tiến độ triển khai ngày 18/11/2026
 
+Hoàn thiện màn hình tiền: phần phải chịu hiển thị rõ trong form/chi tiết và luôn thấy trong Số dư cùng đã ứng/chuyển/nhận. Dùng snapshot server đầy đủ cho kết luận công nợ/chốt; bỏ fallback cộng expense đang lọc. Ô chuyển tiền hiểu VND có dấu phân nhóm giống khoản chi. Có thêm 36 unit và 2 hành trình browser cho chia đều/lẻ, trả một phần/đảo, chia chính xác và dữ liệu thiếu. [Quy tắc và bằng chứng](MONEY_SCREENS.md).
+
 Bổ sung S19: [worker đối soát từng lượt](LEDGER_RECONCILIATION.md) dùng lại checker, lease 120 giây, checkpoint theo chuyến, retry tối đa 3 lần và chu kỳ 15 phút. Summary có trong Hệ thống quản trị; dữ liệu tiền chỉ đọc. Có kiểm thử lease stale, crash/reclaim, phân trang và schema DTO. Lịch cloud, backup/restore, repair và cảnh báo vẫn còn mở.
 
 Bổ sung: ô mật khẩu đăng nhập/đăng ký có nút hiện/ẩn bằng con mắt, kiểm cả thao tác bàn phím và giữ nội dung. Bắt đầu O13 của S19 với [log HTTP theo allowlist và mã request](OPERATIONS_LOGGING.md); đã có 5 kiểm thử cho dữ liệu riêng tư, lỗi server và request ID. Lịch workers, backup/restore, repair và cảnh báo còn mở.

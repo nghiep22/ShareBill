@@ -328,6 +328,13 @@ input[type="radio"], input[type="checkbox"] { min-height: 0; width: 16px; height
 .balance-breakdown dt { color: var(--muted); font-size: 12px; }
 .balance-breakdown dd { margin: 0; font-weight: 700; }
 .balance-breakdown .amount { white-space: normal; overflow-wrap: anywhere; }
+.balance-member + .balance-member { border-top: 1px solid var(--line); }
+.money-explainer { margin-bottom: 12px; }
+.split-caption { display: block; color: var(--muted); font-size: 11px; font-weight: 500; }
+.split-row > strong { text-align: right; }
+.member-money { display: grid; justify-items: end; gap: 2px; }
+.member-money small { color: var(--muted); font-size: 11px; }
+.summary-card .amount { white-space: normal; overflow-wrap: anywhere; }
 .balance-hero { justify-items: start; }
 .settlement-meta { display: flex; flex-wrap: wrap; gap: 8px 12px; padding: 0 12px 8px; color: var(--muted); font-size: 12px; }
 .empty-stack { display: grid; justify-items: center; padding: 24px 12px; }

@@ -76,7 +76,10 @@ export function Members({ data, update, accounts }: { data: Demo; update: Update
           <div className="row-text"><strong>{nameOf(data, id)}{id === viewerOf(data) ? ' (bạn)' : ''}</strong>
             <span>{member.inactive ? 'Ngừng sử dụng' : id === ownerOf(data) ? 'Chủ chuyến' : member.linked ? 'Đã liên kết tài khoản' : 'Chưa có tài khoản'}</span>
           </div>
-          <strong className={'row-end ' + (net > 0 ? 'positive' : net < 0 ? 'negative' : 'muted')}><Amount value={net} signed /></strong>
+          <span className="row-end member-money">{net === undefined ? 'Chưa đủ dữ liệu' : <>
+            <small>{net < 0 ? 'Cần trả' : net > 0 ? 'Được nhận' : 'Đã cân bằng'}</small>
+            <strong className={net > 0 ? 'positive' : net < 0 ? 'negative' : 'muted'}><Amount value={Math.abs(net)} /></strong>
+          </>}</span>
           {(data.remote ? canEdit : owner) && <button className="icon-button member-settings" aria-label={'Quản lý ' + nameOf(data, id)} onClick={() => edit(member)}><Settings2 size={18} aria-hidden /></button>}
         </div>;
       })}

@@ -46,7 +46,10 @@ async function fixture(t) {
   const expenses = 'trips/' + trip.id + '/expenses';
   const screen = route => web + '/#chuyen/' + trip.id + '/' + route;
   const context = await browser.newContext();
-  t.after(() => context.close());
+  t.after(async () => {
+    await context.unrouteAll({ behavior: 'ignoreErrors' });
+    await context.close();
+  });
   await context.addInitScript(session => {
     const key = 'sharebill-live-session-v1';
     if (!sessionStorage.getItem(key)) sessionStorage.setItem(key, JSON.stringify(session));
@@ -293,6 +296,149 @@ test('trusted devices recover an offline draft and clear private data on sign ou
       };
     });
   });
+});
+
+test('money screens keep equal shares, remaining debt, partial payments and reversals consistent', { timeout: 90000 }, async t => {
+  const { page, session, trip, screen } = await fixture(t);
+  const root = 'trips/' + trip.id;
+  const peers = [];
+  for (const displayName of ['Bình', 'Chi']) peers.push(await call(root + '/participants', session, { method: 'POST', body: { displayName } }));
+  const overview = () => call(root + '/overview', session);
+  const format = value => new Intl.NumberFormat('vi-VN').format(value) + 'đ';
+  async function checkMember(name, id) {
+    const snapshot = await overview(), row = snapshot.balances.find(row => row.participantId === id);
+    const card = page.getByRole('region', { name: 'Số dư của ' + name, exact: true });
+    await card.getByText(format(Math.abs(row.netMinor)), { exact: true }).first().waitFor();
+    for (const [label, value] of [['Phải chịu', row.owedMinor], ['Đã ứng', row.paidMinor], ['Đã chuyển', row.sentMinor], ['Đã nhận', row.receivedMinor]]) {
+      const cell = card.locator('dl > div').filter({ hasText: label });
+      await cell.getByText(format(value), { exact: true }).waitFor();
+    }
+    assert.equal(await card.locator('dl').isVisible(), true);
+    return row;
+  }
+  await page.goto(screen('them-khoan-chi'));
+  await heading(page, 'Thêm khoản chi');
+  await page.getByLabel('Tên khoản chi').fill('Khoản chia đều ba người');
+  await page.getByLabel('Số tiền đã trả').fill('100.000');
+  for (const name of ['An', 'Bình', 'Chi']) await page.getByLabel('Phần chia dự kiến của ' + name, { exact: true }).getByText('Phải chịu', { exact: true }).waitFor();
+  await page.getByText(/chênh lệch tối đa 1đ/).waitFor();
+  await page.getByRole('button', { name: /Lưu khoản chi/ }).click();
+  await heading(page, 'Khoản chia đều ba người');
+  await heading(page, 'Mỗi người phải chịu');
+  const expense = (await call(root + '/expenses', session)).items[0];
+  assert.equal(expense.shares.reduce((sum, row) => sum + row.amountMinor, 0), 100000);
+  assert.ok(Math.max(...expense.shares.map(row => row.amountMinor)) - Math.min(...expense.shares.map(row => row.amountMinor)) <= 1);
+  for (const [name, id] of [['An', trip.ownerParticipantId], ['Bình', peers[0].id], ['Chi', peers[1].id]]) {
+    const row = page.getByLabel('Phần phải chịu của ' + name, { exact: true });
+    await row.getByText(format(expense.shares.find(row => row.participantId === id).amountMinor), { exact: true }).waitFor();
+  }
+  await page.goto(screen('so-du'));
+  const debt = await checkMember('Bình', peers[0].id);
+  await checkMember('An', trip.ownerParticipantId);
+  await checkMember('Chi', peers[1].id);
+  async function recordPartial(checkInvalid = false) {
+    await page.getByRole('button', { name: 'Ghi khoản chuyển khác', exact: true }).click();
+    const dialog = page.getByRole('dialog');
+    await dialog.getByLabel('Người chuyển', { exact: true }).selectOption(peers[0].id);
+    await dialog.getByLabel('Người nhận', { exact: true }).selectOption(trip.ownerParticipantId);
+    const amount = dialog.getByLabel('Số tiền đã chuyển (VND)', { exact: true });
+    if (checkInvalid) {
+      await amount.fill('1e3');
+      await dialog.getByRole('button', { name: 'Ghi nhận', exact: true }).click();
+      await dialog.getByRole('alert').waitFor();
+      assert.equal((await call(root + '/settlements?status=pending', session)).items.length, 0);
+      await amount.fill(String(-debt.netMinor + 1));
+      await dialog.getByRole('button', { name: 'Ghi nhận', exact: true }).click();
+      await dialog.getByRole('alert').waitFor();
+      assert.equal((await call(root + '/settlements?status=pending', session)).items.length, 0);
+    }
+    await amount.fill('10.000');
+    await dialog.getByRole('button', { name: 'Ghi nhận', exact: true }).click();
+    await heading(page, 'Lịch sử chuyển tiền');
+    await page.getByRole('button', { name: 'Xác nhận thay', exact: true }).waitFor();
+    const pending = (await call(root + '/settlements?status=pending', session)).items[0];
+    assert.equal(pending.amountMinor, 10000);
+  }
+  await recordPartial(true);
+  assert.equal((await overview()).balances.find(row => row.participantId === peers[0].id).netMinor, debt.netMinor);
+  await page.getByRole('button', { name: 'Xác nhận thay', exact: true }).click();
+  await page.getByRole('dialog').getByRole('button', { name: 'Xác nhận', exact: true }).click();
+  await page.getByRole('button', { name: 'Hủy hiệu lực', exact: true }).waitFor();
+  await page.goto(screen('so-du'));
+  const afterPayment = await checkMember('Bình', peers[0].id);
+  assert.equal(afterPayment.owedMinor, debt.owedMinor);
+  assert.equal(afterPayment.netMinor, debt.netMinor + 10000);
+  await page.goto(screen('quyet-toan') + '?status=confirmed');
+  await page.getByRole('button', { name: 'Hủy hiệu lực', exact: true }).click();
+  let dialog = page.getByRole('dialog');
+  await dialog.getByLabel('Lý do', { exact: true }).fill('Đảo khoản chuyển nhập nhầm');
+  await dialog.getByRole('button', { name: 'Xác nhận', exact: true }).click();
+  await page.getByText('Lý do: Đảo khoản chuyển nhập nhầm', { exact: true }).waitFor();
+  await page.goto(screen('so-du'));
+  assert.equal((await checkMember('Bình', peers[0].id)).netMinor, debt.netMinor);
+  await recordPartial();
+  await page.getByRole('button', { name: 'Hủy', exact: true }).click();
+  await page.getByRole('dialog').getByRole('button', { name: 'Xác nhận', exact: true }).click();
+  await page.getByText('Đã hủy', { exact: true }).last().waitFor();
+  assert.equal((await overview()).balances.find(row => row.participantId === peers[0].id).netMinor, debt.netMinor);
+  await page.goto(screen('sua-khoan-chi/' + expense.id));
+  await heading(page, 'Sửa khoản chi');
+  await page.getByLabel('Số tiền đã trả').fill('120.000');
+  await page.getByRole('button', { name: /Lưu khoản chi/ }).click();
+  await heading(page, 'Khoản chia đều ba người');
+  await page.goto(screen('so-du'));
+  assert.equal((await checkMember('Bình', peers[0].id)).owedMinor, 40000);
+  await page.goto(screen('sua-khoan-chi/' + expense.id));
+  await heading(page, 'Sửa khoản chi');
+  await page.getByRole('button', { name: 'Nhập từng phần', exact: true }).click();
+  await page.getByLabel('Phần chia dự kiến của An', { exact: true }).getByRole('checkbox').uncheck();
+  await page.getByLabel('Phần chia của Bình', { exact: true }).fill('0');
+  await page.getByLabel('Phần chia của Chi', { exact: true }).fill('120.000');
+  await page.getByRole('button', { name: /Lưu khoản chi/ }).click();
+  await heading(page, 'Khoản chia đều ba người');
+  const exact = await call(root + '/expenses/' + expense.id, session);
+  assert.equal(exact.payerParticipantId, trip.ownerParticipantId);
+  assert.equal(exact.shares.some(row => row.participantId === trip.ownerParticipantId), false);
+  await page.goto(screen('so-du'));
+  assert.equal((await checkMember('Bình', peers[0].id)).owedMinor, 0);
+  assert.equal((await checkMember('Chi', peers[1].id)).owedMinor, 120000);
+  await page.goto(screen('khoan-chi/' + expense.id));
+  await page.getByRole('button', { name: 'Hủy khoản chi', exact: true }).click();
+  dialog = page.getByRole('dialog');
+  await dialog.getByLabel('Lý do hủy').fill('Không còn dùng khoản chi thử nghiệm');
+  await dialog.getByRole('button', { name: 'Xác nhận hủy', exact: true }).click();
+  await page.getByText(/Khoản chi đã hủy. Các phần chia/).waitFor();
+  await page.goto(screen('so-du'));
+  assert.equal((await checkMember('Bình', peers[0].id)).netMinor, 0);
+  assert.equal((await checkMember('An', trip.ownerParticipantId)).paidMinor, 0);
+  await page.getByText('Mọi người đã cân bằng.', { exact: true }).waitFor();
+  await page.goto(screen('cai-dat'));
+  await page.getByRole('button', { name: 'Chốt chuyến đi', exact: true }).click();
+  await page.getByRole('dialog').getByRole('button', { name: 'Xác nhận', exact: true }).click();
+  await heading(page, 'Chuyến đi đã chốt');
+  assert.equal((await overview()).trip.status, 'archived');
+});
+
+test('incomplete financial snapshots never show a zero debt or enable archive', async t => {
+  const { page, context, session, trip, screen } = await fixture(t);
+  await call('trips/' + trip.id + '/participants', session, { method: 'POST', body: { displayName: 'Bình' } });
+  await context.route('**/api/v1/trips/*/overview', async route => {
+    const response = await route.fetch(), body = await response.json();
+    body.data.balances.pop();
+    await route.fulfill({ response, json: body });
+  });
+  await page.goto(screen('so-du'));
+  await page.getByText(/Chưa đủ dữ liệu số dư để kết luận/).waitFor();
+  assert.equal(await page.getByText('Mọi người đã cân bằng.', { exact: true }).count(), 0);
+  assert.equal(await page.getByRole('button', { name: 'Ghi khoản chuyển khác', exact: true }).count(), 0);
+  await page.goto(screen('tong-quan'));
+  await page.getByText('Chưa đủ dữ liệu', { exact: true }).first().waitFor();
+  assert.equal(await page.getByText('Các thành viên đã cân bằng.', { exact: true }).count(), 0);
+  await page.goto(screen('cai-dat'));
+  assert.equal(await page.getByRole('button', { name: 'Chốt chuyến đi', exact: true }).count(), 0);
+  await page.goto(screen('thanh-vien'));
+  await heading(page, 'Thành viên & phân quyền');
+  assert.equal(await page.getByText('NaNđ', { exact: false }).count(), 0);
 });
 
 test('two accounts record an expense, confirm repayment and archive a balanced trip', async t => {

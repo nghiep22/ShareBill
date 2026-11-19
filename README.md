@@ -25,6 +25,8 @@ Giao diện quản trị nằm ở `/admin`. Cấp quyền Google operator và c
 
 S18 đã deploy FE/API cùng SHA, kiểm Auth/luồng tiền và 18 index trên cloud; xem [báo cáo và công cụ smoke](docs/STAGING_SMOKE.md). Lệnh `pnpm smoke --help` xem cách kiểm bản triển khai. Còn nghiệm thu Google quản trị, bucket ảnh và thiết bị thật.
 
+[Các màn hình tiền](docs/MONEY_SCREENS.md) phân biệt phần mỗi người phải chịu và công nợ còn lại, hiện trực tiếp số đã ứng/chuyển/nhận, kiểm nhập VND và xử lý số dư chưa đủ dữ liệu.
+
 ## Hướng triển khai đề xuất
 
 - **Frontend:** thư mục `fe/` dành cho Next.js/React + TypeScript, responsive mobile-first, PWA và website quản trị React.

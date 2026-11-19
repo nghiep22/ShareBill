@@ -9,18 +9,10 @@ import {
 import { Amount, Avatar, CategoryIcon, CategorySelect, Dialog, PageTitle } from './ui';
 import type { ReceiptActions, UpdateTrip } from './trip-command';
 import { tripHref } from './workspace-route';
+import { maximumMoney as maximum, parseMoney } from './money-input';
 import { clearExpenseDraft, getExpenseDraft, saveExpenseDraft, type DeviceScope, type ExpenseDraft } from './private-device';
 
 const receiptTypes = ['image/jpeg', 'image/png', 'image/webp'];
-const maximum = 1_000_000_000_000;
-
-function parseMoney(value: string): string | undefined {
-  const trimmed = value.trim();
-  if (/^\d{0,13}$/.test(trimmed)) return trimmed;
-  if (!/^(?:\d{1,3}(?:\.\d{3})+|\d{1,3}(?:,\d{3})+)$/.test(trimmed)) return;
-  const plain = trimmed.replace(/[.,]/g, '');
-  if (plain.length <= 13) return plain;
-}
 
 async function readReceipt(file: File): Promise<Receipt> {
   const incoming = URL.createObjectURL(file);
@@ -307,18 +299,22 @@ export function ExpenseForm({ data, expense: latest, update, receiptActions, dis
           }}>Nhập từng phần</button>
         </div>
         <div className="split-list">
-          {eligible.map(member => <div className="split-row" key={member.id}>
+          {eligible.map(member => <div className="split-row" aria-label={'Phần chia dự kiến của ' + nameOf(data, member.id)} key={member.id}>
             <label><input type="checkbox" checked={selected.includes(member.id)} onChange={e =>
               setSelected(e.target.checked ? [...selected, member.id] : selected.filter(id => id !== member.id))
             } /><Avatar member={member} /> {nameOf(data, member.id)}{member.inactive && <small>Ngừng dùng</small>}</label>
             {selected.includes(member.id) && (mode === 'equal'
-              ? <strong><Amount value={shares[member.id]} /></strong>
+              ? <strong><span className="split-caption">Phải chịu </span><Amount value={shares[member.id]} /></strong>
               : <input className="split-input" aria-label={'Phần chia của ' + nameOf(data, member.id)} aria-invalid={invalid.includes(member.id)} inputMode="numeric" placeholder="0"
                 value={exact[member.id] ?? ''}
                 onChange={e => enterMoney(member.id, e.target.value, value => setExact(current => ({ ...current, [member.id]: value })))} />
             )}
           </div>)}
         </div>
+        {mode === 'equal' && ids.length > 0 && total > 0 && Number.isSafeInteger(total) && <p className="inline-note" aria-live="polite">
+          {money(total)} chia đều {ids.length} người. Tổng phần chia {money(assigned)}.
+          {total % ids.length !== 0 && ' Phần lẻ được phân bổ theo thứ tự thành viên cố định; chênh lệch tối đa 1đ.'}
+        </p>}
         {mode === 'exact' && <p className={'inline-note ' + (difference ? 'error' : 'positive')} aria-live="polite">
           Đã chia {money(assigned)} / {money(total)}. {difference > 0 ? 'Còn thiếu ' + money(difference) : difference < 0 ? 'Vượt ' + money(-difference) : 'Tổng phần chia đã khớp.'}
         </p>}
@@ -403,11 +399,13 @@ export function ExpenseDetail({ data, expense, update, receiptActions }: { data:
       <p>{expense.createdBy && 'Được tạo bởi ' + nameOf(data, expense.createdBy)}{expense.editedBy && ' · Sửa lần cuối bởi ' + nameOf(data, expense.editedBy)}</p>
     </section>
     <section>
-      <div className="section-heading"><h2>Phần chia</h2><span className="tag">{expense.mode === 'equal' ? 'Chia đều' : 'Theo số tiền'}</span></div>
+      <div className="section-heading"><h2>Mỗi người phải chịu</h2><span className="tag">{expense.mode === 'equal' ? 'Chia đều' : 'Theo số tiền'}</span></div>
+      <p className="inline-note money-explainer">{expense.voided ? 'Khoản chi đã hủy. Các phần chia dưới đây chỉ để xem lại, không còn tính vào số dư.' : nameOf(data, expense.payer) + ' đã ứng toàn bộ. Đây là phần chi của từng người, chưa phải khoản chuyển tiền đã xác nhận.'}</p>
       <div className="card rows">{data.members.filter(member => member.id in expense.shares).map(member =>
-        <div key={member.id} className="list-row"><Avatar member={member} /><strong className="row-text">{nameOf(data, member.id)}</strong>
+        <div key={member.id} className="list-row" aria-label={'Phần phải chịu của ' + nameOf(data, member.id)}><Avatar member={member} /><span className="row-text"><strong>{nameOf(data, member.id)}{member.id === viewerOf(data) && ' (bạn)'}</strong><span>{member.id === expense.payer ? 'Người đã ứng tiền' : 'Phần được chia'}</span></span>
           <strong className="row-end"><Amount value={expense.shares[member.id]} /></strong></div>
       )}</div>
+      <a className="text-button" href={tripHref(data, 'so-du')}>Xem số tiền còn cần trả / được nhận</a>
     </section>
     {Boolean(expense.receipts?.length) && <section className="card field-card">
       <h2>Ảnh hóa đơn</h2>

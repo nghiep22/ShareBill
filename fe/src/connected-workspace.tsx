@@ -20,6 +20,7 @@ import { MutationFeedback, PageTitle } from './ui';
 import { useHash, useOnline, WorkspaceShell } from './workspace-shell';
 import { isParticipantId, isTripScreen, readWorkspaceRoute, tripHref, tripRoute } from './workspace-route';
 import { PendingOperations } from './operation-recovery';
+import { financialSnapshot } from './finance-view';
 import { clearDeviceData, clearExpenseDraft, getTripSnapshot, preferenceKey, saveTripSnapshot, setTrustedDevice, trustedDevice } from './private-device';
 
 const invitePattern = /^[A-Za-z0-9_-]{43}$/;
@@ -288,6 +289,7 @@ function AuthenticatedWorkspace({ session, api, hash, onSignOut }: { session: Se
     }
     if (transfers.data && hasMatchingLedger) {
       data.remote!.suggestions = transfers.data.suggestions.map(transferFrom);
+      data.remote!.suggestionsReady = !transfers.loading && !transfers.error;
     }
   }
 
@@ -361,9 +363,9 @@ function AuthenticatedWorkspace({ session, api, hash, onSignOut }: { session: Se
             disabled={networkUnavailable || detail.loading || Boolean(detail.error)} /> :
           <ExpenseDetail data={data} expense={expense} key={id} update={update} receiptActions={attachments} />;
         break;
-      case 'so-du': content = <Balances data={data} update={update} loading={transfers.loading} />; break;
+      case 'so-du': content = <Balances data={data} update={update} loading={transfers.loading} disabled={overview.loading || mutation.busy} />; break;
       case 'quyet-toan':
-        content = <Settlements data={data} update={update} onMore={history.more} loading={history.loading} remoteFilter={historyFilter}
+        content = <Settlements data={data} update={update} onMore={history.more} loading={history.loading} remoteFilter={historyFilter} disabled={overview.loading || mutation.busy}
           onFilter={status => replaceRoute(tripRoute(selected, 'quyet-toan', undefined, 'status=' + status))} />;
         break;
       case 'thanh-vien':
@@ -398,6 +400,7 @@ function AuthenticatedWorkspace({ session, api, hash, onSignOut }: { session: Se
       <button className="text-button" disabled={mutation.busy} onClick={refresh}>Tải lại</button>
     </div>}
     {notice && <p className="inline-note workspace-notice" role="status">{notice}</p>}
+    {data && !financialSnapshot(data).complete && <p className="inline-note error" role="alert"><span>Chưa đủ dữ liệu số dư để kết luận số tiền cần trả hoặc chốt chuyến. Tải lại dữ liệu để kiểm tra.</span><button className="text-button" disabled={mutation.busy} onClick={refresh}>Tải lại</button></p>}
     {storageError && <p className="inline-note error" role="status">Thiết bị gặp lỗi khi lưu hoặc xóa dữ liệu ngoại tuyến.</p>}
     {data && (offlineCache || overview.loadedAt) && <p className="inline-note" role="status">
       {networkUnavailable ? 'Dữ liệu đã tải trước đó' : 'Đồng bộ'} lúc {new Date(offlineCache?.at ?? overview.loadedAt!).toLocaleString('vi-VN')}.

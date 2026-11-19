@@ -1,3 +1,5 @@
+import { financialSnapshot, validSuggestions } from './finance-view';
+
 export const categories = {
   stay: 'Lưu trú',
   food: 'Ăn uống',
@@ -57,6 +59,7 @@ export type RemoteSnapshot = {
   total: number;
   balances: BalanceLine[];
   suggestions: Transfer[];
+  suggestionsReady?: boolean;
   itineraryVersion?: number;
 };
 export type Demo = {
@@ -78,6 +81,7 @@ export const newId = () => Array.from(crypto.getRandomValues(new Uint8Array(12))
 
 export function splitEqually(amount: number, ids: string[]) {
   if (!ids.length) return {};
+  ids = [...ids].sort();
   const base = Math.floor(amount / ids.length);
   const remainder = amount % ids.length;
   return Object.fromEntries(ids.map((id, index) => [id, base + Number(index < remainder)]));
@@ -115,45 +119,10 @@ export function record(data: Demo, title: string, detail: string, href?: string)
   return { ...data, activity: [entry, ...(data.activity ?? [])] };
 }
 
-export function balances(data: Demo, reservePending = false) {
-  if (data.remote) return Object.fromEntries(data.remote.balances.map(item => [item.participantId, item.netMinor]));
-  const totals: Record<string, number> = Object.fromEntries(data.members.map(({ id }) => [id, 0]));
-  for (const expense of activeExpenses(data)) {
-    totals[expense.payer] += expense.amount;
-    for (const [id, share] of Object.entries(expense.shares)) totals[id] -= share;
-  }
-  for (const settlement of data.settlements) {
-    if (settlementStatus(settlement) === 'confirmed') {
-      totals[settlement.from] += settlement.amount;
-      totals[settlement.to] -= settlement.amount;
-    }
-  }
-  if (reservePending) {
-    for (const settlement of data.settlements) {
-      if (settlementStatus(settlement) === 'pending' && totals[settlement.from] <= -settlement.amount && totals[settlement.to] >= settlement.amount) {
-        totals[settlement.from] += settlement.amount;
-        totals[settlement.to] -= settlement.amount;
-      }
-    }
-  }
-  return totals;
+export function balances(data: Demo) {
+  return financialSnapshot(data).net;
 }
 
 export function suggestions(data: Demo): Transfer[] {
-  if (data.remote) return data.remote.suggestions;
-  const entries = Object.entries(balances(data, true));
-  const debtors = entries.filter(([, total]) => total < 0).map(([id, total]) => ({ id, left: -total }));
-  const creditors = entries.filter(([, total]) => total > 0).map(([id, total]) => ({ id, left: total }));
-  const transfers: Transfer[] = [];
-  for (const debtor of debtors) {
-    for (const creditor of creditors) {
-      const amount = Math.min(debtor.left, creditor.left);
-      if (amount > 0) {
-        transfers.push({ from: debtor.id, to: creditor.id, amount });
-        debtor.left -= amount;
-        creditor.left -= amount;
-      }
-    }
-  }
-  return transfers;
+  return validSuggestions(data);
 }

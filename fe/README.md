@@ -36,7 +36,7 @@ Link màn hình chuyến có dạng `/#chuyen/{tripId}/khoan-chi/{expenseId}?cat
 
 ## Kiểm thử trình duyệt và quản trị
 
-`pnpm --dir fe test:browser` chạy 7 hành trình bằng Playwright với frontend cổng 3000, API 3001 và Emulator 8080/9099. Cài Chromium bằng `pnpm --dir fe exec playwright install chromium`. Trên Windows có thể đặt `PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH` tới Chrome. Đặt `SHAREBILL_PWA_TEST=1` khi kiểm bản static production để kiểm cả reload offline và hành trình thứ 8 cho smoke S18; đặt cùng `RELEASE_COMMIT` khi build FE, chạy API và chạy bộ test. [Hướng dẫn smoke và cấu hình cloud](../docs/STAGING_SMOKE.md).
+`pnpm --dir fe test:browser` chạy 9 hành trình bằng Playwright với frontend cổng 3000, API 3001 và Emulator 8080/9099. Cài Chromium bằng `pnpm --dir fe exec playwright install chromium`. Trên Windows có thể đặt `PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH` tới Chrome. Đặt `SHAREBILL_PWA_TEST=1` khi kiểm bản static production để kiểm cả reload offline và hành trình thứ 10 cho smoke S18; đặt cùng `RELEASE_COMMIT` khi build FE, chạy API và chạy bộ test. [Hướng dẫn smoke và cấu hình cloud](../docs/STAGING_SMOKE.md).
 
 Trang `/admin` dùng Google sign-in và quyền server trong `platformAdmins/{uid}`. Sao chép các trường Firebase public trong [.env.example](.env.example) và đặt giá trị của môi trường khi build. Với project demo trên localhost, Google popup dùng Auth Emulator. Môi trường cloud cần Google provider và authorized domains đã cấu hình. Phiên quản trị nằm trong bộ nhớ, đăng nhập lại sau reload. API kiểm quyền ở mỗi request và yêu cầu xác thực trong 10 phút cho lệnh ghi.
 
