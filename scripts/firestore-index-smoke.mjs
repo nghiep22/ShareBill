@@ -79,7 +79,8 @@ export async function runIndexSmoke(config, { accessToken, fetcher = fetch, inve
     const actual = [];
     let pageToken;
     for (let page = 0; page < 10; page++) {
-      const result = await request('/collectionGroups/-/indexes?pageSize=100' + (pageToken ? '&pageToken=' + encodeURIComponent(pageToken) : ''));
+      // The wildcard collection-group endpoint currently accepts only the default page size.
+      const result = await request('/collectionGroups/-/indexes' + (pageToken ? '?pageToken=' + encodeURIComponent(pageToken) : ''));
       actual.push(...result.indexes ?? []);
       pageToken = result.nextPageToken;
       if (!pageToken) break;

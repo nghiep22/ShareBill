@@ -576,7 +576,7 @@ Root kỳ vọng: totalExpenseMinor=1200000, expenseCountAllTime=2, activeExpens
 | DATA-12 | Reconcile | Phát hiện cố ý làm hỏng projection; ledger đổi giữa scan thì retry, không false mismatch |
 | DATA-13 | Migration | Chạy hai lần không đổi tiền, không reset disabled/version, tiếp tục sau crash, invalid rows có report |
 | DATA-14 | Rules và API quyền | Firebase client không đọc/ghi private collections; outsider 404; user thường bị chặn namespace admin |
-| DATA-15 | Index staging | Từng IX01..IX16 và cursor nhiều trang chạy được trên Firestore thật, không missing-index |
+| DATA-15 | Index staging | Từng IX01..IX18 và cursor nhiều trang chạy được trên Firestore thật, không missing-index |
 | DATA-16 | Restore | Khôi phục ledger/projection/Auth/ảnh theo scope, chạy checker và đạt mục tiêu RPO/RTO đã đo |
 
 Kiểm thử emulator hiện có mới bao phủ một phần auth và ledger happy path/outsider/retry; chưa xem ma trận này là đã pass. Trạng thái thực thi được theo dõi trong [ROADMAP_TESTING.md](ROADMAP_TESTING.md).

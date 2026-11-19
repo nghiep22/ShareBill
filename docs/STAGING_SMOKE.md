@@ -1,6 +1,16 @@
 # S18 — Kiểm cấu hình và smoke bản triển khai
 
-Ngày 19/11/2026. Công cụ đã diễn tập trên bản build static và Firebase Emulator. Chưa triển khai đợt mã này lên cloud; các kết quả local không thay cho cổng staging.
+Ngày 19/11/2026. FE và API đã triển khai lên domain staging cùng SHA `5256b3f58d98a81c5384f6262d911af14f01951e`, sau khi [GitHub Actions đạt](https://github.com/nghiep22/ShareBill/actions/runs/44444811607). Vercel Hobby, Firebase billing chưa bật. Bản này chưa đạt mọi cổng phát hành.
+
+## Bằng chứng staging ngày 19/11
+
+- [Smoke FE/API](reports/2026-11-19-staging-smoke.json): cùng SHA/project, preflight POST/PATCH, Auth login/refresh, user thường bị chặn admin, replay/operation, cursor, số dư, xác nhận trả nợ và chốt chuyến riêng đều đạt.
+- [Browser 390px](reports/2026-11-19-staging-browser.json): đăng ký, tạo chuyến, thêm khoản chi, chốt, đăng xuất và đăng nhập lại qua UI. Không có page error hoặc API request lỗi. Đây là Chrome tự động mô phỏng viewport, chưa phải điện thoại vật lý.
+- [Index cloud](reports/2026-11-19-staging-indexes.json): đủ IX01–IX18 READY và 18 query thực thi, chỉ đọc tên tài liệu. Report có hash cấu hình và chuyến fixture của smoke tiền.
+
+Deployment API `dpl_AAhxgefpYhjXS8xZrDEvFpxjetLQ`, web `dpl_eEzhoQhQC4UFgduU2m8EHy67ATvr`. Build từ monorepo với Root Directory `be`/`fe`, Node 24 và quyền đọc source ngoài root. Build candidate dùng `--skip-domain`; chỉ promote sau khi CI và build đạt. Các project hiện được deploy bằng CLI, chưa liên kết Git để tự deploy mỗi lần push. API serverless có output `public` và handler `api/index.ts`; không phục vụ source backend làm static output.
+
+Domain `sharebill-nghiep22.vercel.app` đã được thêm vào Firebase Authorized Domains. Email/Password hoạt động. Danh sách Google provider hiện trống, chưa cấp operator thật. Bucket ảnh và IAM ký chưa được cấu hình. Các chuyến synthetic của lần kiểm được giữ archived; không reset dữ liệu staging.
 
 ## Cấu hình bản phát hành
 
@@ -19,7 +29,7 @@ Web export `/release.json` từ cấu hình lúc build, gồm `service`, cùng b
 
 API dừng khởi tạo với cấu hình cloud thiếu trường bắt buộc, project `demo-*`, host Emulator, origin HTTP/localhost hoặc cặp credential khai báo dở. Web cloud build cũng bị chặn nếu thiếu SHA/cấu hình public hoặc API origin không hợp lệ. Trên Vercel phải khai báo môi trường rõ ràng; project staging dùng Vercel production deployment vẫn đặt giá trị **staging**. Local không cần credential cloud. Bộ kiểm này không kiểm tính hợp lệ của key/IAM/provider trên dịch vụ thật.
 
-Giữ Vercel Hobby/Firebase Spark theo ràng buộc miễn phí hiện tại. Bước này không tạo tài nguyên, đổi gói hoặc chọn bucket ảnh.
+Giữ Vercel Hobby/Firebase Spark theo ràng buộc miễn phí hiện tại. Đợt triển khai không đổi gói hoặc tạo bucket ảnh.
 
 ## Chạy kiểm chỉ đọc
 
@@ -60,7 +70,7 @@ Bộ browser tạo tài khoản synthetic trên Emulator và chạy smoke exerci
 
 Ngày 19/11 đã đạt frozen install, build/typecheck FE/BE, 29 unit/HTTP và 24 kiểm thử cấu hình release, 54 kiểm thử Emulator, 6 kiểm thử smoke CLI, cùng 7 hành trình browser trên Chrome chạy tự động. Diễn tập local sử dụng SHA HEAD làm giá trị đối chiếu trên working tree đang sửa; đây là bằng chứng cho cơ chế kiểm, **không phải** bằng chứng artifact cloud đã phát hành từ SHA đó.
 
-## Cổng S18 còn mở
+## Index cloud và các cổng còn mở
 
 ### Kiểm toàn bộ composite index
 
@@ -68,4 +78,4 @@ Ngày 19/11 đã đạt frozen install, build/typecheck FE/BE, 29 unit/HTTP và 
 
 Lệnh đối chiếu đủ 18 index trong cấu hình với metadata Firestore cloud, gồm chiều sort `__name__`, và dừng trước query nếu thiếu index hoặc chưa READY. Khi đủ, chạy một query giới hạn 1, chỉ projection tên tài liệu cho mỗi index; không trả tên/nội dung tài liệu vào report. Các query ledger nằm trong chuyến synthetic đã nêu; các query admin/worker kiểm collection gốc và group receipt. Có hash SHA-256 cấu hình index trong report để đối chiếu release. Đây là công cụ chỉ đọc, không deploy index hay sửa dữ liệu. Test CLI nằm trong `pnpm test:smoke` (10 kiểm thử).
 
-Cần build/deploy cùng SHA thật lên staging, deploy/đợi indexes Ready rồi chạy smoke với cấu hình và credential staging. Smoke hiện kiểm một query index khoản chi và cursor, chưa bao phủ toàn bộ inventory index. Còn nghiệm thu Google operator thực, bucket/IAM/CORS/URL ảnh hết hạn, Auth trên domain và thiết bị thật. Backup/restore, lịch worker và rollback vẫn thuộc S19/S20. Mỗi report đạt chỉ áp dụng cho phạm vi `coverage` của lần chạy đó.
+FE/API cùng SHA, CI, Auth Email/Password trên domain, composite indexes và luồng tiền đã có bằng chứng cloud ở trên. Smoke REST riêng vẫn liệt kê index inventory trong `remaining` vì phần đó do report `staging-indexes.json` kiểm riêng. Còn Google provider/operator thực, bucket/IAM/CORS/URL ảnh hết hạn, usability và thiết bị thật. Backup/restore, lịch worker và diễn tập rollback vẫn thuộc S19/S20. Mỗi report đạt chỉ áp dụng cho phạm vi đã thực thi.

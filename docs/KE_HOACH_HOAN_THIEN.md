@@ -4,7 +4,7 @@ Ngày khảo sát 18/11/2026 · Phạm vi mã trong workspace, giao diện và A
 
 ## Tiến độ triển khai ngày 18/11/2026
 
-Cập nhật 19/11: bắt đầu S18 với release identity FE/API, kiểm cấu hình cloud từ lúc khởi tạo/build và CLI smoke mặc định chỉ đọc. Luồng exercise đã diễn tập trên static FE + API + Emulator, gồm replay, cursor, quyết toán và chốt chuyến riêng. Đã đồng bộ lockfile Firebase frontend để frozen install đạt. Có 7 hành trình browser đạt local; chưa chạy Actions hoặc deploy đợt mã này. Xem [runbook S18 và các cổng còn mở](STAGING_SMOKE.md).
+Cập nhật 19/11: đã deploy FE/API staging cùng SHA `5256b3f`, CI frontend/backend đạt. Browser 390px trên domain thật đã kiểm đăng ký, đăng nhập lại, tạo chuyến, chi tiêu và chốt; smoke tiền/replay/cursor và 18 query index cloud đều đạt. Giữ Vercel Hobby, Firebase billing chưa bật. Bộ local có 53 unit/cấu hình, 54 Emulator, 10 smoke và 7 browser. Còn Google provider/operator, bucket ảnh, thiết bị vật lý và các cổng S19/S20. Xem [runbook, bằng chứng và cổng còn mở](STAGING_SMOKE.md).
 
 Đã sửa K01–K09 trong mã nguồn. K01, K02, K04 và K05 có kiểm thử Chromium trong repo. K03 có kiểm thử transaction và cạnh tranh với tạo settlement. K06 được kiểm với owner nhận tiền do member tạo. K08 kiểm membership active mở lời mời hết lượt và tiếp tục chặn người ngoài.
 

@@ -2,13 +2,13 @@
 
 Tài liệu thiết lập staging và kế hoạch đưa ShareBill vào vận hành.
 
-Ngày 19/11/2026 đã bổ sung [release identity, kiểm cấu hình cloud và CLI smoke S18](STAGING_SMOKE.md), có diễn tập local. Các domain staging bên dưới mô tả môi trường đã có; chưa có bằng chứng chúng đang chạy đợt mã mới. Build/deploy đúng SHA rồi chạy smoke trước khi ghi nhận cổng cloud đạt.
+Ngày 19/11/2026 đã deploy FE/API cùng SHA `5256b3f` sau CI, kiểm trên domain staging và lưu [báo cáo S18](STAGING_SMOKE.md). Auth Email/Password, luồng tiền và đủ 18 composite index đạt cloud. Google quản trị, bucket ảnh và thiết bị thật còn cổng riêng. Các project hiện deploy bằng CLI từ monorepo, chưa tự deploy theo Git push.
 
 Repo tách Web/PWA Next.js ở `fe/` và API Fastify ở `be/`. Hai thư mục có cấu hình Vercel riêng. GitHub Actions kiểm tra các gói trong cùng monorepo.
 
 ## Môi trường staging hiện tại
 
-- Web/PWA ở [sharebill-nghiep22.vercel.app](https://sharebill-nghiep22.vercel.app/), thuộc tài khoản Vercel Hobby. Giao diện hiện dùng dữ liệu mẫu lưu trong trình duyệt.
+- Web/PWA ở [sharebill-nghiep22.vercel.app](https://sharebill-nghiep22.vercel.app/), thuộc tài khoản Vercel Hobby. Trang chính dùng API thật; `/demo/` giữ dữ liệu mẫu trong trình duyệt.
 - API ở [sharebill-api-staging.vercel.app](https://sharebill-api-staging.vercel.app/health), có tài liệu tương tác tại [/docs/](https://sharebill-api-staging.vercel.app/docs/).
 - Firebase project `sharebill-staging` dùng Spark, bật đăng nhập Email/Password và Firestore Standard tại `asia-southeast1` (Singapore). Rules và indexes lấy từ `be/`.
 - Runtime API dùng service account `sharebill-api@sharebill-staging.iam.gserviceaccount.com` với `roles/datastore.user` và `roles/firebaseauth.admin`. Thông tin xác thực nằm trong secrets của Vercel.
@@ -19,7 +19,7 @@ Môi trường này triển khai theo yêu cầu chỉ dùng gói miễn phí c�
 ## Staging đầu tiên
 
 1. Trong Vercel, import cùng repo GitHub hai lần, với Root Directory lần lượt là `fe` và `be`. Bật quyền truy cập các file ngoài Root Directory để hai project đọc được `pnpm-lock.yaml` và `pnpm-workspace.yaml` ở gốc repo. Chọn Node.js 24.x. [Vercel monorepo](https://vercel.com/docs/monorepos).
-2. Với `fe`, chạy build theo `fe/vercel.json` và phục vụ thư mục `out`. Kiểm tra trang chủ, `/manifest.webmanifest` và `/sw.js` qua HTTPS. Giao diện hiện sử dụng chuyến đi mẫu lưu trong trình duyệt.
+2. Với `fe`, chạy build theo `fe/vercel.json` và phục vụ thư mục `out`. Kiểm tra trang chủ, `/release.json`, `/manifest.webmanifest` và `/sw.js` qua HTTPS. Cấu hình public lúc build phải trỏ đúng API/Firebase staging.
 3. Tạo hoặc chọn một Firebase project dành cho staging. Bật đăng nhập Email/Password, tạo Firestore và áp dụng Rules/indexes từ `be/firebase.json`. [Firebase Admin SDK](https://firebase.google.com/docs/admin/setup).
 4. Với `be`, dùng cấu hình `be/vercel.json` và đầu vào serverless `be/api/index.ts`. Các đường dẫn HTTP được chuyển vào Fastify. Đặt `APP_ORIGIN` bằng origin của Web/PWA, cấu hình `FIREBASE_PROJECT_ID`, `FIREBASE_WEB_API_KEY`, `CURSOR_SIGNING_SECRET` riêng ít nhất 32 ký tự và thông tin xác thực runtime `FIREBASE_CLIENT_EMAIL`, `FIREBASE_PRIVATE_KEY` trong Vercel. Cấu hình emulator chỉ dùng ở local và CI.
 5. Kiểm tra API `/health` và `/docs/`, sau đó dùng tài khoản thử để đăng ký, đăng nhập, tạo chuyến và thêm khoản chi. Backend ảnh S10 mới kiểm local/Emulator; lựa chọn bucket/signing trên cloud thuộc cổng S18. Adapter mặc định là Cloud Storage for Firebase; R2 là phương án thay adapter nếu cần sau khi chốt yêu cầu môi trường. Xem [cấu hình và cổng smoke ảnh](RECEIPTS.md).

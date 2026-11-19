@@ -1,0 +1,114 @@
+{
+  "startedAt": "2026-11-19T02:35:50.485Z",
+  "environment": "staging",
+  "commit": "5256b3f58d98a81c5384f6262d911af14f01951e",
+  "firebaseProjectId": "sharebill-staging",
+  "apiOrigin": "https://sharebill-api-staging.vercel.app",
+  "webOrigin": "https://sharebill-nghiep22.vercel.app",
+  "mode": "exercise",
+  "passed": true,
+  "checks": [
+    {
+      "name": "api-release",
+      "passed": true
+    },
+    {
+      "name": "web-release",
+      "passed": true
+    },
+    {
+      "name": "web-admin-shell",
+      "passed": true
+    },
+    {
+      "name": "cors-versioned-commands",
+      "passed": true
+    },
+    {
+      "name": "unauthenticated-guards",
+      "passed": true
+    },
+    {
+      "name": "login-refresh-admin-deny",
+      "passed": true
+    },
+    {
+      "name": "create-isolated-trip",
+      "passed": true
+    },
+    {
+      "name": "expense-replay-and-ledger",
+      "passed": true
+    },
+    {
+      "name": "expense-index-and-cursor",
+      "passed": true
+    },
+    {
+      "name": "settle-and-archive",
+      "passed": true
+    }
+  ],
+  "commands": [
+    {
+      "path": "/trips",
+      "key": "5373879a-cf48-4c10-b7c8-e91c8cbda75b",
+      "confirmed": true
+    },
+    {
+      "path": "/trips/4b634afe-ee78-4450-bb38-37bb05c0fec6/participants",
+      "key": "462996ad-88a6-47d6-82bb-ec671e891771",
+      "confirmed": true
+    },
+    {
+      "path": "/trips/4b634afe-ee78-4450-bb38-37bb05c0fec6/expenses",
+      "key": "15ced719-2ab1-4ac4-ac87-5567e74bb44f",
+      "confirmed": true
+    },
+    {
+      "path": "/trips/4b634afe-ee78-4450-bb38-37bb05c0fec6/expenses",
+      "key": "15ced719-2ab1-4ac4-ac87-5567e74bb44f",
+      "confirmed": true
+    },
+    {
+      "path": "/trips/4b634afe-ee78-4450-bb38-37bb05c0fec6/expenses",
+      "key": "7fd2f58b-bdb0-4106-85e8-efa63a6c0499",
+      "confirmed": true
+    },
+    {
+      "path": "/trips/4b634afe-ee78-4450-bb38-37bb05c0fec6/settlements",
+      "key": "23dfa936-c8c5-430a-a65e-c10e7df3d1e7",
+      "confirmed": true
+    },
+    {
+      "path": "/trips/4b634afe-ee78-4450-bb38-37bb05c0fec6/settlements/d82eac2c-74f5-4576-bb61-42a5ac7af194/confirm",
+      "key": "90965723-6914-460a-9bdb-6fe96f1823ee",
+      "confirmed": true
+    },
+    {
+      "path": "/trips/4b634afe-ee78-4450-bb38-37bb05c0fec6/archive",
+      "key": "5c735500-9738-44a1-b311-1297890d3003",
+      "confirmed": true
+    }
+  ],
+  "tripId": "4b634afe-ee78-4450-bb38-37bb05c0fec6",
+  "coverage": [
+    "release identity",
+    "web and admin shell",
+    "CORS",
+    "unauthenticated guards",
+    "login/refresh",
+    "member denied admin",
+    "expense/replay/operation lookup",
+    "expense cursor",
+    "settlement/archive"
+  ],
+  "remaining": [
+    "real browser/device acceptance",
+    "Google operator allow journey",
+    "receipt bucket signing/CORS/expiry",
+    "complete cloud index inventory",
+    "backup/restore/worker schedules"
+  ],
+  "finishedAt": "2026-11-19T02:36:20.234Z"
+}

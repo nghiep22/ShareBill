@@ -12,7 +12,10 @@ const actual = inventory.map((index, i) => ({ ...index, name: 'projects/sharebil
 test('checks all 18 indexes including pending participant links, then runs only bounded name projections', async () => {
   let queries = 0;
   const report = await runIndexSmoke(config, { accessToken: 'synthetic-secret', inventoryText, fetcher: async (url, options) => {
-    if (!options.body) return Response.json({ indexes: actual });
+    if (!options.body) {
+      assert.equal(new URL(url).searchParams.has('pageSize'), false);
+      return Response.json({ indexes: actual });
+    }
     queries++;
     const query = JSON.parse(options.body).structuredQuery;
     assert.equal(query.limit, 1);

@@ -74,7 +74,7 @@ Triển khai hiện tại dùng REST signal kiểm quyền mỗi 30 giây khi ta
 
 **Cloud staging và smoke test**
 
-- **Trạng thái** Đã có kiểm cấu hình, release identity và smoke CLI; đã diễn tập local. Chưa deploy/nghiệm thu cloud
+- **Trạng thái** Đã deploy FE/API cùng SHA, CI, Auth/tiền/index cloud và browser 390px đạt. Còn Google operator, bucket ảnh và thiết bị thật
 - **Phụ thuộc** [S16](05_ADMIN_HO_TRO.md#s16), [S17](#s17)
 - **Kết quả** Cấu hình Firebase/Vercel staging, deploy BE/FE/admin và smoke các index/cursor trên Firestore thật.
 - **Nghiệm thu** Health, Auth, preflight, luồng browser và admin guard đạt trên staging đúng SHA. Chạy query sau khi index ready và lưu kết quả.
@@ -118,7 +118,7 @@ Triển khai hiện tại dùng REST signal kiểm quyền mỗi 30 giây khi ta
 
 **O09 · Smoke index và cursor trên Firestore thật**
 
-- **Kết quả** Từng IX01..16 dùng được trên cloud và phân trang đúng.
+- **Kết quả** Từng IX01..18 dùng được trên cloud và phân trang đúng.
 - **Phạm vi file/module** Index deployment và staging query smoke scripts (mới).
 - **Việc làm** Deploy index/Rules theo cấu hình, đợi ready, seed synthetic scope, chạy query real credentials; ghi report index/query/cursor.
 - **Kiểm thử** Tất cả composite inventory, ngày/timestamp trùng, filter sai và cursor stale.
