@@ -418,5 +418,17 @@ test('a Google operator processes a user ticket through the admin screens', asyn
   assert.equal(await page.getByText('Nội dung chỉ dành cho operator E2E', { exact: true }).count(), 0);
   await admin.getByRole('link', { name: 'Nhật ký', exact: true }).click();
   await admin.getByRole('cell', { name: ticket.id, exact: false }).first().waitFor();
+  const store = getFirestore(fixtureApp);
+  const job = store.doc('maintenanceJobs/ledger-reconcile-' + randomUUID());
+  await job.set({ kind: 'ledger_reconcile', status: 'failed', attempts: 1, lastErrorCode: 'RECONCILE_ISSUES_FOUND',
+    resultSummary: { tripsScanned: 3, tripsChecked: 2, tripsWithIssues: 1, issueCount: 2, scanErrors: 1 },
+    checkpoint: 'private-reconcile-checkpoint', privateDiff: 'private-reconcile-financial-values',
+    updatedAt: Timestamp.now() });
+  try {
+    await admin.getByRole('link', { name: 'Hệ thống', exact: true }).click();
+    await admin.getByText('Đối soát sổ tiền', { exact: false }).waitFor();
+    await admin.getByText('Đã kiểm 2/3 chuyến · 1 chuyến cần kiểm tra · 2 sai lệch · 1 lỗi quét', { exact: true }).waitFor();
+    assert.equal(await admin.getByText(/private-reconcile/).count(), 0);
+  } finally { await job.delete(); }
   assert.deepEqual(errors, []);
 });

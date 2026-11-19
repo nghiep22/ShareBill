@@ -15,7 +15,8 @@ type Ticket = { id: string; createdBy: string; tripId: string | null; category: 
 type Note = { id: string; note: string; actorUid: string; createdAt: string };
 type Audit = { id: string; action: string; actorUid: string; targetType: string; targetId: string; reason: string; createdAt: string };
 type Dashboard = { users: number; trips: number; support: number; failures: number; updatedAt: string; tickets: Ticket[]; activity: Audit[] };
-type Job = { id: string; uid?: string; status: string; moderationVersion?: number; attempts: number; lastErrorCode: string | null; updatedAt: string };
+type Job = { id: string; uid?: string; status: string; moderationVersion?: number; attempts: number; lastErrorCode: string | null; updatedAt: string;
+  kind?: 'ledger_reconcile'; resultSummary?: { tripsScanned: number; tripsChecked: number; tripsWithIssues: number; issueCount: number; scanErrors: number } | null };
 type System = { environment: string; release: string | null; jobs: Job[]; maintenance: Job[] };
 const names: Record<string, string> = {
   open: 'Mới gửi', in_progress: 'Đang xử lý', resolved: 'Đã xử lý', active: 'Đang hoạt động', disabled: 'Đã khóa',
@@ -295,7 +296,11 @@ function SystemView({ data }: { data: System }) {
     {data.jobs.map(job => <p key={job.id}>{job.id} · {label(job.status)} · {time(job.updatedAt)}</p>)}
     {!data.jobs.length && <p>Chưa có tác vụ đồng bộ.</p>}
     <h2>Tác vụ bảo trì gần đây</h2>
-    {data.maintenance.map(job => <p key={job.id}>{job.id} · {label(job.status)} · {time(job.updatedAt)}</p>)}
+    {data.maintenance.map(job => <div key={job.id}>
+      <p>{job.kind === 'ledger_reconcile' ? 'Đối soát sổ tiền' : job.id} · {label(job.status)} · {time(job.updatedAt)}</p>
+      {job.resultSummary && <p>Đã kiểm {job.resultSummary.tripsChecked}/{job.resultSummary.tripsScanned} chuyến · {job.resultSummary.tripsWithIssues} chuyến cần kiểm tra · {job.resultSummary.issueCount} sai lệch · {job.resultSummary.scanErrors} lỗi quét</p>}
+      {job.lastErrorCode && <p className="error">{job.lastErrorCode}</p>}
+    </div>)}
     {!data.maintenance.length && <p>Chưa có kết quả bảo trì.</p>}
   </section>;
 }

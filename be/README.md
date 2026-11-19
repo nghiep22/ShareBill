@@ -235,6 +235,8 @@ Cần cấu hình scheduler chạy worker định kỳ trên môi trường tri�
 
 ## Deploy
 
+Đối soát theo từng lượt: `pnpm --dir be db:reconcile --project demo-sharebill --limit 5`. Worker chỉ ghi tiến độ và summary vào maintenanceJobs, không sửa ledger/số dư. Có lease, retry tối đa 3 lần và chu kỳ mới sau 15 phút; kết quả hiện trong trang Hệ thống của admin. Xem [runbook đối soát](../docs/LEDGER_RECONCILIATION.md); lịch cloud chưa được cấu hình.
+
 Log HTTP sử dụng mã request UUID, route template, status, thời gian xử lý và SHA. Response trả `X-Request-Id` để đối chiếu log. Xem [cách tra lỗi và phạm vi S19](../docs/OPERATIONS_LOGGING.md).
 
 Fastify có [hướng dẫn deploy trên Vercel](https://vercel.com/docs/frameworks/backend/fastify). Khi cấu hình Vercel, chọn Root Directory `be`, tách project backend và frontend, đặt origin thật vào `APP_ORIGIN`, và dùng Firebase project/credential riêng cho staging và production. Staging đã có bằng chứng FE/API, Auth, luồng tiền và index cloud; xem [thiết lập staging](../docs/CICD_DEPLOY.md), [cấu hình ảnh](../docs/RECEIPTS.md) và các cổng smoke S18 còn mở.

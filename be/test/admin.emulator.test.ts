@@ -70,6 +70,25 @@ describe.skipIf(!enabled)('platform administration', () => {
     expect((await send('GET', root + '/trips/' + id, undefined, google)).statusCode).toBe(403);
   }, 30_000);
 
+  it('returns only aggregate reconciliation results in the protected system view', async () => {
+    const operator = await account(); await grant(operator);
+    const jobId = 'ledger-reconcile-' + randomUUID(), ref = db().doc('maintenanceJobs/' + jobId);
+    const resultSummary = { tripsScanned: 3, tripsChecked: 2, tripsWithIssues: 1, issueCount: 2, scanErrors: 1 };
+    await ref.set({ kind: 'ledger_reconcile', status: 'failed', resultSummary, attempts: 1,
+      lastErrorCode: 'RECONCILE_ISSUES_FOUND', checkpoint: 'private-reconcile-checkpoint', leaseOwner: 'private-reconcile-lease',
+      privateDiff: 'private-reconcile-financial-values', updatedAt: Timestamp.now() });
+    try {
+      const response = await send('GET', root + '/system', undefined, operator);
+      expect(response.statusCode).toBe(200);
+      expect(response.json().data.maintenance.find((job: { id: string }) => job.id === jobId)).toMatchObject({
+        kind: 'ledger_reconcile', resultSummary, status: 'failed' });
+      expect(response.body).not.toContain('private-reconcile');
+      await ref.update({ 'resultSummary.unknown': 'private-reconcile-extra' });
+      const invalid = await send('GET', root + '/system', undefined, operator);
+      expect(invalid.json().data.maintenance.find((job: { id: string }) => job.id === jobId).resultSummary).toBeNull();
+    } finally { await ref.delete(); }
+  });
+
   it('processes a ticket with idempotent notes, version checks, private audit and safe user DTOs', async () => {
     const [operator, reporter] = await Promise.all([account(), account(false)]);
     await grant(operator);
