@@ -287,6 +287,7 @@ export function ExpenseForm({ data, expense: latest, update, receiptActions, dis
       </fieldset>
       <fieldset className="card field-card">
         <legend>Chia cho ai?</legend>
+        {expense && active.some(member => !(member.id in expense.shares)) && <p className="inline-note">Khoản chi này giữ danh sách người được chia đã lưu trước đó. Để chia thêm người, tích tên bên dưới hoặc bấm Chọn tất cả, kiểm tra phần phải chịu rồi lưu.</p>}
         <div className="split-heading"><span>{ids.length} người được chia</span>
           <button type="button" className="text-button" onClick={() => setSelected(active.every(member => selected.includes(member.id)) ? selected.filter(id => !active.some(member => member.id === id)) : [...new Set([...selected, ...active.map(member => member.id)])])}>
             {active.every(member => selected.includes(member.id)) ? 'Bỏ chọn tất cả' : 'Chọn tất cả'}

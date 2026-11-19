@@ -419,6 +419,85 @@ test('money screens keep equal shares, remaining debt, partial payments and reve
   assert.equal((await overview()).trip.status, 'archived');
 });
 
+test('single-person and unlinked balances guide users to add people, resplit old expenses and link accounts', { timeout: 90000 }, async t => {
+  const { page, session, trip, screen, expenses } = await fixture(t);
+  await page.setViewportSize({ width: 390, height: 844 });
+  const root = 'trips/' + trip.id;
+  const expense = await call(expenses, session, { method: 'POST', body: {
+    title: 'Tiền chuyến đi chưa chia', category: 'food', amountMinor: 1550000, payerParticipantId: trip.ownerParticipantId,
+    occurredOn: '2026-11-18', splitMethod: 'equal', split: { participantIds: [trip.ownerParticipantId] },
+  } });
+  const member = await call('auth/register', null, { method: 'POST', body: {
+    email: randomUUID() + '@example.test', password: 'BrowserFixture-123!', displayName: 'Bình E2E',
+  } });
+  const invitation = await call(root + '/invites', session, { method: 'POST', body: {} });
+  await call('invites/accept', member, { method: 'POST', body: { token: invitation.token } });
+  const memberContext = await browser.newContext({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true });
+  t.after(() => memberContext.close());
+  await memberContext.addInitScript(session => {
+    sessionStorage.setItem('sharebill-live-session-v1', JSON.stringify(session));
+  }, { ...member, expiresAt: Date.now() + member.expiresIn * 1000 });
+  const memberPage = await memberContext.newPage();
+  await memberPage.goto(screen('so-du'));
+  await memberPage.getByText('Chưa liên kết', { exact: true }).waitFor();
+  await memberPage.getByText(/Hiện chuyến chỉ có 1 người chia tiền/).waitFor();
+  await memberPage.getByText(/nhờ chủ chuyến thêm những người cùng chia/).waitFor();
+  assert.equal(await memberPage.getByRole('button', { name: 'Ghi nhận đã chuyển', exact: true }).count(), 0);
+  assert.equal(await memberPage.getByRole('link', { name: 'Thêm người chia tiền', exact: true }).count(), 0);
+  await memberPage.getByRole('link', { name: 'Xem tài khoản trong chuyến', exact: true }).click();
+  await heading(memberPage, 'Thành viên & phân quyền');
+  assert.equal(await memberPage.getByRole('button', { name: 'Tài khoản truy cập', exact: true }).getAttribute('aria-pressed'), 'true');
+  await memberPage.getByText('Bình E2E (bạn)', { exact: true }).waitFor();
+  assert.equal(await memberPage.getByRole('button', { name: /Quản lý tài khoản/ }).count(), 0);
+
+  await page.goto(screen('so-du'));
+  const transferSection = page.getByRole('region', { name: 'Số tiền cần chuyển', exact: true });
+  await transferSection.getByText(/Toàn bộ/).getByText('1.550.000đ', { exact: true }).waitFor();
+  await transferSection.getByText(/Toàn bộ/).getByText('0đ', { exact: true }).waitFor();
+  await page.getByRole('link', { name: 'Thêm người chia tiền', exact: true }).click();
+  await page.getByRole('dialog', { name: 'Thêm người chia tiền', exact: true }).getByLabel('Tên hiển thị').fill('Bình');
+  await page.getByRole('button', { name: 'Thêm thành viên', exact: true }).click();
+  await page.getByRole('button', { name: 'Quản lý Bình', exact: true }).waitFor();
+  const participant = (await call(root + '/overview', session)).participants.find(row => row.displayName === 'Bình');
+  assert.equal((await call(expenses + '/' + expense.id, session)).shares.length, 1);
+  await page.goto(screen('so-du'));
+  await transferSection.getByText(/Nếu bạn vừa thêm người chia tiền/).waitFor();
+  assert.equal(await page.getByRole('button', { name: 'Ghi nhận đã chuyển', exact: true }).count(), 0);
+  await page.getByRole('link', { name: 'Xem và sửa khoản chi', exact: true }).click();
+  await page.getByRole('link').filter({ hasText: 'Tiền chuyến đi chưa chia' }).click();
+  await page.getByRole('link', { name: 'Sửa khoản chi', exact: true }).click();
+  await heading(page, 'Sửa khoản chi');
+  assert.equal(await page.getByLabel('Phần chia dự kiến của Bình', { exact: true }).getByRole('checkbox').isChecked(), false);
+  await page.getByText(/Khoản chi này giữ danh sách người được chia/).waitFor();
+  await page.getByRole('button', { name: 'Chọn tất cả', exact: true }).click();
+  await page.getByRole('button', { name: /Lưu khoản chi/ }).click();
+  await heading(page, 'Tiền chuyến đi chưa chia');
+  const resplit = await call(expenses + '/' + expense.id, session);
+  assert.equal(resplit.shares.length, 2);
+  assert.ok(resplit.shares.every(row => row.amountMinor === 775000));
+  await page.getByRole('link', { name: 'Xem số tiền còn cần trả / được nhận', exact: true }).click();
+  await transferSection.getByText('775.000đ', { exact: true }).waitFor();
+  assert.match(await transferSection.locator('.transfer-names').innerText(), /^Bình\s+An$/);
+  await transferSection.getByRole('button', { name: 'Ghi nhận đã chuyển', exact: true }).waitFor();
+  const transferY = (await transferSection.boundingBox()).y;
+  assert.ok(transferY < (await page.getByRole('heading', { name: 'Số tiền của từng thành viên', exact: true }).boundingBox()).y);
+  assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth), false);
+
+  await page.goto(screen('thanh-vien/tai-khoan'));
+  await page.getByRole('button', { name: 'Quản lý tài khoản Bình E2E', exact: true }).click();
+  await page.getByRole('button', { name: 'Liên kết người chia tiền', exact: true }).click();
+  const dialog = page.getByRole('dialog');
+  await dialog.getByLabel('Người chia tiền', { exact: true }).selectOption(participant.id);
+  await dialog.getByLabel('Lý do', { exact: true }).fill('Gắn đúng tên để xem số tiền cần trả');
+  await dialog.getByRole('button', { name: 'Xác nhận', exact: true }).click();
+  await page.getByText('Thành viên · Chia tiền với tên Bình', { exact: true }).waitFor();
+  await memberPage.goto(screen('so-du'));
+  await memberPage.locator('.balance-hero').getByText('Bạn cần trả', { exact: true }).waitFor();
+  await memberPage.locator('.balance-hero').getByText('775.000đ', { exact: true }).waitFor();
+  assert.equal(await memberPage.getByRole('link', { name: 'Xem tài khoản trong chuyến', exact: true }).count(), 0);
+  await memberPage.getByRole('region', { name: 'Số tiền cần chuyển', exact: true }).getByRole('button', { name: 'Ghi nhận đã chuyển', exact: true }).waitFor();
+});
+
 test('incomplete financial snapshots never show a zero debt or enable archive', async t => {
   const { page, context, session, trip, screen } = await fixture(t);
   await call('trips/' + trip.id + '/participants', session, { method: 'POST', body: { displayName: 'Bình' } });

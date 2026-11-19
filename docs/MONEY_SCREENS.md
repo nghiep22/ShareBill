@@ -19,6 +19,12 @@ Tổng quan hiển thị tổng chi, phần chi của tài khoản đang xem và
 
 ## Nhập và quyết toán
 
+Mục **Số tiền cần chuyển** nằm ngay sau số dư cá nhân, trước bảng chi tiết từng người. Mỗi dòng ghi rõ người chuyển → người nhận và số tiền. Người dùng chuyển tiền bên ngoài ứng dụng rồi ghi nhận và xác nhận.
+
+Nếu chỉ có một người chia tiền, màn hình giải thích toàn bộ chi phí đang tính cho người đó nên cần chuyển 0đ, kèm nút cho chủ chuyến **Thêm người chia tiền** và **Xem và sửa khoản chi**. Thêm người hoặc mời tài khoản không tự chia lại khoản chi cũ: mở từng khoản chi → Sửa → Chia cho ai? → chọn đủ người hoặc Chọn tất cả → Lưu khoản chi. Form sửa nhắc rõ khi có người chưa nằm trong phần chia cũ.
+
+**Chưa liên kết** nghĩa là tài khoản đang xem chưa gắn với người chia tiền. Nút **Xem tài khoản trong chuyến** mở thẳng tab Tài khoản truy cập; chủ chuyến quản lý tài khoản thành viên → Liên kết người chia tiền → chọn đúng tên và xác nhận. Liên kết không thay đổi phần chia hay số dư của nhóm. Người chưa liên kết vẫn xem được số tiền cần chuyển của nhóm.
+
 Ô ghi nhận chuyển tiền dùng cùng quy tắc VND với khoản chi. `10.000`, `10,000` và `10000` đều thành 10.000đ. Từ chối số lẻ, trộn dấu, số mũ như `1e3`, số âm/0, vượt giới hạn và vượt số nợ hiện tại. Không dùng việc chuyển dấu chấm thành phần thập phân của HTML number để ghi nhầm 10.000đ thành 10đ.
 
 Có thể chuyển một phần hoặc chọn cặp người chuyển/người nhận khác hợp lệ. Lưu chỉ tạo đề nghị chờ; người nhận hoặc chủ chuyến xác nhận đúng quyền mới cập nhật số dư. Hủy pending giữ nguyên tiền. Hủy hiệu lực confirmed đảo đúng số tiền đã ghi nhận, giữ lịch sử và yêu cầu lý do. Sửa/hủy khoản chi cập nhật phần chia và công nợ; các khoản chuyển đã xác nhận trước đó vẫn được giữ riêng theo sổ.
@@ -33,4 +39,4 @@ Khi snapshot thiếu hoặc lệch, hiển thị **Chưa đủ dữ liệu**, b�
 
 ## Bằng chứng kiểm thử
 
-36 kiểm thử unit kiểm phần chi và nợ còn lại, snapshot thiếu/trùng/sai, tổng tiền/chuyển, chốt, gợi ý, làm tròn và nhập VND. Hai hành trình browser mới kiểm chia đều ba người, trả một phần, số nhập không hợp lệ/vượt nợ, xác nhận/hủy/đảo, sửa tiền/chia chính xác có 0đ và payer ngoài nhóm, hủy khoản chi, chốt; trường hợp snapshot thiếu không được báo cân bằng hoặc chốt. Hành trình hai tài khoản hiện có tiếp tục kiểm người gửi/người nhận và quyền sau chốt. Các bộ transaction/concurrency/idempotency backend vẫn là kiểm chứng cuối của số dư server.
+38 kiểm thử unit kiểm phần chi và nợ còn lại, snapshot thiếu/trùng/sai, tổng tiền/chuyển, chốt, gợi ý, làm tròn, nhập VND và giới hạn mỗi lần chuyển. Các hành trình browser kiểm chia đều ba người, trả một phần, số nhập không hợp lệ/vượt nợ, xác nhận/hủy/đảo, sửa tiền/chia chính xác có 0đ và payer ngoài nhóm, hủy khoản chi, chốt; trường hợp snapshot thiếu không được báo cân bằng hoặc chốt. Luồng mới kiểm từ một người, thêm người không đổi khoản cũ, chọn lại phần chia 1.550.000đ thành hai phần 775.000đ, rồi liên kết tài khoản để xem nợ cá nhân. Hành trình hai tài khoản hiện có tiếp tục kiểm người gửi/người nhận và quyền sau chốt. Các bộ transaction/concurrency/idempotency backend vẫn là kiểm chứng cuối của số dư server.

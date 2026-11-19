@@ -336,6 +336,10 @@ input[type="radio"], input[type="checkbox"] { min-height: 0; width: 16px; height
 .member-money small { color: var(--muted); font-size: 11px; }
 .summary-card .amount { white-space: normal; overflow-wrap: anywhere; }
 .balance-hero { justify-items: start; }
+.balance-link-help { font-size: 13px; line-height: 1.6; }
+.transfer-empty h3 { display: flex; align-items: flex-start; gap: 8px; font-size: 15px; }
+.transfer-empty h3 svg { color: var(--teal); margin-top: 1px; }
+.money-actions { display: flex; flex-wrap: wrap; gap: 8px; }
 .settlement-meta { display: flex; flex-wrap: wrap; gap: 8px 12px; padding: 0 12px 8px; color: var(--muted); font-size: 12px; }
 .empty-stack { display: grid; justify-items: center; padding: 24px 12px; }
 .empty-stack > svg { color: var(--teal); }

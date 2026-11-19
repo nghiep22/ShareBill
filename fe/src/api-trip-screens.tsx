@@ -125,6 +125,7 @@ export function MemberAccounts({ data, accounts, tripId, api, run }: {
   }
 
   return <>
+    <p className="inline-note money-explainer">Tài khoản truy cập cho phép đăng nhập vào chuyến. Chủ chuyến bấm nút quản lý cạnh tài khoản → Liên kết người chia tiền → chọn đúng tên. Liên kết chỉ xác định số dư của tài khoản; không chia lại khoản chi cũ.</p>
     <div className="card rows">
       {!accounts.length && <Empty>Chưa có tài khoản trong chuyến.</Empty>}
       {accounts.map(account => <div className="list-row member-row" key={account.uid}>

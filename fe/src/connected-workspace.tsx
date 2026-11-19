@@ -369,7 +369,7 @@ function AuthenticatedWorkspace({ session, api, hash, onSignOut }: { session: Se
           onFilter={status => replaceRoute(tripRoute(selected, 'quyet-toan', undefined, 'status=' + status))} />;
         break;
       case 'thanh-vien':
-        content = <Members key={selected} data={data} update={update} accounts={members.data ?
+        content = <Members key={selected + ':' + (id ?? '')} view={id} data={data} update={update} accounts={members.data ?
           <MemberAccounts data={data} accounts={members.data.memberships} tripId={selected} api={api} run={mutation.run} /> :
           <p role="status">Đang tải tài khoản…</p>} />;
         break;

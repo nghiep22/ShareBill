@@ -189,6 +189,7 @@ export function Balances({ data, update, loading, disabled }: { data: Demo; upda
   const hasPersonal = complete && Object.hasOwn(totals, me);
   const pending = data.remote?.pendingCount ?? data.settlements.filter(item => settlementStatus(item) === 'pending').length;
   const allSettled = finance.balanced;
+  const singleParticipant = complete && data.members.length === 1 && data.remote!.total > 0;
   const debtors = data.members.filter(member => totals[member.id] < 0 && (isOwner(data) || member.id === me));
   const creditors = data.members.filter(member => totals[member.id] > 0);
   const cap = transferLimit(totals[from] ?? 0, totals[to] ?? 0);
@@ -219,8 +220,40 @@ export function Balances({ data, update, loading, disabled }: { data: Demo; upda
       <span className="tile-icon summary-icon"><Wallet size={21} aria-hidden /></span>
       <span className="summary-label">{hasPersonal ? netLabel(net) : 'Số dư của bạn'}</span>
       <strong>{hasPersonal ? <Amount value={Math.abs(net)} /> : me ? 'Chưa đủ dữ liệu' : 'Chưa liên kết'}</strong>
+      {!me && <>
+        <p className="balance-link-help">Tài khoản của bạn chưa gắn với người chia tiền. Nhờ chủ chuyến vào Thành viên → Tài khoản truy cập để liên kết đúng tên của bạn. Bạn vẫn xem được số tiền của cả nhóm bên dưới.</p>
+        <a className="text-button" href={tripHref(data, 'thanh-vien', 'tai-khoan')}>Xem tài khoản trong chuyến <ChevronRight size={15} aria-hidden /></a>
+      </>}
       {pending > 0 && <a className="text-button" href={tripHref(data, 'quyet-toan')}>{pending} khoản đang chờ xác nhận <ChevronRight size={15} aria-hidden /></a>}
     </div>
+    <section aria-label="Số tiền cần chuyển">
+      <div className="section-heading"><h2>Số tiền cần chuyển</h2>
+        {complete && canWrite(data) && debtors.length > 0 && creditors.length > 0 &&
+          <button className="secondary-button compact" disabled={disabled} onClick={() => open()}>Ghi khoản chuyển khác</button>}
+      </div>
+      {loading && <p role="status">Đang tải gợi ý chuyển tiền…</p>}
+      {!loading && !transfers.length && <div className="card field-card transfer-empty">
+        <h3>{allSettled ? <CircleCheck size={23} aria-hidden /> : <Wallet size={23} aria-hidden />}{singleParticipant ? 'Chưa có khoản cần chuyển giữa các thành viên' : allSettled ? 'Mọi người đã cân bằng.' : 'Chưa có gợi ý chuyển tiền'}</h3>
+        {singleParticipant ? <>
+          <p>Hiện chuyến chỉ có 1 người chia tiền là <b>{nameOf(data, data.members[0].id)}</b>. Toàn bộ <Amount value={data.remote!.total} /> được tính cho người này nên số cần chuyển là <Amount value={0} />.</p>
+          <p>Để chia tiền cho nhóm, {isOwner(data) ? 'thêm những người cùng chia' : 'nhờ chủ chuyến thêm những người cùng chia'}, rồi mở từng khoản chi cũ → Sửa → Chia cho ai? → chọn đủ người → Lưu khoản chi.</p>
+        </> : allSettled && data.remote!.total > 0 ?
+          <p>Không còn số dư cần chuyển. Nếu bạn vừa thêm người chia tiền, khoản chi cũ vẫn giữ phần chia đã lưu. Mở từng khoản chi → Sửa → Chia cho ai? để chọn thêm người khi cần.</p> :
+          <p>{!complete ? 'Tải lại dữ liệu để kiểm tra số tiền cần chuyển.' : pending ? 'Kiểm tra các khoản đang chờ trong Lịch sử chuyển tiền.' : allSettled ? 'Chuyến chưa có khoản chi. Thêm khoản chi và chọn những người cùng chia để tính số tiền cần chuyển.' : 'Tải lại gợi ý hoặc kiểm tra số dư của từng thành viên bên dưới.'}</p>}
+        {complete && !data.trip.closed && <div className="money-actions">
+          {singleParticipant && isOwner(data) && canWrite(data) && <a className="primary-button compact" href={tripHref(data, 'thanh-vien', 'them-nguoi')}>Thêm người chia tiền</a>}
+          {data.remote!.total > 0 && <a className="secondary-button compact" href={tripHref(data, 'chi-tieu')}>Xem và sửa khoản chi</a>}
+          {data.remote!.total === 0 && canWrite(data) && <a className="primary-button compact" href={tripHref(data, 'them-khoan-chi')}>Thêm khoản chi</a>}
+          {allSettled && !singleParticipant && isOwner(data) && <a className="secondary-button compact" href={tripHref(data, 'cai-dat')}>Chốt chuyến đi</a>}
+        </div>}
+      </div>}
+      {pending > 0 && <p className="inline-note">Các khoản đang chờ vẫn nằm ngoài số tiền đã xác nhận. Kiểm tra lịch sử trước khi ghi thêm khoản chuyển.</p>}
+      {!loading && transfers.length > 0 && <p className="inline-note money-explainer">Người bên trái cần chuyển cho người bên phải số tiền dưới đây. Sau khi chuyển tiền bên ngoài ứng dụng, bấm Ghi nhận đã chuyển; người nhận hoặc chủ chuyến xác nhận để cập nhật số dư.</p>}
+      <div className="transfer-grid">{!loading && complete && transfers.map(suggestion => <div className="card transfer-card" key={suggestion.from + '-' + suggestion.to}>
+        <div className="list-row"><TransferRow data={data} transfer={suggestion} /></div>
+        {canWrite(data) && (isOwner(data) || suggestion.from === me) && <button className="soft-button transfer-button" disabled={disabled} onClick={() => open(suggestion)}><ArrowDownUp size={16} aria-hidden /> Ghi nhận đã chuyển</button>}
+      </div>)}</div>
+    </section>
     <section>
       <div className="section-heading"><h2>Số tiền của từng thành viên</h2><span className="tag">{data.members.length} người</span></div>
       <p className="inline-note money-explainer">Phải chịu là tổng phần được chia từ các khoản chi. Cần trả / được nhận đã trừ tiền ứng và các khoản chuyển được xác nhận.</p>
@@ -238,21 +271,6 @@ export function Balances({ data, update, loading, disabled }: { data: Demo; upda
             <div key={label}><dt>{label}</dt><dd><Amount value={Number(value)} /></dd></div>)}</dl>
         </section>;
       })}</div>
-    </section>
-    <section>
-      <div className="section-heading"><h2>Gợi ý chuyển tiền</h2>
-        {complete && canWrite(data) && debtors.length > 0 && creditors.length > 0 &&
-          <button className="secondary-button compact" disabled={disabled} onClick={() => open()}>Ghi khoản chuyển khác</button>}
-      </div>
-      {loading && <p role="status">Đang tải gợi ý chuyển tiền…</p>}
-      {!loading && !transfers.length && <div className="card empty-stack">{allSettled ? <CircleCheck size={26} aria-hidden /> : <Wallet size={26} aria-hidden />}<Empty>{allSettled ? 'Mọi người đã cân bằng.' : pending ? 'Các khoản còn lại đang chờ xác nhận.' : 'Chưa có gợi ý cho số dư hiện tại.'}</Empty>
-        {allSettled && !data.trip.closed && isOwner(data) && <a className="secondary-button" href={tripHref(data, 'cai-dat')}>Chốt chuyến đi</a>}
-      </div>}
-      {pending > 0 && <p className="inline-note">Các khoản đang chờ vẫn nằm ngoài số tiền đã xác nhận. Kiểm tra lịch sử trước khi ghi thêm khoản chuyển.</p>}
-      <div className="transfer-grid">{!loading && complete && transfers.map(suggestion => <div className="card transfer-card" key={suggestion.from + '-' + suggestion.to}>
-        <div className="list-row"><TransferRow data={data} transfer={suggestion} /></div>
-        {canWrite(data) && (isOwner(data) || suggestion.from === me) && <button className="soft-button transfer-button" disabled={disabled} onClick={() => open(suggestion)}><ArrowDownUp size={16} aria-hidden /> Ghi nhận đã chuyển</button>}
-      </div>)}</div>
     </section>
     {selected && <Dialog title="Ghi nhận đã chuyển tiền" onClose={() => setSelected(undefined)}>
       <p>{selected.transfer && nameOf(data, selected.transfer.from) + ' → ' + nameOf(data, selected.transfer.to) + '. '}Số dư cập nhật sau khi khoản chuyển được xác nhận.</p>
