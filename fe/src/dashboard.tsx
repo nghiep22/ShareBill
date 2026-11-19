@@ -190,6 +190,15 @@ export function Balances({ data, update, loading, disabled }: { data: Demo; upda
   const pending = data.remote?.pendingCount ?? data.settlements.filter(item => settlementStatus(item) === 'pending').length;
   const allSettled = finance.balanced;
   const singleParticipant = complete && data.members.length === 1 && data.remote!.total > 0;
+  const withoutCosts = new Set(complete && data.remote!.total > 0 ? data.members.filter(member => {
+    const row = finance.lines[member.id];
+    return !member.inactive && [row.owedMinor, row.paidMinor, row.sentMinor, row.receivedMinor].every(value => value === 0);
+  }).map(member => member.id) : []);
+  const noPersonalCost = hasPersonal && withoutCosts.has(me);
+  const withoutCostNames = [...withoutCosts].slice(0, 3).map(id => nameOf(data, id)).join(', ') +
+    (withoutCosts.size > 3 ? ' và ' + (withoutCosts.size - 3) + ' người khác' : '');
+  const emptyTransferTitle = singleParticipant ? 'Chưa có khoản cần chuyển giữa các thành viên' : !allSettled ? 'Chưa có gợi ý chuyển tiền' :
+    withoutCosts.size > 0 ? 'Chưa có khoản cần chuyển theo phần chia đã lưu' : 'Mọi người đã cân bằng.';
   const debtors = data.members.filter(member => totals[member.id] < 0 && (isOwner(data) || member.id === me));
   const creditors = data.members.filter(member => totals[member.id] > 0);
   const cap = transferLimit(totals[from] ?? 0, totals[to] ?? 0);
@@ -218,8 +227,12 @@ export function Balances({ data, update, loading, disabled }: { data: Demo; upda
     </PageTitle>
     <div className={'summary-card balance-hero personal' + (net < 0 ? ' negative-card' : '')}>
       <span className="tile-icon summary-icon"><Wallet size={21} aria-hidden /></span>
-      <span className="summary-label">{hasPersonal ? netLabel(net) : 'Số dư của bạn'}</span>
+      <span className="summary-label">{noPersonalCost ? 'Bạn chưa có chi phí phải chịu' : hasPersonal ? netLabel(net) : 'Số dư của bạn'}</span>
       <strong>{hasPersonal ? <Amount value={Math.abs(net)} /> : me ? 'Chưa đủ dữ liệu' : 'Chưa liên kết'}</strong>
+      {noPersonalCost && <>
+        <p className="balance-link-help">Bạn đã liên kết tài khoản, nhưng phần phải chịu trong các khoản chi đã lưu hiện là 0đ. Nếu bạn cần cùng chia tiền, chủ chuyến hoặc người tạo khoản chi cần mở khoản chi → Sửa → Chia cho ai? → chọn tên bạn → Lưu khoản chi.</p>
+        <a className="text-button" href={tripHref(data, 'chi-tieu')}>Xem khoản chi để chia lại <ChevronRight size={15} aria-hidden /></a>
+      </>}
       {!me && <>
         <p className="balance-link-help">Tài khoản của bạn chưa gắn với người chia tiền. Nhờ chủ chuyến vào Thành viên → Tài khoản truy cập để liên kết đúng tên của bạn. Bạn vẫn xem được số tiền của cả nhóm bên dưới.</p>
         <a className="text-button" href={tripHref(data, 'thanh-vien', 'tai-khoan')}>Xem tài khoản trong chuyến <ChevronRight size={15} aria-hidden /></a>
@@ -233,12 +246,13 @@ export function Balances({ data, update, loading, disabled }: { data: Demo; upda
       </div>
       {loading && <p role="status">Đang tải gợi ý chuyển tiền…</p>}
       {!loading && !transfers.length && <div className="card field-card transfer-empty">
-        <h3>{allSettled ? <CircleCheck size={23} aria-hidden /> : <Wallet size={23} aria-hidden />}{singleParticipant ? 'Chưa có khoản cần chuyển giữa các thành viên' : allSettled ? 'Mọi người đã cân bằng.' : 'Chưa có gợi ý chuyển tiền'}</h3>
+        <h3>{allSettled && !withoutCosts.size ? <CircleCheck size={23} aria-hidden /> : <Wallet size={23} aria-hidden />}{emptyTransferTitle}</h3>
+        {allSettled && !singleParticipant && withoutCosts.size > 0 && <p><b>Chưa có chi phí phải chịu:</b> {withoutCostNames}. Thêm người hoặc liên kết tài khoản không tự thay đổi phần chia của khoản chi cũ.</p>}
         {singleParticipant ? <>
           <p>Hiện chuyến chỉ có 1 người chia tiền là <b>{nameOf(data, data.members[0].id)}</b>. Toàn bộ <Amount value={data.remote!.total} /> được tính cho người này nên số cần chuyển là <Amount value={0} />.</p>
           <p>Để chia tiền cho nhóm, {isOwner(data) ? 'thêm những người cùng chia' : 'nhờ chủ chuyến thêm những người cùng chia'}, rồi mở từng khoản chi cũ → Sửa → Chia cho ai? → chọn đủ người → Lưu khoản chi.</p>
         </> : allSettled && data.remote!.total > 0 ?
-          <p>Không còn số dư cần chuyển. Nếu bạn vừa thêm người chia tiền, khoản chi cũ vẫn giữ phần chia đã lưu. Mở từng khoản chi → Sửa → Chia cho ai? để chọn thêm người khi cần.</p> :
+          <p>Hiện số cần chuyển bằng 0 theo phần chia đã lưu. Nếu bạn vừa thêm người chia tiền, khoản chi cũ vẫn giữ phần chia đã lưu. Mở từng khoản chi → Sửa → Chia cho ai? để chọn thêm người khi cần.</p> :
           <p>{!complete ? 'Tải lại dữ liệu để kiểm tra số tiền cần chuyển.' : pending ? 'Kiểm tra các khoản đang chờ trong Lịch sử chuyển tiền.' : allSettled ? 'Chuyến chưa có khoản chi. Thêm khoản chi và chọn những người cùng chia để tính số tiền cần chuyển.' : 'Tải lại gợi ý hoặc kiểm tra số dư của từng thành viên bên dưới.'}</p>}
         {complete && !data.trip.closed && <div className="money-actions">
           {singleParticipant && isOwner(data) && canWrite(data) && <a className="primary-button compact" href={tripHref(data, 'thanh-vien', 'them-nguoi')}>Thêm người chia tiền</a>}
@@ -264,7 +278,7 @@ export function Balances({ data, update, loading, disabled }: { data: Demo; upda
           <div className="row-text"><strong>{member.name}</strong><span>Chưa có dữ liệu số dư</span></div></div>;
         return <section className="balance-member" aria-label={'Số dư của ' + nameOf(data, member.id)} key={member.id}>
           <div className="list-row"><Avatar member={member} />
-            <span className="row-text"><strong>{nameOf(data, member.id)}{member.id === me ? ' (bạn)' : ''}{member.inactive && ' · Ngừng dùng'}</strong><span>{total > 0 ? 'Được nhận' : total < 0 ? 'Cần trả' : 'Đã cân bằng'}</span></span>
+            <span className="row-text"><strong>{nameOf(data, member.id)}{member.id === me ? ' (bạn)' : ''}{member.inactive && ' · Ngừng dùng'}</strong><span>{total > 0 ? 'Được nhận' : total < 0 ? 'Cần trả' : withoutCosts.has(member.id) ? 'Chưa có chi phí phải chịu' : 'Đã cân bằng'}</span></span>
             <strong className={'row-end ' + (total < 0 ? 'negative' : total > 0 ? 'positive' : '')}><Amount value={Math.abs(total)} /></strong>
           </div>
           <dl className="balance-breakdown">{[['Phải chịu', row.owedMinor], ['Đã ứng', row.paidMinor], ['Đã chuyển', row.sentMinor], ['Đã nhận', row.receivedMinor]].map(([label, value]) =>

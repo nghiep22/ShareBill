@@ -25,6 +25,8 @@ Nếu chỉ có một người chia tiền, màn hình giải thích toàn bộ 
 
 **Chưa liên kết** nghĩa là tài khoản đang xem chưa gắn với người chia tiền. Nút **Xem tài khoản trong chuyến** mở thẳng tab Tài khoản truy cập; chủ chuyến quản lý tài khoản thành viên → Liên kết người chia tiền → chọn đúng tên và xác nhận. Liên kết không thay đổi phần chia hay số dư của nhóm. Người chưa liên kết vẫn xem được số tiền cần chuyển của nhóm.
 
+Khi chuyến có chi phí nhưng một người chưa chịu chi phí, chưa ứng và chưa chuyển/nhận khoản nào, thẻ người đó dùng **Chưa có chi phí phải chịu**. Nếu là tài khoản đang xem, thẻ cá nhân giải thích đã liên kết nhưng phần chi phí vẫn 0đ và dẫn đến danh sách khoản chi để chọn lại người được chia. Nhóm có số dư 0 nhưng còn người ở tình trạng này dùng nhãn **Chưa có khoản cần chuyển theo phần chia đã lưu**, kèm tên người chưa chịu chi phí; không suy đoán họ đã trả hết tiền. Người có phần chi và đã thanh toán đủ vẫn dùng nhãn **Đã cân bằng**. Không tự thêm người vào khoản chi hay gộp những người trùng tên.
+
 Ô ghi nhận chuyển tiền dùng cùng quy tắc VND với khoản chi. `10.000`, `10,000` và `10000` đều thành 10.000đ. Từ chối số lẻ, trộn dấu, số mũ như `1e3`, số âm/0, vượt giới hạn và vượt số nợ hiện tại. Không dùng việc chuyển dấu chấm thành phần thập phân của HTML number để ghi nhầm 10.000đ thành 10đ.
 
 Có thể chuyển một phần hoặc chọn cặp người chuyển/người nhận khác hợp lệ. Lưu chỉ tạo đề nghị chờ; người nhận hoặc chủ chuyến xác nhận đúng quyền mới cập nhật số dư. Hủy pending giữ nguyên tiền. Hủy hiệu lực confirmed đảo đúng số tiền đã ghi nhận, giữ lịch sử và yêu cầu lý do. Sửa/hủy khoản chi cập nhật phần chia và công nợ; các khoản chuyển đã xác nhận trước đó vẫn được giữ riêng theo sổ.
