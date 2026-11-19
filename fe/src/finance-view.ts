@@ -1,4 +1,10 @@
 import type { BalanceLine, Demo, Transfer } from './model';
+import { maximumMoney } from './money-input';
+
+export function transferLimit(fromNet: number, toNet: number) {
+  return Number.isSafeInteger(fromNet) && Number.isSafeInteger(toNet) && fromNet < 0 && toNet > 0
+    ? Math.min(-fromNet, toNet, maximumMoney) : 0;
+}
 
 /** Money views use the complete server snapshot, never sums of a filtered/paginated expense list. */
 export function financialSnapshot(data: Demo) {
@@ -6,7 +12,8 @@ export function financialSnapshot(data: Demo) {
   const unavailable = { complete: false, lines: {} as Record<string, BalanceLine>, net: {} as Record<string, number>, balanced: false };
   if (!remote || !Array.isArray(remote.balances) || data.members.length < 1 || data.members.length !== remote.participantCount || remote.balances.length !== data.members.length ||
       !Number.isSafeInteger(remote.total) || remote.total < 0 || !Number.isSafeInteger(remote.pendingCount) || remote.pendingCount < 0 ||
-      !Number.isSafeInteger(remote.expenseCount) || remote.expenseCount < 0 || (remote.expenseCount === 0) !== (remote.total === 0)) return unavailable;
+      !Number.isSafeInteger(remote.expenseCount) || remote.expenseCount < 0 || (remote.expenseCount === 0) !== (remote.total === 0) ||
+      !Number.isSafeInteger(remote.ledgerVersion) || remote.ledgerVersion < 0) return unavailable;
   const ids = new Set(data.members.map(member => member.id));
   if (ids.size !== data.members.length) return unavailable;
   const lines: Record<string, BalanceLine> = Object.create(null);

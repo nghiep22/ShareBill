@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { financialSnapshot, validSuggestions } from '../../fe/src/finance-view.js';
+import { financialSnapshot, transferLimit, validSuggestions } from '../../fe/src/finance-view.js';
 import { parseMoney, parsePositiveMoney } from '../../fe/src/money-input.js';
 import { splitEqually, type Demo } from '../../fe/src/model.js';
 import { splitEqual } from '../src/domain/money.js';
@@ -78,6 +78,14 @@ describe('money views', () => {
 });
 
 describe('VND inputs', () => {
+  it('caps a single repayment at the API limit even when accumulated trip debt is larger', () => {
+    expect(transferLimit(-2_000_000_000_000, 2_000_000_000_000)).toBe(1_000_000_000_000);
+    expect(transferLimit(-30000, 20000)).toBe(20000);
+  });
+  it('does not offer a transfer for invalid or reversed balance roles', () => {
+    expect(transferLimit(100, -100)).toBe(0);
+    expect(transferLimit(NaN, 100)).toBe(0);
+  });
   it.each([['10.000', 10000], ['10,000', 10000], [' 10000 ', 10000], ['1', 1], ['1.000.000.000.000', 1e12]])('parses %s as %i whole VND', (text, expected) => {
     expect(parsePositiveMoney(String(text))).toBe(expected);
   });

@@ -12,8 +12,8 @@ import {
 import { Amount, Avatar, CategoryIcon, Dialog, Empty, PageTitle } from './ui';
 import type { UpdateTrip } from './trip-command';
 import { tripHref } from './workspace-route';
-import { financialSnapshot } from './finance-view';
-import { parsePositiveMoney } from './money-input';
+import { financialSnapshot, transferLimit } from './finance-view';
+import { maximumMoney, parsePositiveMoney } from './money-input';
 
 const sortExpenses = (a: Expense, b: Expense) => b.date.localeCompare(a.date);
 
@@ -191,12 +191,12 @@ export function Balances({ data, update, loading, disabled }: { data: Demo; upda
   const allSettled = finance.balanced;
   const debtors = data.members.filter(member => totals[member.id] < 0 && (isOwner(data) || member.id === me));
   const creditors = data.members.filter(member => totals[member.id] > 0);
-  const cap = Math.min(-(totals[from] ?? 0), totals[to] ?? 0);
+  const cap = transferLimit(totals[from] ?? 0, totals[to] ?? 0);
   const transfer = selected?.transfer ?? (cap > 0 ? { from, to, amount: cap } : undefined);
   const stale = selected?.ledgerVersion !== undefined && selected.ledgerVersion !== data.remote?.ledgerVersion;
 
   function open(transfer?: Transfer) {
-    setSelected({ transfer, ledgerVersion: data.remote?.ledgerVersion });
+    setSelected({ transfer: transfer && { ...transfer, amount: Math.min(transfer.amount, maximumMoney) }, ledgerVersion: data.remote?.ledgerVersion });
     setFrom(debtors[0]?.id ?? '');
     setTo(creditors[0]?.id ?? '');
     setError('');
