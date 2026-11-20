@@ -15,7 +15,7 @@ Trong **Số dư & quyết toán**, mỗi thành viên luôn hiện trực tiế
 - **Đã chuyển / Đã nhận:** chỉ tính các khoản chuyển đã xác nhận còn hiệu lực.
 - **Cần trả / Được nhận:** phần còn lại sau ứng tiền và chuyển tiền; hiển thị số tiền dương kèm nhãn, không bắt người dùng tự hiểu dấu âm.
 
-Ví dụ An ứng 100.000đ chia ba người; Bình chịu 33.333đ và chưa ứng gì. Bình cần trả 33.333đ. Sau khi khoản Bình chuyển 10.000đ được xác nhận, phần phải chịu vẫn là 33.333đ, đã chuyển là 10.000đ và còn cần trả 23.333đ. Pending không trừ nợ và không giữ chỗ tiền; gợi ý có thể gồm các cặp đang có pending, nên người dùng kiểm lịch sử trước khi ghi thêm.
+Ví dụ An ứng 100.000đ chia ba người; Bình chịu 33.333đ và chưa ứng gì. Bình cần trả 33.333đ. Sau khi khoản Bình chuyển 10.000đ được xác nhận, phần phải chịu vẫn là 33.333đ, đã chuyển là 10.000đ và còn cần trả 23.333đ. Pending chưa trừ nợ; mỗi cặp chỉ được ghi một khoản chờ xác nhận. Gợi ý vẫn hiện số nợ hiện tại nhưng khóa nút **Đã ghi nhận · Chờ xác nhận**. Backend chặn ghi trùng cả khi gửi đồng thời, ghi nhận thay, tải lại hoặc mở nhiều tab. Sau khi khoản chờ được hủy hoặc xác nhận, có thể ghi khoản tiếp theo nếu còn nợ.
 
 Tổng quan hiển thị tổng chi, phần chi của tài khoản đang xem và số còn cần trả/được nhận từ snapshot server. Danh sách khoản chi dùng nhãn **Phần của bạn** để tránh hiểu số âm/dương của riêng một khoản là toàn bộ công nợ. Màn hình thành viên cũng có nhãn Cần trả/Được nhận.
 

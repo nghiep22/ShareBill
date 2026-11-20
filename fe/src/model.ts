@@ -11,7 +11,7 @@ export const categories = {
 };
 
 export type Category = keyof typeof categories;
-export type Member = { id: string; name: string; tone: number; inactive?: boolean; linked?: boolean; uid?: string; version?: number };
+export type Member = { id: string; name: string; tone: number; inactive?: boolean; linked?: boolean; uid?: string; version?: number; paymentQrReceiptId?: string | null };
 export type Receipt = { id: string; name: string; src?: string; version?: number };
 export type Expense = {
   id: string;
@@ -37,6 +37,7 @@ export type Settlement = Transfer & {
   version?: number;
   confirmationMode?: 'recipient' | 'owner_on_behalf';
   confirmedAt?: string;
+  receipts?: Receipt[];
 };
 export type Plan = { id: string; day: string; time: string; title: string; place: string; note?: string; suggestionId?: string };
 export type Idea = { id: string; title: string; by: string; author?: string; declined?: boolean; scheduled?: boolean };
@@ -61,6 +62,7 @@ export type RemoteSnapshot = {
   total: number;
   balances: BalanceLine[];
   suggestions: Transfer[];
+  pendingTransfers?: Transfer[];
   suggestionsReady?: boolean;
   itineraryVersion?: number;
 };

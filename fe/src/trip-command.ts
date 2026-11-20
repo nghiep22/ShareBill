@@ -11,7 +11,8 @@ export type ItineraryChange =
 export type TripCommand =
   | { type: 'save-expense'; expense: Expense; previous?: Expense }
   | { type: 'void-expense'; expense: Expense; reason: string }
-  | { type: 'record-settlement'; transfer: Transfer; ledgerVersion?: number }
+  | { type: 'record-settlement'; transfer: Transfer; receipts?: Receipt[]; ledgerVersion?: number }
+  | { type: 'save-payment-qr'; member: Member; receipt: Receipt | null }
   | { type: 'settlement-status'; item: Settlement; status: 'confirmed' | 'cancelled' | 'void'; reason: string; ledgerVersion?: number }
   | { type: 'save-trip'; trip: Trip; version?: number }
   | { type: 'close-trip'; closed: boolean; version?: number }

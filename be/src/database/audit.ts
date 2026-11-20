@@ -47,7 +47,8 @@ const ownerSnapshot = z.strictObject({ id: z.uuid(), ownerUid: z.string().min(1)
 const tripStateSnapshot = z.strictObject({ id: z.uuid(), status: z.enum(['active', 'archived']),
   archivedAt: z.iso.datetime().nullable(), inviteEpoch: z.int().positive(), version: z.int().positive() });
 const receiptSnapshot = z.strictObject({ id: z.uuid(), status: z.enum(['awaiting_upload', 'processing', 'ready', 'attached', 'discarded', 'failed']),
-  version: z.int().positive(), attachedExpenseId: z.uuid().nullable() });
+  version: z.int().positive(), attachedExpenseId: z.uuid().nullable(),
+  attachedSettlementId: z.uuid().nullable().optional(), attachedParticipantId: z.uuid().nullable().optional() });
 const itinerarySnapshot = z.strictObject({
   id: z.uuid(), version: z.int().positive(), status: z.enum(['scheduled', 'removed', 'pending', 'declined']),
 });
@@ -172,7 +173,8 @@ export const auditEventSchema = z.strictObject({
       event.action.startsWith('receipt.') && event.action !== 'receipt.created' &&
       (event.after.version !== (event.before?.version as number) + 1 ||
         event.action === 'receipt.finalized' && (event.before?.status !== 'processing' || event.after.status !== 'ready') ||
-        event.action === 'receipt.attached' && (event.before?.status !== 'ready' || event.after.status !== 'attached' || event.after.attachedExpenseId === null) ||
+        event.action === 'receipt.attached' && (event.before?.status !== 'ready' || event.after.status !== 'attached' ||
+          [event.after.attachedExpenseId, event.after.attachedSettlementId, event.after.attachedParticipantId].filter(Boolean).length !== 1) ||
         event.action === 'receipt.discarded' && event.after.status !== 'discarded')) {
     context.addIssue({ code: 'custom', message: 'invalid receipt transition', path: ['after'] });
   }

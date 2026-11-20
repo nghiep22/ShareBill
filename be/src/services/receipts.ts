@@ -10,6 +10,7 @@ import { createReceiptDocument, DAY_MS, DISCARD_GRACE_MS, LEASE_MS, MAX_RECEIPT_
 import { increment, readTripActor, requireWritable } from './trip-access.js';
 import { processReceiptImage, type ReceiptImageProcessor } from './receipt-image.js';
 import { CloudReceiptStorage, type ReceiptStorage } from './receipt-storage.js';
+import { VercelReceiptStorage } from './vercel-receipt-storage.js';
 
 type Trip = FirebaseFirestore.DocumentSnapshot;
 function denied(): never { throw new ApiError(403, 'FORBIDDEN', 'Bạn không thể thao tác ảnh này.'); }
@@ -36,7 +37,8 @@ function paths(tripId: string, uid: string, id: string, key: string) {
     workflowRef: store.doc(`users/${uid}/receiptWorkflows/${key}`) };
 }
 export class ReceiptService {
-  constructor(public storage: ReceiptStorage = new CloudReceiptStorage(), public imageProcessor: ReceiptImageProcessor = processReceiptImage) {}
+  constructor(public storage: ReceiptStorage = process.env.BLOB_READ_WRITE_TOKEN || process.env.BLOB_STORE_ID ? new VercelReceiptStorage() : new CloudReceiptStorage(),
+    public imageProcessor: ReceiptImageProcessor = processReceiptImage) {}
 
   async createIntent(tripId: string, uid: string, key: string, input: z.infer<typeof receiptIntentInput>) {
     const id = randomUUID(), auditId = randomUUID(), { store, tripRef, opRef } = paths(tripId, uid, id, key);
@@ -183,8 +185,17 @@ export class ReceiptService {
       if (data.status !== 'attached' && !(data.status === 'ready' && data.uploaderUid === uid)) return denied();
       if (!data.processedPath || !data.processedGeneration || data.storageDeletedAt) throw new ApiError(409, 'RECEIPT_NOT_READY', 'Ảnh chưa sẵn sàng.');
       if (data.status === 'attached') {
-        const expense = await tx.get(tripRef.collection('expenses').doc(data.attachedExpenseId!));
-        if (!expense.exists || !(expense.get('receiptIds') as string[]).includes(id)) throw new ApiError(409, 'RECEIPT_CLAIM_CONFLICT', 'Liên kết ảnh không hợp lệ.');
+        const collection = data.attachedSettlementId ? 'settlements' : data.attachedParticipantId ? 'participants' : 'expenses';
+        const targetId = data.attachedSettlementId ?? data.attachedParticipantId ?? data.attachedExpenseId!;
+        const target = await tx.get(tripRef.collection(collection).doc(targetId));
+        const claimed = collection === 'participants' ? target.get('paymentQrReceiptId') === id :
+          Array.isArray(target.get('receiptIds')) && target.get('receiptIds').includes(id);
+        if (!target.exists || !claimed) throw new ApiError(409, 'RECEIPT_CLAIM_CONFLICT', 'Liên kết ảnh không hợp lệ.');
+        if (collection === 'participants' && target.get('linkedUid') !== data.uploaderUid) return denied();
+        if (collection === 'settlements') {
+          const membership = await tx.get(tripRef.collection('memberships').doc(uid));
+          if (![target.get('fromParticipantId'), target.get('toParticipantId')].includes(membership.get('participantId'))) return denied();
+        }
       }
       return data;
     }, { readOnly: true });
@@ -205,7 +216,7 @@ export class ReceiptService {
       const receipt = readReceipt(snapshot, tripId);
       if (receipt.uploaderUid !== uid && member.get('role') !== 'owner') return denied();
       if (receipt.version !== expectedVersion) throw new ApiError(409, 'VERSION_CONFLICT', 'Ảnh đã thay đổi.');
-      if (receipt.status === 'attached') throw new ApiError(409, 'RECEIPT_ATTACHED', 'Ảnh đang thuộc khoản chi. Hãy sửa khoản chi để bỏ ảnh.');
+      if (receipt.status === 'attached') throw new ApiError(409, 'RECEIPT_ATTACHED', 'Ảnh đang được sử dụng và không thể xóa trực tiếp.');
       if (receipt.status === 'discarded') throw new ApiError(409, 'INVALID_STATE_TRANSITION', 'Ảnh đã được loại bỏ.');
       const now = Timestamp.now(), changes = { status: 'discarded' as const, version: increment(receipt.version), updatedAt: now,
         discardedAt: now, cleanupAfter: Timestamp.fromMillis(now.toMillis() + DISCARD_GRACE_MS), processingLeaseUntil: null };

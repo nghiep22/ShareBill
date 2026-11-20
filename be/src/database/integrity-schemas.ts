@@ -40,6 +40,7 @@ export const participantSchema = z.strictObject({
   schemaVersion: v1, id: entityId, displayName: z.string().min(1).max(80), linkedUid: uid.nullable(),
   status: z.enum(['active', 'inactive']), version, hasLedgerReferences: z.boolean(), createdBy: uid,
   createdAt: timestamp, updatedAt: timestamp,
+  paymentQrReceiptId: entityId.nullable().optional(),
 });
 
 export const participantLinkSchema = z.strictObject({ schemaVersion: v1, uid, participantId: entityId, updatedAt: timestamp });
@@ -60,15 +61,17 @@ export const receiptSchema = z.strictObject({
   processedPath: z.string().min(1).nullable(), processedGeneration: z.string().min(1).nullable(),
   bytes: version.max(2 * 1024 * 1024).nullable(), width: version.max(1600).nullable(), height: version.max(1600).nullable(),
   attachedExpenseId: entityId.nullable(), processingLeaseUntil: timestamp.nullable(), processingAttemptId: entityId.nullable(),
+  attachedSettlementId: entityId.nullable().default(null), attachedParticipantId: entityId.nullable().default(null),
   processingOperationKey: entityId.nullable(), processingRequestHash: z.string().regex(/^[0-9a-f]{64}$/).nullable(),
   processingBaseVersion: version.nullable(), version, createdAt: timestamp, updatedAt: timestamp,
   discardedAt: timestamp.nullable(), cleanupAfter: timestamp.nullable(), storageDeletedAt: timestamp.nullable(),
 }).superRefine((receipt, context) => {
   const output = [receipt.processedPath, receipt.processedGeneration, receipt.bytes, receipt.width, receipt.height];
   const hasOutput = output.every(value => value !== null);
+  const attachments = [receipt.attachedExpenseId, receipt.attachedSettlementId, receipt.attachedParticipantId].filter(value => value !== null).length;
   if (output.some(value => value !== null) && !hasOutput ||
       (receipt.status === 'ready' || receipt.status === 'attached') && (!hasOutput || !receipt.stagingGeneration || !receipt.processingAttemptId) ||
-      (receipt.status === 'attached') !== (receipt.attachedExpenseId !== null) ||
+      (receipt.status === 'attached' ? attachments !== 1 : attachments !== 0) ||
       receipt.status === 'processing' && (!receipt.processingLeaseUntil || !receipt.processingAttemptId || !receipt.processingOperationKey ||
         !receipt.processingRequestHash || !receipt.processingBaseVersion) ||
       receipt.status !== 'processing' && receipt.processingLeaseUntil !== null ||

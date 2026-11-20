@@ -12,6 +12,7 @@ import { registerMembershipRoutes } from './membership-routes.js';
 import { registerLedgerRoutes } from './ledger-routes.js';
 import { registerGroupSharingRoutes } from './group-sharing-routes.js';
 import { registerReceiptRoutes } from './receipt-routes.js';
+import { registerPaymentRoutes } from './payment-routes.js';
 import { ReceiptService } from './services/receipts.js';
 import { sendError } from './http.js';
 import { registerAuthRoutes } from './auth-routes.js';
@@ -58,6 +59,7 @@ export async function buildApp(app = createServer(), options: { receipts?: Recei
   await registerLedgerRoutes(app);
   await registerGroupSharingRoutes(app);
   await registerReceiptRoutes(app, options.receipts ?? new ReceiptService());
+  await registerPaymentRoutes(app);
   await registerItineraryRoutes(app);
   await registerSupportRoutes(app);
   await registerAdminRoutes(app);

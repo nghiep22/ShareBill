@@ -1,5 +1,7 @@
 # ShareBill — Đặc tả Backend
 
+**Bổ sung 20/11/2026:** [QR nhận tiền và ảnh chuyển khoản](PAYMENTS.md) mô tả API QR, đính kèm bằng chứng giao dịch và quyền xác nhận của người nhận.
+
 Phiên bản 1.0 · 16/11/2026 · Phương án chính: Next.js API trên Vercel + Firebase.
 
 **Cập nhật implementation:** theo yêu cầu tách `fe/` và `be/`, backend thực tế dùng Fastify/Node.js trong `be/` và có thể deploy Vercel như một project riêng. Những đường `src/app/api/...` và đoạn nói Route Handlers bên dưới là thiết kế ban đầu; hợp đồng `/api/v1` và quy tắc tiền/quyền vẫn áp dụng. Xem [BE hiện có](../be/README.md) để biết endpoints đã code.

@@ -1,5 +1,7 @@
 # ShareBill — Kế hoạch sản phẩm và kiến trúc
 
+**Bổ sung 20/11/2026:** thành viên tải QR nhận tiền; người chuyển lưu ảnh và báo đã chuyển; người nhận xem bằng chứng và xác nhận trước khi giảm công nợ. Xem [luồng thanh toán](PAYMENTS.md).
+
 Phiên bản đặc tả: 1.0 · Ngày: 16/11/2026 · Trạng thái: đề xuất triển khai.
 
 **Cập nhật cấu trúc:** theo yêu cầu mới, `fe/` và `be/` tách thư mục. Backend đã bắt đầu bằng Fastify/Node.js + Firebase; React frontend/admin sẽ triển khai sau. Sơ đồ Next.js Route Handlers trong phần kiến trúc là thiết kế ban đầu và được thay bằng Fastify API riêng ở implementation. Xem [README](../README.md).

@@ -41,8 +41,9 @@ export function createReceiptDocument(tripId: string, uid: string, id: string,
 export function receiptDto(id: string, data: ReceiptDocument) {
   return { id, tripId: data.tripId, status: data.status, version: data.version, contentType: data.declaredContentType,
     expiresAt: data.expiresAt.toDate().toISOString(), bytes: data.bytes, width: data.width, height: data.height,
-    attachedExpenseId: data.attachedExpenseId };
+    attachedExpenseId: data.attachedExpenseId, attachedSettlementId: data.attachedSettlementId, attachedParticipantId: data.attachedParticipantId };
 }
 export function receiptAudit(id: string, data: ReceiptDocument) {
-  return { id, status: data.status, version: data.version, attachedExpenseId: data.attachedExpenseId };
+  return { id, status: data.status, version: data.version, attachedExpenseId: data.attachedExpenseId,
+    attachedSettlementId: data.attachedSettlementId, attachedParticipantId: data.attachedParticipantId };
 }

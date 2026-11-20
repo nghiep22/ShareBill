@@ -1,5 +1,7 @@
 # ShareBill — Thiết kế và kế hoạch hoàn thiện cơ sở dữ liệu
 
+**Bổ sung 20/11/2026:** QR thành viên, ảnh chuyển khoản và ràng buộc liên kết ảnh đã triển khai theo [hợp đồng thanh toán](PAYMENTS.md#hợp-đồng-api-và-dữ-liệu).
+
 Phiên bản thiết kế 1.0 · 16/11/2026 · Backend Node.js/Fastify, Firebase Authentication, Cloud Firestore Standard edition.
 
 Tài liệu này là đầu mối thiết kế CSDL cho app chia tiền và website quản trị React/Node.js. Bao gồm quan hệ dữ liệu, từng collection, ràng buộc, index, transaction, dữ liệu mẫu, migration và nghiệm thu. Quy tắc sản phẩm ở [PRODUCT_PLAN.md](PRODUCT_PLAN.md); hợp đồng API ở [BACKEND.md](BACKEND.md); quyền quản trị ở [ADMIN_WEB.md](ADMIN_WEB.md).

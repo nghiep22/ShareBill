@@ -10,6 +10,7 @@ import { suggestSettlements, applySettlement } from './domain/settlement.js';
 import { settlementInput, settlementDocumentSchema, createSettlementDocument, confirmationChanges } from './database/settlement.js';
 import { createAuditEvent } from './database/audit.js';
 import { createOperationDocument, readOperationResult, readOperationSnapshot } from './database/operation.js';
+import { applyReceiptAttachments, planReceiptAttachments } from './services/receipt-attachments.js';
 
 const confirmInput = z.strictObject({ basedOnLedgerVersion: z.number().int().min(0) });
 const voidInput = z.strictObject({ reason: z.string().trim().min(1).max(300) });
@@ -44,14 +45,18 @@ export async function registerFinanceRoutes(app: FastifyInstance): Promise<void>
     const { tripId } = ids(request.params);
     const store = db();
     return store.runTransaction(async tx => {
-      const [member, trip, balanceQuery] = await Promise.all([
+      const [member, trip, balanceQuery, pendingQuery] = await Promise.all([
         tx.get(store.doc(`trips/${tripId}/memberships/${uid}`)),
         tx.get(store.doc(`trips/${tripId}`)),
         tx.get(store.collection(`trips/${tripId}/balances`)),
+        tx.get(store.collection(`trips/${tripId}/settlements`).where('status', '==', 'pending')),
       ]);
       if (!member.exists || member.get('status') !== 'active' || !trip.exists) throw new ApiError(404, 'NOT_FOUND', 'Không tìm thấy chuyến đi.');
       const balances = balanceQuery.docs.map(s => s.data() as Balance);
-      return { data: { ledgerVersion: trip.get('ledgerVersion'), suggestions: suggestSettlements(balances) } };
+      return { data: { ledgerVersion: trip.get('ledgerVersion'), revision: trip.get('revision'),
+        suggestions: suggestSettlements(balances), pendingTransfers: pendingQuery.docs.map(item => ({
+          fromParticipantId: item.get('fromParticipantId'), toParticipantId: item.get('toParticipantId'), amountMinor: item.get('amountMinor'),
+        })) } };
     }, { readOnly: true });
   });
 
@@ -63,6 +68,7 @@ export async function registerFinanceRoutes(app: FastifyInstance): Promise<void>
     const command = { method: request.method, canonicalPath: `/api/v1/trips/${tripId}/settlements`, body };
     const settlementId = randomUUID(), store = db();
     const auditEventId = randomUUID();
+    const receiptAuditIds = Array.from({ length: 3 }, () => randomUUID());
     const result = await store.runTransaction(async tx => {
       const opRef = store.doc(`users/${uid}/operations/${key}`), tripRef = store.doc(`trips/${tripId}`);
       const [op, trip, member, user, fromParticipant, toParticipant, fromBalanceSnap, toBalanceSnap] = await Promise.all([
@@ -75,15 +81,25 @@ export async function registerFinanceRoutes(app: FastifyInstance): Promise<void>
       if (replay) return { outcome: replay, replayed: true };
       ensureWritable(trip);
       if (member.get('role') !== 'owner' && member.get('participantId') !== body.fromParticipantId) throw new ApiError(403, 'FORBIDDEN', 'Bạn không thể ghi trả nợ cho người này.');
+      if (body.receiptIds?.length && member.get('participantId') !== body.fromParticipantId) {
+        throw new ApiError(403, 'FORBIDDEN', 'Chỉ người chuyển được gửi ảnh chuyển khoản của mình.');
+      }
       if (!fromParticipant.exists || !toParticipant.exists) throw new ApiError(422, 'INVALID_PARTICIPANTS', 'Người tham gia không hợp lệ.');
       if (trip.get('ledgerVersion') !== body.basedOnLedgerVersion) throw new ApiError(409, 'LEDGER_CHANGED', 'Số dư đã thay đổi. Hãy kiểm tra lại.');
       const [from, to] = balancesFrom([fromBalanceSnap, toBalanceSnap]);
       if (!from || !to || from.netMinor >= 0 || to.netMinor <= 0 || body.amountMinor > Math.min(-from.netMinor, to.netMinor)) throw new ApiError(422, 'SETTLEMENT_EXCEEDS_BALANCE', 'Số tiền trả vượt số nợ hiện tại.');
       if (trip.get('settlementCountAllTime') >= 2000) throw new ApiError(422, 'TRIP_LIMIT_REACHED', 'Chuyến đi đã đạt giới hạn lượt trả nợ.');
+      const pending = await tx.get(tripRef.collection('settlements').where('status', '==', 'pending'));
+      if (pending.docs.some(item => item.get('fromParticipantId') === body.fromParticipantId && item.get('toParticipantId') === body.toParticipantId)) {
+        throw new ApiError(409, 'PAYMENT_ALREADY_PENDING', 'Khoản chuyển này đã được ghi nhận và đang chờ xác nhận. Hãy kiểm tra lịch sử chuyển tiền.');
+      }
       const now = Timestamp.now(), revision = trip.get('revision') + 1;
+      const receiptPlans = await planReceiptAttachments(tx, tripRef, settlementId, uid, body.receiptIds ?? [], [], now, 'attachedSettlementId');
       const document = createSettlementDocument({ id: settlementId, body, actorUid: uid, now });
-      const response = { id: settlementId, ...body, currency: 'VND', status: 'pending', version: 1 };
+      const response = { id: settlementId, ...body, receiptIds: document.receiptIds, currency: 'VND', status: 'pending', version: 1 };
       tx.create(store.doc(`trips/${tripId}/settlements/${settlementId}`), document);
+      applyReceiptAttachments(tx, tripRef, receiptPlans, { uid, displayName: user.get('displayName'), key,
+        auditIds: receiptAuditIds, revision, ledgerVersion: trip.get('ledgerVersion'), now });
       if (fromParticipant.get('hasLedgerReferences') !== true) {
         tx.update(store.doc(`trips/${tripId}/participants/${body.fromParticipantId}`), { hasLedgerReferences: true, updatedAt: now });
       }
@@ -131,6 +147,9 @@ export async function registerFinanceRoutes(app: FastifyInstance): Promise<void>
       if (settlement.get('status') !== 'pending') throw new ApiError(409, 'INVALID_STATE_TRANSITION', 'Lượt trả nợ không còn chờ xác nhận.');
       const owner = member.get('role') === 'owner';
       const recipient = member.get('participantId') === settlement.get('toParticipantId') && settlement.get('createdBy') !== uid;
+      if ((settlement.get('receiptIds') as string[] | undefined)?.length && !recipient) {
+        throw new ApiError(403, 'FORBIDDEN', 'Chỉ người nhận được xác nhận đã nhận khoản chuyển có ảnh.');
+      }
       if (!owner && !recipient) throw new ApiError(403, 'FORBIDDEN', 'Chỉ người nhận xác nhận đã nhận tiền.');
       if (body.basedOnLedgerVersion !== trip.get('ledgerVersion')) throw new ApiError(409, 'LEDGER_CHANGED', 'Số dư đã thay đổi. Hãy kiểm tra lại.');
       const fromId = settlement.get('fromParticipantId') as string, toId = settlement.get('toParticipantId') as string, amount = settlement.get('amountMinor') as number;

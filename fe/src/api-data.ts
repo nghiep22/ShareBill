@@ -11,7 +11,7 @@ export type TripDto = {
   myParticipantId?: string | null;
   sharingMode?: 'group-equal' | 'per-expense'; equalParticipantIds?: string[];
 };
-type ParticipantDto = { id: string; displayName: string; status: 'active' | 'inactive'; linkedUid: string | null; version: number };
+type ParticipantDto = { id: string; displayName: string; status: 'active' | 'inactive'; linkedUid: string | null; version: number; paymentQrReceiptId?: string | null };
 export type Membership = {
   uid: string; displayName?: string | null; role: 'owner' | 'member'; status: 'active' | 'removed';
   participantId: string | null; version: number; joinedAt: string;
@@ -29,6 +29,7 @@ export type SettlementDto = TransferDto & {
   id: string; status: 'pending' | 'confirmed' | 'cancelled' | 'void'; version: number; occurredOn: string;
   createdBy: string; confirmedBy: string | null; voidReason?: string | null;
   confirmationMode?: 'recipient' | 'owner_on_behalf' | null; confirmedAt?: string | null;
+  receiptIds?: string[];
 };
 export type InviteDto = {
   id: string; version: number; maxUses: number; usedCount: number; expiresAt: string;
@@ -52,6 +53,7 @@ export function tripSnapshot(overview: TripOverview, uid: string): Demo {
   const members = participants.map((item, tone) => ({
     id: item.id, name: item.displayName, tone, inactive: item.status === 'inactive',
     linked: Boolean(item.linkedUid), uid: item.linkedUid ?? undefined, version: item.version,
+    paymentQrReceiptId: item.paymentQrReceiptId,
   }));
   return {
     trip: { name: trip.name, place: trip.destination ?? '', note: trip.note ?? '', start: trip.startDate ?? '', end: trip.endDate ?? '', timezone: trip.timezone,
@@ -85,6 +87,7 @@ export const settlementFrom = (item: SettlementDto): Settlement => ({
   date: item.occurredOn, version: item.version, recordedBy: item.createdBy, confirmedBy: item.confirmedBy ?? undefined,
   reason: item.voidReason ?? undefined,
   confirmationMode: item.confirmationMode ?? undefined, confirmedAt: item.confirmedAt ?? undefined,
+  receipts: item.receiptIds?.map((id, index) => ({ id, name: 'Ảnh chuyển khoản ' + (index + 1) })),
 });
 
 const activityLabels: Record<string, string> = {
@@ -162,7 +165,11 @@ export async function sendTripCommand(api: ShareBillApi, tripId: string, data: D
       return api.write<{ id: string }>(path + '/settlements', {
         fromParticipantId: action.transfer.from, toParticipantId: action.transfer.to, amountMinor: action.transfer.amount,
         occurredOn: today(data.trip.timezone), note: null, basedOnLedgerVersion: action.ledgerVersion ?? remote.ledgerVersion,
+        receiptIds: action.receipts?.map(receipt => receipt.id) ?? [],
       });
+    case 'save-payment-qr':
+      return api.write<{ id: string }>(path + '/participants/' + action.member.id + '/payment-qr',
+        { receiptId: action.receipt?.id ?? null }, { method: 'PATCH', version: action.member.version });
     case 'settlement-status': {
       const name = { confirmed: 'confirm', cancelled: 'cancel', void: 'void' }[action.status];
       const body = action.status === 'confirmed' ? { basedOnLedgerVersion: action.ledgerVersion ?? remote.ledgerVersion } :
@@ -184,7 +191,7 @@ export async function sendTripCommand(api: ShareBillApi, tripId: string, data: D
   }
 }
 
-type Intent = { id: string; version: number; expiresAt: string; upload: { url: string; fields: Record<string, string> } };
+type Intent = { id: string; version: number; expiresAt: string; upload: { url: string; fields: Record<string, string>; method?: 'PUT'; headers?: Record<string, string> } };
 type UploadAttempt = { intentKey: string; finalizeKey: string; intent?: Intent; uploaded: boolean };
 
 export function receiptActions(api: ShareBillApi, tripId: string): ReceiptActions {
@@ -208,7 +215,9 @@ export function receiptActions(api: ShareBillApi, tripId: string): ReceiptAction
           form.append('file', file);
           let uploaded;
           try {
-            uploaded = await fetch(intent.upload.url, { method: 'POST', body: form, credentials: 'omit', referrerPolicy: 'no-referrer', signal: AbortSignal.timeout(60_000) });
+            uploaded = await fetch(intent.upload.url, { method: intent.upload.method ?? 'POST',
+              body: intent.upload.method === 'PUT' ? file : form, headers: intent.upload.headers,
+              credentials: 'omit', referrerPolicy: 'no-referrer', signal: AbortSignal.timeout(60_000) });
           } catch {
             throw new Error('Tải ảnh bị gián đoạn. Hãy thử lại.');
           }

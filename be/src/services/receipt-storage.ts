@@ -2,7 +2,7 @@ import { receiptBucket } from '../firebase.js';
 import { ApiError } from '../http.js';
 
 export type ReceiptObject = { path: string; generation: string; bytes: number; contentType: string };
-export type UploadPolicy = { url: string; fields: Record<string, string>; expiresAt: string };
+export type UploadPolicy = { url: string; fields: Record<string, string>; expiresAt: string; method?: 'PUT'; headers?: Record<string, string> };
 export interface ReceiptStorage {
   uploadPolicy(path: string, contentType: string, maxBytes: number, expiresAt: number): Promise<UploadPolicy>;
   metadata(path: string): Promise<ReceiptObject>;

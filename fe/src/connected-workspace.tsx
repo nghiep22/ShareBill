@@ -45,6 +45,7 @@ function useMutation(hash: string, onCommit?: () => void) {
       onCommit?.();
       if (window.location.hash === source) onSaved?.(result);
     }, (cause: unknown) => {
+      if (cause instanceof ApiError && cause.code === 'PAYMENT_ALREADY_PENDING') onCommit?.();
       if (window.location.hash === source) {
         const message = cause instanceof Error ? cause.message : 'Chưa thực hiện được thao tác.';
         setError({ route: source.slice(1), code: cause instanceof ApiError ? cause.code : undefined, message: cause instanceof ApiError && ['VERSION_CONFLICT', 'LEDGER_CHANGED'].includes(cause.code ?? '')
@@ -179,7 +180,8 @@ function AuthenticatedWorkspace({ session, api, hash, onSignOut }: { session: Se
       { limit: '30', status: filters.status === 'all' ? undefined : filters.status === 'voided' ? 'void' : filters.status,
         category: filters.category, payer: filters.payer }, epoch);
   const detail = useApiRead<ExpenseDto>(api, tripPath && id && isExpenseDetail(route) ? tripPath + '/expenses/' + encodeURIComponent(id) : undefined, epoch);
-  const transfers = useApiRead<{ ledgerVersion: number; suggestions: TransferDto[] }>(api, tripPath && wantsFinance ? tripPath + '/settlement-suggestions' : undefined, epoch + (overview.data?.trip.ledgerVersion ?? 0));
+  const transfers = useApiRead<{ ledgerVersion: number; revision: number; suggestions: TransferDto[]; pendingTransfers: TransferDto[] }>(api,
+    tripPath && wantsFinance ? tripPath + '/settlement-suggestions' : undefined, epoch + (overview.data?.revision ?? 0));
   const history = useApiPage<SettlementDto>(api, tripPath && route === 'quyet-toan' ? tripPath + '/settlements' : undefined, { status: historyFilter, limit: '30' }, epoch);
   const members = useApiRead<Memberships>(api, tripPath && route === 'thanh-vien' ? tripPath + '/members' : undefined, epoch + (overview.data?.revision ?? 0));
   const itinerary = useApiRead<ItineraryDto>(api, tripPath && route === 'lich-trinh' ? tripPath + '/itinerary' : undefined, epoch);
@@ -273,7 +275,7 @@ function AuthenticatedWorkspace({ session, api, hash, onSignOut }: { session: Se
   const data = source ? tripSnapshot(source, uid) : undefined;
   if (data?.remote && networkUnavailable && route !== 'them-khoan-chi') data.remote.writable = false;
   const expense = detail.data ? expenseFrom(detail.data) : undefined;
-  const hasMatchingLedger = Boolean(data && transfers.data && transfers.data.ledgerVersion === data.remote?.ledgerVersion);
+  const hasMatchingLedger = Boolean(data && transfers.data && transfers.data.ledgerVersion === data.remote?.ledgerVersion && transfers.data.revision === source?.revision);
   if (data) {
     data.expenses = expenseList.items.map(expenseFrom);
     data.settlements = history.items.map(settlementFrom);
@@ -289,6 +291,7 @@ function AuthenticatedWorkspace({ session, api, hash, onSignOut }: { session: Se
     }
     if (transfers.data && hasMatchingLedger) {
       data.remote!.suggestions = transfers.data.suggestions.map(transferFrom);
+      data.remote!.pendingTransfers = transfers.data.pendingTransfers.map(transferFrom);
       data.remote!.suggestionsReady = !transfers.loading && !transfers.error;
     }
   }
@@ -363,13 +366,14 @@ function AuthenticatedWorkspace({ session, api, hash, onSignOut }: { session: Se
             disabled={networkUnavailable || detail.loading || Boolean(detail.error)} /> :
           <ExpenseDetail data={data} expense={expense} key={id} update={update} receiptActions={attachments} />;
         break;
-      case 'so-du': content = <Balances data={data} update={update} loading={transfers.loading} disabled={overview.loading || mutation.busy} />; break;
+      case 'so-du': content = <Balances data={data} update={update} loading={transfers.loading} disabled={overview.loading || mutation.busy} receiptActions={networkUnavailable ? undefined : attachments} />; break;
       case 'quyet-toan':
         content = <Settlements data={data} update={update} onMore={history.more} loading={history.loading} remoteFilter={historyFilter} disabled={overview.loading || mutation.busy}
+          receiptActions={networkUnavailable ? undefined : attachments}
           onFilter={status => replaceRoute(tripRoute(selected, 'quyet-toan', undefined, 'status=' + status))} />;
         break;
       case 'thanh-vien':
-        content = <Members key={selected + ':' + (id ?? '')} view={id} data={data} update={update} accounts={members.data ?
+        content = <Members key={selected + ':' + (id ?? '')} view={id} data={data} update={update} receiptActions={networkUnavailable ? undefined : attachments} disabled={overview.loading || mutation.busy} accounts={members.data ?
           <MemberAccounts data={data} accounts={members.data.memberships} tripId={selected} api={api} run={mutation.run} /> :
           <p role="status">Đang tải tài khoản…</p>} />;
         break;

@@ -27,6 +27,8 @@ S18 đã deploy FE/API cùng SHA, kiểm Auth/luồng tiền và 18 index trên 
 
 [Các màn hình tiền](docs/MONEY_SCREENS.md) phân biệt phần mỗi người phải chịu và công nợ còn lại, hiện trực tiếp số đã ứng/chuyển/nhận, kiểm nhập VND và xử lý số dư chưa đủ dữ liệu.
 
+[QR nhận tiền và ảnh chuyển khoản](docs/PAYMENTS.md): thành viên thêm QR của mình, người chuyển tải ảnh giao dịch và báo đã chuyển; người nhận xem ảnh rồi xác nhận để cập nhật công nợ.
+
 ## Hướng triển khai đề xuất
 
 - **Frontend:** thư mục `fe/` dành cho Next.js/React + TypeScript, responsive mobile-first, PWA và website quản trị React.

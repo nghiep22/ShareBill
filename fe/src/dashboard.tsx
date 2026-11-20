@@ -7,10 +7,11 @@ import {
 import { useState, type FormEvent } from 'react';
 import {
   activeExpenses, balances, canWrite, categories, dateLabel, dateRange, isOwner, memberFor, money, nameOf, netLabel,
-  newId, record, settlementStatus, sharingMembers, suggestions, today, viewerOf, type Demo, type Expense, type Settlement, type Transfer,
+  newId, record, settlementStatus, sharingMembers, suggestions, today, viewerOf, type Demo, type Expense, type Receipt, type Settlement, type Transfer,
 } from './model';
 import { Amount, Avatar, CategoryIcon, Dialog, Empty, PageTitle } from './ui';
-import type { UpdateTrip } from './trip-command';
+import type { ReceiptActions, UpdateTrip } from './trip-command';
+import { PaymentImage, PaymentImagePicker, PaymentQrCard } from './payments';
 import { tripHref } from './workspace-route';
 import { financialSnapshot, transferLimit } from './finance-view';
 import { maximumMoney, parsePositiveMoney } from './money-input';
@@ -175,7 +176,9 @@ export function Expenses({ data, filters, onFilter, onMore, loading }: {
   </>;
 }
 
-export function Balances({ data, update, loading, disabled }: { data: Demo; update: UpdateTrip; loading?: boolean; disabled?: boolean }) {
+export function Balances({ data, update, loading, disabled, receiptActions }: { data: Demo; update: UpdateTrip; loading?: boolean; disabled?: boolean; receiptActions?: ReceiptActions }) {
+  const [proof, setProof] = useState<Receipt>();
+  const [uploading, setUploading] = useState(false);
   const [selected, setSelected] = useState<{ transfer?: Transfer; ledgerVersion?: number }>();
   const [from, setFrom] = useState('');
   const [to, setTo] = useState('');
@@ -183,6 +186,9 @@ export function Balances({ data, update, loading, disabled }: { data: Demo; upda
   const finance = financialSnapshot(data);
   const totals = finance.net;
   const transfers = suggestions(data);
+  const transfersReady = !data.remote || data.remote.suggestionsReady === true;
+  const pendingTransfers = data.remote?.pendingTransfers ?? data.settlements.filter(item => settlementStatus(item) === 'pending');
+  const isPending = (item: Transfer) => pendingTransfers.some(pending => pending.from === item.from && pending.to === item.to);
   const me = viewerOf(data);
   const net = totals[me] ?? 0;
   const complete = finance.complete;
@@ -207,23 +213,28 @@ export function Balances({ data, update, loading, disabled }: { data: Demo; upda
   const creditors = data.members.filter(member => totals[member.id] > 0);
   const cap = transferLimit(totals[from] ?? 0, totals[to] ?? 0);
   const transfer = selected?.transfer ?? (cap > 0 ? { from, to, amount: cap } : undefined);
+  const ownPayment = Boolean(data.remote && transfer?.from === me);
+  const alreadyRecorded = Boolean(transfer && isPending(transfer));
   const stale = selected?.ledgerVersion !== undefined && selected.ledgerVersion !== data.remote?.ledgerVersion;
 
   function open(transfer?: Transfer) {
+    if (!transfersReady || disabled || transfer && isPending(transfer)) return;
     setSelected({ transfer: transfer && { ...transfer, amount: Math.min(transfer.amount, maximumMoney) }, ledgerVersion: data.remote?.ledgerVersion });
     setFrom(debtors[0]?.id ?? '');
     setTo(creditors[0]?.id ?? '');
     setError('');
+    setProof(undefined);
   }
 
   function save(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (!selected || !transfer || stale || !complete || disabled) return;
+    if (!selected || !transfer || stale || !complete || disabled || uploading || alreadyRecorded || !transfersReady) return;
+    if (ownPayment && !proof) { setError('Thêm ảnh chuyển khoản trước khi báo đã chuyển.'); return; }
     const amount = parsePositiveMoney(String(new FormData(event.currentTarget).get('amount') ?? ''));
     if (amount === undefined || amount > transfer.amount) { setError('Nhập số nguyên VND từ 1đ đến ' + money(transfer.amount) + ', ví dụ 10.000.'); return; }
-    const entry: Settlement = { ...transfer, amount, id: newId(), confirmed: false, date: today(data.trip.timezone), recordedBy: me };
+    const entry: Settlement = { ...transfer, amount, id: newId(), confirmed: false, date: today(data.trip.timezone), recordedBy: me, receipts: proof ? [proof] : [] };
     update(record({ ...data, settlements: [entry, ...data.settlements] }, 'Ghi nhận chuyển tiền', nameOf(data, entry.from) + ' → ' + nameOf(data, entry.to) + ' · ' + money(amount), '#quyet-toan'),
-      { type: 'record-settlement', transfer: entry, ledgerVersion: selected.ledgerVersion }, () => { setSelected(undefined); window.location.hash = tripHref(data, 'quyet-toan'); });
+      { type: 'record-settlement', transfer: entry, receipts: entry.receipts, ledgerVersion: selected.ledgerVersion }, () => { setSelected(undefined); setProof(undefined); window.location.hash = tripHref(data, 'quyet-toan'); });
   }
   return <>
     <PageTitle title="Số dư & quyết toán">
@@ -251,7 +262,7 @@ export function Balances({ data, update, loading, disabled }: { data: Demo; upda
     <section aria-label="Số tiền cần chuyển">
       <div className="section-heading"><h2>Số tiền cần chuyển</h2>
         {complete && canWrite(data) && debtors.length > 0 && creditors.length > 0 &&
-          <button className="secondary-button compact" disabled={disabled} onClick={() => open()}>Ghi khoản chuyển khác</button>}
+          <button className="secondary-button compact" disabled={disabled || !transfersReady} onClick={() => open()}>Ghi khoản chuyển khác</button>}
       </div>
       {loading && <p role="status">Đang tải gợi ý chuyển tiền…</p>}
       {!loading && !transfers.length && <div className="card field-card transfer-empty">
@@ -271,10 +282,10 @@ export function Balances({ data, update, loading, disabled }: { data: Demo; upda
         </div>}
       </div>}
       {pending > 0 && <p className="inline-note">Các khoản đang chờ vẫn nằm ngoài số tiền đã xác nhận. Kiểm tra lịch sử trước khi ghi thêm khoản chuyển.</p>}
-      {!loading && transfers.length > 0 && <p className="inline-note money-explainer">Người bên trái cần chuyển cho người bên phải số tiền dưới đây. Sau khi chuyển tiền bên ngoài ứng dụng, bấm Ghi nhận đã chuyển; người nhận hoặc chủ chuyến xác nhận để cập nhật số dư.</p>}
+      {!loading && transfers.length > 0 && <p className="inline-note money-explainer">Mở QR người nhận, chuyển tiền bằng ứng dụng ngân hàng rồi tải ảnh chuyển khoản và bấm “Tôi đã chuyển khoản”. Người nhận kiểm tra ảnh và tiền thực nhận, sau đó xác nhận để cập nhật công nợ.</p>}
       <div className="transfer-grid">{!loading && complete && transfers.map(suggestion => <div className="card transfer-card" key={suggestion.from + '-' + suggestion.to}>
         <div className="list-row"><TransferRow data={data} transfer={suggestion} /></div>
-        {canWrite(data) && (isOwner(data) || suggestion.from === me) && <button className="soft-button transfer-button" disabled={disabled} onClick={() => open(suggestion)}><ArrowDownUp size={16} aria-hidden /> Ghi nhận đã chuyển</button>}
+        {canWrite(data) && (isOwner(data) || suggestion.from === me) && <button className="soft-button transfer-button" disabled={disabled || isPending(suggestion)} onClick={() => open(suggestion)}><ArrowDownUp size={16} aria-hidden /> {isPending(suggestion) ? 'Đã ghi nhận · Chờ xác nhận' : data.remote ? suggestion.from === me ? 'Chuyển khoản' : 'Ghi nhận thay' : 'Ghi nhận đã chuyển'}</button>}
       </div>)}</div>
     </section>
     <section>
@@ -295,18 +306,29 @@ export function Balances({ data, update, loading, disabled }: { data: Demo; upda
         </section>;
       })}</div>
     </section>
-    {selected && <Dialog title="Ghi nhận đã chuyển tiền" onClose={() => setSelected(undefined)}>
+    <PaymentQrCard data={data} update={update} actions={receiptActions} disabled={disabled} />
+    {selected && <Dialog title={ownPayment ? 'Chuyển khoản trả thành viên' : 'Ghi nhận đã chuyển tiền'} onClose={() => { if (!uploading) setSelected(undefined); }}>
       <p>{selected.transfer && nameOf(data, selected.transfer.from) + ' → ' + nameOf(data, selected.transfer.to) + '. '}Số dư cập nhật sau khi khoản chuyển được xác nhận.</p>
       <form className="field-card dialog-fields" onSubmit={save}>
         {!selected.transfer && <div className="field-pair">
-          <label>Người chuyển<select aria-label="Người chuyển" value={from} onChange={event => setFrom(event.target.value)}>{debtors.map(member => <option value={member.id} key={member.id}>{nameOf(data, member.id)}</option>)}</select></label>
-          <label>Người nhận<select aria-label="Người nhận" value={to} onChange={event => setTo(event.target.value)}>{creditors.map(member => <option value={member.id} key={member.id}>{nameOf(data, member.id)}</option>)}</select></label>
+          <label>Người chuyển<select aria-label="Người chuyển" value={from} disabled={uploading || Boolean(proof)} onChange={event => setFrom(event.target.value)}>{debtors.map(member => <option value={member.id} key={member.id}>{nameOf(data, member.id)}</option>)}</select></label>
+          <label>Người nhận<select aria-label="Người nhận" value={to} disabled={uploading || Boolean(proof)} onChange={event => setTo(event.target.value)}>{creditors.map(member => <option value={member.id} key={member.id}>{nameOf(data, member.id)}</option>)}</select></label>
         </div>}
-        {transfer && <label>Số tiền đã chuyển (VND)<input key={transfer.from + '/' + transfer.to} inputMode="numeric" name="amount" placeholder="Ví dụ: 10.000" defaultValue={selected.transfer?.amount} required /></label>}
+        {ownPayment && transfer && <section className="field-card">
+          <h3>QR nhận tiền của {nameOf(data, transfer.to)}</h3>
+          {memberFor(data, transfer.to)?.paymentQrReceiptId ? <PaymentImage receipt={{ id: memberFor(data, transfer.to)!.paymentQrReceiptId!, name: 'QR người nhận' }} actions={receiptActions} label={'QR nhận tiền của ' + nameOf(data, transfer.to)} />
+            : <p>Người nhận chưa thêm QR. Liên hệ {nameOf(data, transfer.to)} để lấy thông tin chuyển khoản.</p>}
+          <p>Kiểm tra đúng người nhận và số tiền trong ứng dụng ngân hàng trước khi chuyển.</p>
+        </section>}
+        {transfer && <label>Số tiền đã chuyển (VND)<input key={transfer.from + '/' + transfer.to} inputMode="numeric" name="amount" placeholder="Ví dụ: 10.000" defaultValue={selected.transfer?.amount} onChange={() => setError('')} required /></label>}
         {transfer && <p>Tối đa {money(transfer.amount)}</p>}
+        {ownPayment && receiptActions && <PaymentImagePicker receipt={proof} onChange={setProof} actions={receiptActions} label="Ảnh chuyển khoản" busy={uploading} onBusy={setUploading} disabled={disabled} />}
+        {ownPayment && !receiptActions && <p role="status">Cần kết nối mạng để tải ảnh chuyển khoản.</p>}
+        {data.remote && !ownPayment && <p>Bạn đang ghi nhận thay người chuyển. Người chuyển cần tự gửi giao dịch nếu muốn đính kèm ảnh chuyển khoản.</p>}
+        {alreadyRecorded && <p role="status">Khoản chuyển này đã được ghi nhận và đang chờ xác nhận. <a className="text-button" href={tripHref(data, 'quyet-toan')}>Xem lịch sử chuyển tiền</a></p>}
         {stale && <p className="error" role="alert">Số dư đã thay đổi. Đóng hộp thoại rồi kiểm tra khoản chuyển mới.</p>}
         {error && <p className="error" role="alert">{error}</p>}
-        <button className="primary-button" disabled={disabled || stale || !transfer || !complete}>Ghi nhận</button>
+        <button className="primary-button" disabled={disabled || uploading || stale || !transfer || !complete || alreadyRecorded || !transfersReady || Boolean(ownPayment && !proof)}>{alreadyRecorded ? 'Đã ghi nhận · Chờ xác nhận' : ownPayment ? 'Tôi đã chuyển khoản' : 'Ghi nhận'}</button>
       </form>
     </Dialog>}
   </>;
@@ -314,9 +336,11 @@ export function Balances({ data, update, loading, disabled }: { data: Demo; upda
 
 export type SettlementFilter = 'pending' | 'confirmed' | 'cancelled' | 'void';
 
-export function Settlements({ data, update, onMore, loading, remoteFilter, onFilter, disabled }: {
+export function Settlements({ data, update, onMore, loading, remoteFilter, onFilter, disabled, receiptActions }: {
   data: Demo; update: UpdateTrip; onMore?: () => void; loading?: boolean; remoteFilter?: SettlementFilter; onFilter?: (status: SettlementFilter) => void; disabled?: boolean;
+  receiptActions?: ReceiptActions;
 }) {
+  const [viewing, setViewing] = useState<Settlement>();
   const [localFilter, setLocalFilter] = useState<SettlementFilter>('pending');
   const filter = remoteFilter ?? localFilter;
   const setFilter = onFilter ?? setLocalFilter;
@@ -368,19 +392,26 @@ export function Settlements({ data, update, onMore, loading, remoteFilter, onFil
         <div className="settlement-meta">{item.date && <span>{dateLabel(item.date)}</span>}{item.recordedBy && <span>{nameOf(data, item.recordedBy)} ghi nhận</span>}
           {item.confirmedBy && <span>{nameOf(data, item.confirmedBy)} {item.confirmationMode === 'owner_on_behalf' ? 'xác nhận thay' : 'xác nhận đã nhận'}{item.confirmedAt && ' · ' + dateLabel(item.confirmedAt.slice(0, 10))}</span>}</div>
         {item.reason && <p className="settlement-meta">Lý do: {item.reason}</p>}
+        {item.receipts?.length && (item.from === me || item.to === me) ? <button className="text-button payment-proof-button" onClick={() => setViewing(item)}><ReceiptText size={16} aria-hidden /> Xem ảnh chuyển khoản</button> : null}
         <div className="transfer-footer">
           <span className={'tag ' + (status === 'confirmed' ? 'mint' : status === 'pending' ? 'warm' : '')}>{labels[status]}</span>
           {canWrite(data) && status === 'pending' && <>
             {(owner || (item.recordedBy ?? item.from) === actor) && <button className="text-button muted" onClick={() => open(item, 'cancelled')}>Hủy</button>}
-            {(owner || recipient(item)) && <button className="text-button" onClick={() => open(item, 'confirmed')}><CircleCheck size={16} aria-hidden /> {recipient(item) ? 'Tôi đã nhận tiền' : 'Xác nhận thay'}</button>}
+            {(recipient(item) || owner && !item.receipts?.length) && <button className="text-button" onClick={() => open(item, 'confirmed')}><CircleCheck size={16} aria-hidden /> {recipient(item) ? 'Xác nhận đã nhận tiền' : 'Xác nhận thay'}</button>}
           </>}
           {canWrite(data) && owner && status === 'confirmed' && <button className="text-button" onClick={() => open(item, 'void')}>Hủy hiệu lực</button>}
         </div>
       </div>;
     })}</div>
     {onMore && <button className="secondary-button" disabled={loading} onClick={onMore}>Tải thêm giao dịch</button>}
+    {viewing && <Dialog title="Ảnh chuyển khoản" onClose={() => setViewing(undefined)}>
+      <p>{nameOf(data, viewing.from)} → {nameOf(data, viewing.to)} · {money(viewing.amount)}</p>
+      {viewing.receipts?.map(receipt => <PaymentImage key={receipt.id} receipt={receipt} actions={receiptActions} label={receipt.name} />)}
+      {canWrite(data) && recipient(viewing) && settlementStatus(viewing) === 'pending' && <button className="primary-button" disabled={disabled} onClick={() => { setViewing(undefined); open(viewing, 'confirmed'); }}>Xác nhận đã nhận tiền</button>}
+    </Dialog>}
     {selected && <Dialog title={selected.status === 'confirmed' && !recipient(selected.item) ? 'Xác nhận thay người nhận?' : actions[selected.status] + '?'} onClose={() => setSelected(null)}>
       <p>{nameOf(data, selected.item.from)} → {nameOf(data, selected.item.to)} · {money(selected.item.amount)}</p>
+      {selected.status === 'confirmed' && selected.item.receipts?.map(receipt => <PaymentImage key={receipt.id} receipt={receipt} actions={receiptActions} label={receipt.name} />)}
       <p>{selected.status === 'confirmed' ? recipient(selected.item)
         ? 'Hãy kiểm tra tiền thực tế đã nhận trước khi ghi sổ.'
         : 'Bạn đang ghi sổ thay người nhận. Hãy xác minh người nhận đã nhận khoản tiền này.'

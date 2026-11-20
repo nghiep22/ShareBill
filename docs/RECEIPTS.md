@@ -1,5 +1,11 @@
 # ShareBill — Backend ảnh hóa đơn S10
 
+**Vercel Blob, 20/11/2026:** runtime tự chọn `VercelReceiptStorage` khi có `BLOB_READ_WRITE_TOKEN` hoặc `BLOB_STORE_ID`. Kho staging `sharebill-private-images` ở Singapore (`sin1`), access **private**, thuộc gói Hobby. Upload trực tiếp bằng signed PUT cố định pathname/MIME/dung lượng, TTL tối đa 5 phút; không cho overwrite. Finalize giữ nguyên kiểm ảnh thật/lease/claim. ETag dùng làm generation, kiểm lại khi đọc và dùng `ifMatch` khi xóa. Link xem ký riêng từng object, TTL 60 giây. Nếu không cấu hình Blob, adapter Cloud Storage hiện có vẫn được dùng. Không đổi provider của kho đã có ảnh mà chưa di chuyển dữ liệu.
+
+Không cần bật billing Firebase để dùng adapter này. Hạn mức Hobby và cách dừng khi vượt mức theo [Vercel Blob pricing](https://vercel.com/docs/vercel-blob/usage-and-pricing).
+
+**Bổ sung 20/11/2026:** quy trình upload này cũng phục vụ [QR nhận tiền và ảnh chuyển khoản](PAYMENTS.md). Một ảnh có thể thuộc khoản chi, giao dịch chuyển khoản hoặc QR thành viên; quyền xem ảnh chuyển khoản giới hạn cho người chuyển và người nhận.
+
 Cập nhật 18/11/2026. Backend, xử lý ảnh thật và state machine đã kiểm trên local/Emulator. Chưa tạo/triển khai bucket cloud, đổi gói dịch vụ hoặc chạy smoke IAM/CORS/signed policy thật. Ràng buộc miễn phí của staging vẫn giữ; quyết định lưu trữ cloud và smoke nằm ở S18. Adapter mặc định dùng Cloud Storage for Firebase; interface `ReceiptStorage` tách khỏi nghiệp vụ nếu cần đổi nhà cung cấp.
 
 ## Cấu hình

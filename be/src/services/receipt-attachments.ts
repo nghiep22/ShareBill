@@ -7,8 +7,9 @@ import { DISCARD_GRACE_MS, readReceipt, receiptAudit, type ReceiptDocument } fro
 type AttachmentPlan = { ref: DocumentReference; before: ReceiptDocument; after: ReceiptDocument;
   patch: FirebaseFirestore.UpdateData<FirebaseFirestore.DocumentData>; action: 'receipt.attached' | 'receipt.discarded' };
 
-export async function planReceiptAttachments(tx: Transaction, tripRef: DocumentReference, expenseId: string,
-  actorUid: string, receiptIds: string[], previousIds: string[], now: Timestamp) {
+export async function planReceiptAttachments(tx: Transaction, tripRef: DocumentReference, targetId: string,
+  actorUid: string, receiptIds: string[], previousIds: string[], now: Timestamp,
+  target: 'attachedExpenseId' | 'attachedSettlementId' | 'attachedParticipantId' = 'attachedExpenseId') {
   if (receiptIds.length > 3 || new Set(receiptIds).size !== receiptIds.length) {
     throw new ApiError(422, 'INVALID_RECEIPTS', 'Chọn tối đa ba ảnh khác nhau.');
   }
@@ -17,19 +18,19 @@ export async function planReceiptAttachments(tx: Transaction, tripRef: DocumentR
   return snapshots.flatMap<AttachmentPlan>(snapshot => {
     const before = readReceipt(snapshot, tripRef.id), keep = receiptIds.includes(snapshot.id), wasAttached = previousIds.includes(snapshot.id);
     if (wasAttached) {
-      if (before.status !== 'attached' || before.attachedExpenseId !== expenseId) {
+      if (before.status !== 'attached' || before[target] !== targetId) {
         throw new ApiError(409, 'RECEIPT_CLAIM_CONFLICT', 'Liên kết ảnh không còn hợp lệ.');
       }
       if (keep) return [];
-      const patch = { status: 'discarded' as const, attachedExpenseId: null, version: before.version + 1,
+      const patch = { status: 'discarded' as const, attachedExpenseId: null, attachedSettlementId: null, attachedParticipantId: null, version: before.version + 1,
         discardedAt: now, cleanupAfter: Timestamp.fromMillis(now.toMillis() + DISCARD_GRACE_MS), updatedAt: now };
       return [{ ref: snapshot.ref, before, after: { ...before, ...patch }, patch, action: 'receipt.discarded' as const }];
     }
     if (before.status !== 'ready' || before.uploaderUid !== actorUid || !before.processedPath || !before.processedGeneration ||
-        before.attachedExpenseId !== null || before.storageDeletedAt !== null) {
+        before.attachedExpenseId !== null || before.attachedSettlementId !== null || before.attachedParticipantId !== null || before.storageDeletedAt !== null) {
       throw new ApiError(409, 'RECEIPT_NOT_ATTACHABLE', 'Ảnh chưa sẵn sàng, đã được dùng hoặc không do bạn upload.');
     }
-    const patch = { status: 'attached' as const, attachedExpenseId: expenseId, version: before.version + 1, updatedAt: now };
+    const patch = { status: 'attached' as const, [target]: targetId, version: before.version + 1, updatedAt: now };
     return [{ ref: snapshot.ref, before, after: { ...before, ...patch }, patch, action: 'receipt.attached' as const }];
   });
 }

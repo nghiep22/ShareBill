@@ -4,11 +4,12 @@ import { Link2, Settings2, ShieldCheck, UserPlus, Users } from 'lucide-react';
 import { useState, type FormEvent } from 'react';
 import { balances, canWrite, isOwner, nameOf, newId, ownerOf, record, viewerOf, type Demo, type Member } from './model';
 import { Amount, Avatar, Dialog, Empty, PageTitle } from './ui';
-import type { UpdateTrip } from './trip-command';
+import type { ReceiptActions, UpdateTrip } from './trip-command';
+import { PaymentQrCard } from './payments';
 import { tripHref } from './workspace-route';
 import type { ReactNode } from 'react';
 
-export function Members({ data, update, accounts, view }: { data: Demo; update: UpdateTrip; accounts?: ReactNode; view?: string }) {
+export function Members({ data, update, accounts, view, receiptActions, disabled }: { data: Demo; update: UpdateTrip; accounts?: ReactNode; view?: string; receiptActions?: ReceiptActions; disabled?: boolean }) {
   const groupEqual = data.remote?.sharingMode === 'group-equal';
   const [filter, setFilter] = useState<'all' | 'linked'>(view === 'tai-khoan' ? 'linked' : 'all');
   const [editing, setEditing] = useState<Member | 'new' | null>(!groupEqual && view === 'them-nguoi' && isOwner(data) && canWrite(data) ? 'new' : null);
@@ -57,6 +58,7 @@ export function Members({ data, update, accounts, view }: { data: Demo; update: 
     <PageTitle title="Thành viên & phân quyền" description={data.trip.name}>
       {canEdit && <a className="primary-button compact" href={tripHref(data, 'loi-moi')}><UserPlus size={18} aria-hidden /> Mời bạn</a>}
     </PageTitle>
+    <PaymentQrCard data={data} update={update} actions={receiptActions} disabled={disabled} />
     <section className="card field-card">
       <h2><ShieldCheck size={20} aria-hidden /> Quyền trong chuyến</h2>
       <p><strong>{data.remote && !data.ownerId ? 'Chủ chuyến' : nameOf(data, ownerOf(data))}</strong> quản lý thành viên, lời mời và chốt chuyến. Thành viên có tài khoản có thể ghi khoản chi.</p>

@@ -67,6 +67,41 @@ function heading(page, name) {
   return page.getByRole('heading', { name, exact: true }).first().waitFor({ timeout: 10000 });
 }
 
+// Stub only image transport; QR attachment, settlement creation, permissions and balances use the real API/Firestore emulator.
+async function paymentImageTransport(context, root, actor) {
+  assert.ok(['localhost', '127.0.0.1'].includes(new URL(apiOrigin).hostname));
+  process.env.FIRESTORE_EMULATOR_HOST = '127.0.0.1:8080';
+  const require = createRequire(new URL('../../be/package.json', import.meta.url));
+  const { initializeApp } = require('firebase-admin/app');
+  const { getFirestore, Timestamp } = require('firebase-admin/firestore');
+  const sharp = require('sharp');
+  fixtureApp ??= initializeApp({ projectId: 'demo-sharebill' }, 'browser-fixtures');
+  const store = getFirestore(fixtureApp), tripId = root.split('/')[1];
+  const buffer = await sharp({ create: { width: 280, height: 280, channels: 3, background: '#e6f6f1' } }).png().toBuffer();
+  const imageUrl = 'data:image/png;base64,' + buffer.toString('base64'), intents = new Map();
+  await context.route('**/' + root + '/receipts/upload-intents', async route => {
+    const key = route.request().headers()['idempotency-key'];
+    if (!intents.has(key)) intents.set(key, randomUUID());
+    const id = intents.get(key);
+    await route.fulfill({ json: { data: { id, version: 1, expiresAt: new Date(Date.now() + 900000).toISOString(),
+      upload: { url: 'https://payment-images.example.test/upload', fields: { key: id } } } } });
+  });
+  await context.route('https://payment-images.example.test/upload', route => route.fulfill({ status: 204 }));
+  await context.route('**/' + root + '/receipts/*/finalize', async route => {
+    const id = new URL(route.request().url()).pathname.split('/').at(-2), attempt = randomUUID(), now = Timestamp.now();
+    await store.doc(root + '/receipts/' + id).set({ schemaVersion: 1, tripId, uploaderUid: actor.user.uid, status: 'ready',
+      declaredContentType: 'image/png', maxBytes: 5242880, expiresAt: Timestamp.fromMillis(Date.now() + 900000),
+      stagingPath: `receipt-staging/${tripId}/${actor.user.uid}/${id}/original`, stagingGeneration: '1',
+      processedPath: `receipt-processed/${tripId}/${id}/${attempt}.jpg`, processedGeneration: '2',
+      bytes: buffer.length, width: 280, height: 280, attachedExpenseId: null, attachedSettlementId: null, attachedParticipantId: null,
+      processingLeaseUntil: null, processingAttemptId: attempt, processingOperationKey: randomUUID(), processingRequestHash: 'a'.repeat(64),
+      processingBaseVersion: 1, version: 3, createdAt: now, updatedAt: now, discardedAt: null, cleanupAfter: null, storageDeletedAt: null });
+    await route.fulfill({ json: { data: { id, version: 3 } } });
+  });
+  await context.route('**/' + root + '/receipts/*/view-url', route => route.fulfill({ json: { data: { url: imageUrl } } }));
+  return { name: 'chuyen-khoan.png', mimeType: 'image/png', buffer };
+}
+
 test('authentication has no demo entry point and PWA retires cached preview pages', async t => {
   const context = await browser.newContext();
   t.after(() => context.close());
@@ -479,7 +514,7 @@ test('single-person and unlinked balances guide users to add people, resplit old
   await page.getByRole('link', { name: 'Xem số tiền còn cần trả / được nhận', exact: true }).click();
   await transferSection.getByText('775.000đ', { exact: true }).waitFor();
   assert.match(await transferSection.locator('.transfer-names').innerText(), /^Bình\s+An$/);
-  await transferSection.getByRole('button', { name: 'Ghi nhận đã chuyển', exact: true }).waitFor();
+  await transferSection.getByRole('button', { name: 'Ghi nhận thay', exact: true }).waitFor();
   const transferY = (await transferSection.boundingBox()).y;
   assert.ok(transferY < (await page.getByRole('heading', { name: 'Số tiền của từng thành viên', exact: true }).boundingBox()).y);
   assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth), false);
@@ -496,7 +531,7 @@ test('single-person and unlinked balances guide users to add people, resplit old
   await memberPage.locator('.balance-hero').getByText('Bạn cần trả', { exact: true }).waitFor();
   await memberPage.locator('.balance-hero').getByText('775.000đ', { exact: true }).waitFor();
   assert.equal(await memberPage.getByRole('link', { name: 'Xem tài khoản trong chuyến', exact: true }).count(), 0);
-  await memberPage.getByRole('region', { name: 'Số tiền cần chuyển', exact: true }).getByRole('button', { name: 'Ghi nhận đã chuyển', exact: true }).waitFor();
+  await memberPage.getByRole('region', { name: 'Số tiền cần chuyển', exact: true }).getByRole('button', { name: 'Chuyển khoản', exact: true }).waitFor();
 });
 
 test('linked users with zero assigned costs are distinguished from settled users and duplicate names stay separate', async t => {
@@ -742,7 +777,7 @@ test('incomplete financial snapshots never show a zero debt or enable archive', 
   assert.equal(await page.getByText('NaNđ', { exact: false }).count(), 0);
 });
 
-test('two accounts record an expense, confirm repayment and archive a balanced trip', async t => {
+test('two accounts upload QR and transfer evidence, confirm repayment and archive a balanced trip', async t => {
   const { page, context: ownerContext, session, trip, screen } = await fixture(t);
   const root = 'trips/' + trip.id;
   const participant = await call(root + '/participants', session, { method: 'POST', body: { displayName: 'Bình' } });
@@ -761,23 +796,66 @@ test('two accounts record an expense, confirm repayment and archive a balanced t
   await page.getByRole('button', { name: /Lưu khoản chi/ }).click();
   await heading(page, 'Khoản chi để quyết toán');
 
+  const ownerImage = await paymentImageTransport(ownerContext, root, session);
+  await page.goto(screen('thanh-vien'));
+  await page.getByRole('button', { name: 'Thêm QR nhận tiền', exact: true }).click();
+  await page.getByLabel('Ảnh QR nhận tiền', { exact: true }).setInputFiles(ownerImage);
+  await page.getByAltText('Ảnh QR nhận tiền', { exact: true }).waitFor();
+  await page.getByRole('button', { name: 'Lưu QR nhận tiền', exact: true }).click();
+  await page.getByRole('button', { name: 'Đổi QR nhận tiền', exact: true }).waitFor();
+  const withQr = await call(root + '/overview', session);
+  assert.ok(withQr.participants.find(row => row.id === trip.ownerParticipantId).paymentQrReceiptId);
+
   const context = await browser.newContext({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true });
   t.after(() => context.close());
   await context.addInitScript(session => {
     sessionStorage.setItem('sharebill-live-session-v1', JSON.stringify(session));
   }, { ...member, expiresAt: Date.now() + member.expiresIn * 1000 });
+  const proofImage = await paymentImageTransport(context, root, member);
   const memberPage = await context.newPage();
   await memberPage.goto(screen('so-du'));
   await heading(memberPage, 'Số dư & quyết toán');
-  await memberPage.getByRole('button', { name: 'Ghi nhận đã chuyển', exact: true }).click();
-  await memberPage.getByRole('dialog').getByRole('button', { name: 'Ghi nhận', exact: true }).click();
+  await memberPage.getByRole('button', { name: 'Chuyển khoản', exact: true }).click();
+  let transferDialog = memberPage.getByRole('dialog');
+  await transferDialog.getByAltText('QR nhận tiền của An', { exact: true }).waitFor();
+  assert.equal(await transferDialog.getByRole('button', { name: 'Tôi đã chuyển khoản', exact: true }).isDisabled(), true);
+  await transferDialog.getByLabel('Ảnh chuyển khoản', { exact: true }).setInputFiles(proofImage);
+  await transferDialog.getByAltText('Ảnh chuyển khoản', { exact: true }).waitFor();
+  const amount = transferDialog.getByLabel('Số tiền đã chuyển (VND)', { exact: true });
+  await amount.fill('1e3');
+  await transferDialog.getByRole('button', { name: 'Tôi đã chuyển khoản', exact: true }).click();
+  await transferDialog.getByRole('alert').waitFor();
+  await amount.fill('120.000');
+  assert.equal(await memberPage.evaluate(() => document.documentElement.scrollWidth > innerWidth), false);
+  if (process.env.SHAREBILL_PAYMENT_SCREENSHOT) await memberPage.screenshot({ path: process.env.SHAREBILL_PAYMENT_SCREENSHOT, fullPage: true });
+  await transferDialog.getByRole('button', { name: 'Tôi đã chuyển khoản', exact: true }).click();
   await heading(memberPage, 'Lịch sử chuyển tiền');
   await memberPage.getByText('Chờ xác nhận', { exact: true }).last().waitFor();
   const pending = await call(root + '/overview', session);
   assert.equal(pending.balances.find(row => row.participantId === participant.id).netMinor, -120000);
+  const transfer = (await call(root + '/settlements?status=pending', session)).items[0];
+  assert.equal(transfer.receiptIds.length, 1);
+  assert.equal(await memberPage.getByRole('button', { name: 'Xác nhận đã nhận tiền', exact: true }).count(), 0);
+  await memberPage.goto(screen('so-du'));
+  await memberPage.getByRole('button', { name: 'Đã ghi nhận · Chờ xác nhận', exact: true }).waitFor();
+  assert.equal(await memberPage.getByRole('button', { name: 'Đã ghi nhận · Chờ xác nhận', exact: true }).isDisabled(), true);
+  await memberPage.reload();
+  await memberPage.getByRole('button', { name: 'Đã ghi nhận · Chờ xác nhận', exact: true }).waitFor();
+  assert.equal(await memberPage.getByRole('button', { name: 'Đã ghi nhận · Chờ xác nhận', exact: true }).isDisabled(), true);
+  await page.goto(screen('so-du'));
+  await page.getByRole('button', { name: 'Đã ghi nhận · Chờ xác nhận', exact: true }).waitFor();
+  assert.equal(await page.getByRole('button', { name: 'Đã ghi nhận · Chờ xác nhận', exact: true }).isDisabled(), true);
+  await page.getByRole('button', { name: 'Ghi khoản chuyển khác', exact: true }).click();
+  const duplicateDialog = page.getByRole('dialog');
+  await duplicateDialog.getByText('Khoản chuyển này đã được ghi nhận và đang chờ xác nhận.', { exact: false }).waitFor();
+  assert.equal(await duplicateDialog.getByRole('button', { name: 'Đã ghi nhận · Chờ xác nhận', exact: true }).isDisabled(), true);
+  await duplicateDialog.getByRole('button', { name: 'Đóng', exact: true }).click();
+  assert.equal((await call(root + '/settlements?status=pending', session)).items.length, 1);
 
   await page.goto(screen('quyet-toan'));
-  await page.getByRole('button', { name: 'Tôi đã nhận tiền', exact: true }).click();
+  await page.getByRole('button', { name: 'Xem ảnh chuyển khoản', exact: true }).click();
+  await page.getByRole('dialog').getByAltText('Ảnh chuyển khoản 1', { exact: true }).waitFor();
+  await page.getByRole('dialog').getByRole('button', { name: 'Xác nhận đã nhận tiền', exact: true }).click();
   await page.getByRole('dialog').getByRole('button', { name: 'Xác nhận', exact: true }).click();
   await page.getByText('An xác nhận đã nhận', { exact: false }).waitFor();
   const confirmed = await call(root + '/overview', session);
@@ -804,6 +882,46 @@ test('two accounts record an expense, confirm repayment and archive a balanced t
   assert.equal((await call(root + '/overview', session)).trip.status, 'archived');
   await memberPage.goto(screen('them-khoan-chi'));
   await heading(memberPage, 'Khoản chi chỉ có thể xem');
+});
+
+test('manual transfer recording stays locked after refresh and in another tab until the pending record is cancelled', async t => {
+  const { page, context, session, trip, screen } = await fixture(t);
+  const root = 'trips/' + trip.id;
+  const peer = await call(root + '/participants', session, { method: 'POST', body: { displayName: 'Bình' } });
+  await call(root + '/expenses', session, { method: 'POST', body: { title: 'Khoản trả cần chống trùng', category: 'food',
+    amountMinor: 200_000, payerParticipantId: trip.ownerParticipantId, occurredOn: '2026-11-20',
+    splitMethod: 'equal', split: { participantIds: [trip.ownerParticipantId, peer.id] } } });
+  await page.goto(screen('so-du'));
+  const staleTab = await context.newPage();
+  await staleTab.goto(screen('so-du'));
+  await staleTab.getByRole('button', { name: 'Ghi nhận thay', exact: true }).waitFor();
+  await page.getByRole('button', { name: 'Ghi nhận thay', exact: true }).click();
+  await page.getByRole('dialog').getByRole('button', { name: 'Ghi nhận', exact: true }).dblclick();
+  await heading(page, 'Lịch sử chuyển tiền');
+  assert.equal((await call(root + '/settlements?status=pending', session)).items.length, 1);
+  await staleTab.getByRole('button', { name: 'Ghi nhận thay', exact: true }).click();
+  await staleTab.getByRole('dialog').getByRole('button', { name: 'Ghi nhận', exact: true }).click();
+  await staleTab.getByRole('dialog').getByRole('button', { name: 'Đã ghi nhận · Chờ xác nhận', exact: true }).waitFor();
+  assert.equal(await staleTab.getByRole('dialog').getByRole('button', { name: 'Đã ghi nhận · Chờ xác nhận', exact: true }).isDisabled(), true);
+  assert.equal((await call(root + '/settlements?status=pending', session)).items.length, 1);
+  await page.goto(screen('so-du'));
+  await page.getByRole('button', { name: 'Đã ghi nhận · Chờ xác nhận', exact: true }).waitFor();
+  assert.equal(await page.getByRole('button', { name: 'Đã ghi nhận · Chờ xác nhận', exact: true }).isDisabled(), true);
+  await page.reload();
+  await page.getByRole('button', { name: 'Đã ghi nhận · Chờ xác nhận', exact: true }).waitFor();
+  assert.equal(await page.getByRole('button', { name: 'Đã ghi nhận · Chờ xác nhận', exact: true }).isDisabled(), true);
+  const otherTab = await context.newPage();
+  await otherTab.goto(screen('so-du'));
+  await otherTab.getByRole('button', { name: 'Đã ghi nhận · Chờ xác nhận', exact: true }).waitFor();
+  assert.equal(await otherTab.getByRole('button', { name: 'Đã ghi nhận · Chờ xác nhận', exact: true }).isDisabled(), true);
+  assert.equal((await call(root + '/settlements?status=pending', session)).items.length, 1);
+  await page.goto(screen('quyet-toan'));
+  await page.getByRole('button', { name: 'Hủy', exact: true }).click();
+  await page.getByRole('dialog').getByRole('button', { name: 'Xác nhận', exact: true }).click();
+  await page.getByRole('button', { name: 'Đã hủy', exact: true }).waitFor();
+  await page.goto(screen('so-du'));
+  await page.getByRole('button', { name: 'Ghi nhận thay', exact: true }).waitFor();
+  assert.equal(await page.getByRole('button', { name: 'Ghi nhận thay', exact: true }).isEnabled(), true);
 });
 
 test('a Google operator processes a user ticket through the admin screens', async t => {
