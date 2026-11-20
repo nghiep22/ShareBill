@@ -1,5 +1,7 @@
 # ShareBill — CI/CD, triển khai và vận hành
 
+**20/11/2026:** đã đưa QR và ảnh chuyển khoản lên hai domain staging tại SHA `11b870a551ba700d0600d093f2ab16c5b5fd898b`. Kho `sharebill-private-images` dùng Vercel Blob private/Hobby, vùng Singapore. Đã kiểm upload/finalize/claim/xem ảnh thật, CORS trình duyệt, chặn pending trùng, xác nhận cập nhật số dư và mở thẻ QR trong tab người dùng. Cloudflare R2 chưa được kích hoạt. Xem [báo cáo phát hành QR](reports/2026-11-20-qr-payments-release.json); ghi chú bucket Firebase chưa gắn bên dưới là trạng thái cũ của adapter Cloud Storage.
+
 Tài liệu thiết lập staging và kế hoạch đưa ShareBill vào vận hành.
 
 Ngày 19/11/2026 đã deploy FE/API cùng SHA `5256b3f` sau CI, kiểm trên domain staging và lưu [báo cáo S18](STAGING_SMOKE.md). Auth Email/Password, luồng tiền và đủ 18 composite index đạt cloud. Google quản trị, bucket ảnh và thiết bị thật còn cổng riêng. Các project hiện deploy bằng CLI từ monorepo, chưa tự deploy theo Git push.
