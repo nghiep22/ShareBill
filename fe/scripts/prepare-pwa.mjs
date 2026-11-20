@@ -31,6 +31,10 @@ self.addEventListener('install', event => {
   event.waitUntil(caches.open(CACHE).then(cache => cache.addAll(ASSETS)));
 });
 
+self.addEventListener('message', event => {
+  if (event.data?.type === 'ACTIVATE_UPDATE') self.skipWaiting();
+});
+
 self.addEventListener('activate', event => {
   event.waitUntil(
     caches.keys().then(keys => Promise.all(keys
@@ -43,8 +47,13 @@ self.addEventListener('activate', event => {
 self.addEventListener('fetch', event => {
   const url = new URL(event.request.url);
   if (event.request.method !== 'GET' || url.origin !== self.location.origin) return;
-  if (event.request.mode === 'navigate' && url.pathname === '/') {
-    event.respondWith(caches.open(CACHE).then(cache => cache.match('/').then(response => response || fetch(event.request))));
+  if (event.request.mode === 'navigate' && (url.pathname === '/demo' || url.pathname === '/demo/')) {
+    event.respondWith(Promise.resolve(Response.redirect(self.location.origin + '/', 302)));
+    return;
+  }
+  const page = url.pathname;
+  if (event.request.mode === 'navigate' && page === '/') {
+    event.respondWith(caches.open(CACHE).then(cache => cache.match(page).then(response => response || fetch(event.request))));
   } else if (shell.has(url.pathname)) {
     event.respondWith(caches.open(CACHE).then(cache => cache.match(url.pathname).then(response => response || fetch(event.request))));
   }

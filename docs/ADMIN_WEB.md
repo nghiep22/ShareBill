@@ -187,7 +187,7 @@ Ghi nhận cả khóa/mở user, khóa/mở trip, đổi ticket, cấp quyền o
 
 ## 6. Schema bổ sung cho BE
 
-Schema lưu trữ hợp nhất và index triển khai xem [DATABASE.md](DATABASE.md#6-ảnh-lời-mời-và-dữ-liệu-quản-trị). Tài liệu đó bổ sung `adminAuthLeases`, jobs, migration, trường timestamp/version và retention; các luồng admin dưới đây là yêu cầu nghiệp vụ, chưa phải API đã code.
+Schema lưu trữ hợp nhất và index triển khai xem [DATABASE.md](DATABASE.md#6-ảnh-lời-mời-và-dữ-liệu-quản-trị). Luồng quản trị đã có ở [admin-routes](../be/src/admin-routes.ts), [giao diện](../fe/src/admin-workspace.tsx) và [worker Auth](../be/src/services/admin-auth-jobs.ts). Grant, phiên Google, ticket, moderation và đối soát Auth có kiểm chứng trên Emulator. Cấu hình Google provider cloud, lịch worker và smoke theo bản staging còn mở. [Cách chạy](../be/README.md#quản-trị)
 
 ### 6.1. User và trip mở rộng
 

@@ -19,6 +19,8 @@ export const tripSchema = z.strictObject({
     try { new Intl.DateTimeFormat('en', { timeZone: value }); return true; } catch { return false; }
   }),
   currency: z.literal('VND'), currencyExponent: z.literal(0), ownerUid: uid, createdBy: uid,
+  sharingMode: z.enum(['group-equal', 'per-expense']).optional(),
+  equalParticipantIds: z.array(entityId).min(1).max(50).refine(ids => new Set(ids).size === ids.length).optional(),
   status: z.enum(['active', 'archived']), moderationStatus: z.enum(['normal', 'suspended']),
   moderationVersion: version, moderationReason: z.string().max(500).nullable(), moderatedAt: timestamp.nullable(), moderatedBy: uid.nullable(),
   inviteEpoch: version, version, revision: version, ledgerVersion: count,
@@ -56,11 +58,24 @@ export const receiptSchema = z.strictObject({
   declaredContentType: z.enum(['image/jpeg', 'image/png', 'image/webp']), maxBytes: z.literal(5 * 1024 * 1024),
   expiresAt: timestamp, stagingPath: z.string().min(1), stagingGeneration: z.string().min(1).nullable(),
   processedPath: z.string().min(1).nullable(), processedGeneration: z.string().min(1).nullable(),
-  bytes: version.nullable(), width: version.nullable(), height: version.nullable(),
+  bytes: version.max(2 * 1024 * 1024).nullable(), width: version.max(1600).nullable(), height: version.max(1600).nullable(),
   attachedExpenseId: entityId.nullable(), processingLeaseUntil: timestamp.nullable(), processingAttemptId: entityId.nullable(),
   processingOperationKey: entityId.nullable(), processingRequestHash: z.string().regex(/^[0-9a-f]{64}$/).nullable(),
   processingBaseVersion: version.nullable(), version, createdAt: timestamp, updatedAt: timestamp,
   discardedAt: timestamp.nullable(), cleanupAfter: timestamp.nullable(), storageDeletedAt: timestamp.nullable(),
+}).superRefine((receipt, context) => {
+  const output = [receipt.processedPath, receipt.processedGeneration, receipt.bytes, receipt.width, receipt.height];
+  const hasOutput = output.every(value => value !== null);
+  if (output.some(value => value !== null) && !hasOutput ||
+      (receipt.status === 'ready' || receipt.status === 'attached') && (!hasOutput || !receipt.stagingGeneration || !receipt.processingAttemptId) ||
+      (receipt.status === 'attached') !== (receipt.attachedExpenseId !== null) ||
+      receipt.status === 'processing' && (!receipt.processingLeaseUntil || !receipt.processingAttemptId || !receipt.processingOperationKey ||
+        !receipt.processingRequestHash || !receipt.processingBaseVersion) ||
+      receipt.status !== 'processing' && receipt.processingLeaseUntil !== null ||
+      receipt.status === 'discarded' && (!receipt.discardedAt || !receipt.cleanupAfter) ||
+      receipt.storageDeletedAt !== null && receipt.status !== 'discarded') {
+    context.addIssue({ code: 'custom', message: 'invalid receipt state', path: ['status'] });
+  }
 });
 
 // The financial fields also let the checker reconcile legacy documents that only lack metadata.

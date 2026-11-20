@@ -1,12 +1,12 @@
 import { z } from 'zod';
-import { applyBalanceDelta, applyExpenseTotals, expenseDelta, EXPENSE_CATEGORIES, zeroBalance } from '../domain/money.js';
+import { applyBalanceDelta, applyExpenseTotals, equalGroupBalances, expenseDelta, EXPENSE_CATEGORIES, zeroBalance } from '../domain/money.js';
 import { applySettlement } from '../domain/settlement.js';
 import type { expenseLedgerSchema, settlementLedgerSchema } from './integrity-schemas.js';
 
 export type LedgerExpense = z.infer<typeof expenseLedgerSchema>;
 export type LedgerSettlement = z.infer<typeof settlementLedgerSchema>;
 
-export function reconcileLedger(participantIds: Iterable<string>, expenses: LedgerExpense[], settlements: LedgerSettlement[]) {
+export function reconcileLedger(participantIds: Iterable<string>, expenses: LedgerExpense[], settlements: LedgerSettlement[], equalParticipantIds?: string[]) {
   const balances = new Map(Array.from(participantIds, id => [id, zeroBalance(id)]));
   const categoryTotalsMinor = Object.fromEntries(EXPENSE_CATEGORIES.map(category => [category, 0])) as
     Record<(typeof EXPENSE_CATEGORIES)[number], number>;
@@ -30,7 +30,7 @@ export function reconcileLedger(participantIds: Iterable<string>, expenses: Ledg
     balances.set(toParticipantId, applySettlement(balances.get(toParticipantId)!, 'to', amountMinor, 1));
   }
   return {
-    balances, ...totals,
+    balances: equalParticipantIds ? new Map(equalGroupBalances([...balances.values()], totals.totalExpenseMinor, equalParticipantIds).map(row => [row.participantId, row])) : balances, ...totals,
     counts: { expenseCountAllTime: expenses.length, activeExpenseCount, settlementCountAllTime: settlements.length, pendingSettlementCount },
   };
 }

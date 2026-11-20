@@ -1,0 +1,121 @@
+{
+  "projectId": "sharebill-staging",
+  "tripId": "4b634afe-ee78-4450-bb38-37bb05c0fec6",
+  "target": "cloud",
+  "readOnly": true,
+  "indexConfigSha256": "2cde3850661092a7676f36b2c6c5168afa15dd2dea30ada3ff097ca8844bc82b",
+  "passed": true,
+  "startedAt": "2026-11-19T02:36:20.239Z",
+  "checks": [
+    {
+      "id": "IX01",
+      "collectionGroup": "tripRefs",
+      "state": "READY",
+      "queried": true
+    },
+    {
+      "id": "IX02",
+      "collectionGroup": "expenses",
+      "state": "READY",
+      "queried": true
+    },
+    {
+      "id": "IX03",
+      "collectionGroup": "expenses",
+      "state": "READY",
+      "queried": true
+    },
+    {
+      "id": "IX04",
+      "collectionGroup": "expenses",
+      "state": "READY",
+      "queried": true
+    },
+    {
+      "id": "IX05",
+      "collectionGroup": "settlements",
+      "state": "READY",
+      "queried": true
+    },
+    {
+      "id": "IX06",
+      "collectionGroup": "users",
+      "state": "READY",
+      "queried": true
+    },
+    {
+      "id": "IX07",
+      "collectionGroup": "trips",
+      "state": "READY",
+      "queried": true
+    },
+    {
+      "id": "IX08",
+      "collectionGroup": "trips",
+      "state": "READY",
+      "queried": true
+    },
+    {
+      "id": "IX09",
+      "collectionGroup": "supportTickets",
+      "state": "READY",
+      "queried": true
+    },
+    {
+      "id": "IX10",
+      "collectionGroup": "supportTickets",
+      "state": "READY",
+      "queried": true
+    },
+    {
+      "id": "IX11",
+      "collectionGroup": "adminAuditEvents",
+      "state": "READY",
+      "queried": true
+    },
+    {
+      "id": "IX12",
+      "collectionGroup": "adminAuthJobs",
+      "state": "READY",
+      "queried": true
+    },
+    {
+      "id": "IX13",
+      "collectionGroup": "maintenanceJobs",
+      "state": "READY",
+      "queried": true
+    },
+    {
+      "id": "IX14",
+      "collectionGroup": "receipts",
+      "state": "READY",
+      "queried": true
+    },
+    {
+      "id": "IX15",
+      "collectionGroup": "receipts",
+      "state": "READY",
+      "queried": true
+    },
+    {
+      "id": "IX16",
+      "collectionGroup": "receipts",
+      "state": "READY",
+      "queried": true
+    },
+    {
+      "id": "IX17",
+      "collectionGroup": "settlements",
+      "state": "READY",
+      "queried": true
+    },
+    {
+      "id": "IX18",
+      "collectionGroup": "settlements",
+      "state": "READY",
+      "queried": true
+    }
+  ],
+  "queriesExecuted": 18,
+  "finishedAt": "2026-11-19T02:36:23.901Z"
+}

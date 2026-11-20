@@ -4,7 +4,7 @@ Phiên bản 1.0 · 16/11/2026 · Phương án chính: Next.js API trên Vercel 
 
 **Cập nhật implementation:** theo yêu cầu tách `fe/` và `be/`, backend thực tế dùng Fastify/Node.js trong `be/` và có thể deploy Vercel như một project riêng. Những đường `src/app/api/...` và đoạn nói Route Handlers bên dưới là thiết kế ban đầu; hợp đồng `/api/v1` và quy tắc tiền/quyền vẫn áp dụng. Xem [BE hiện có](../be/README.md) để biết endpoints đã code.
 
-**Cập nhật auth:** P0 hiện dùng email/password. `POST /api/v1/auth/register`, `/login`, `/refresh` trả Firebase ID token dạng JWT và refresh token; các API protected dùng `verifyIdToken(token, true)`. Web API key chọn Firebase project, không phải bằng chứng xác thực. Google OAuth trong bản thiết kế cũ là tùy chọn sau này hoặc dành riêng cho admin nếu triển khai.
+**Cập nhật auth:** P0 hiện dùng email/password. `POST /api/v1/auth/register`, `/login`, `/refresh` trả Firebase ID token dạng JWT và refresh token; các API protected dùng `verifyIdToken(token, true)`. Web API key chọn Firebase project, không phải bằng chứng xác thực. Quản trị đã triển khai Google sign-in, grant server-only, recent auth, audit và worker đồng bộ Firebase Auth. Xem [hướng dẫn quản trị](../be/README.md#quản-trị). OpenAPI hiện có 67 thao tác; kết quả local/Emulator và phần còn nghiệm thu nằm trong [kế hoạch module](KE_HOACH_HOAN_THIEN.md).
 
 `POST /api/v1/me/bootstrap` nhận Bearer ID token và body trống, lấy danh tính từ Firebase Auth để chỉ tạo hồ sơ v1 khi chưa có. `GET /api/v1/me` chỉ đọc hồ sơ, trả 404 nếu chưa bootstrap. Register/login/refresh và tạo chuyến dùng chung logic bootstrap. Việc bổ sung trường v1 vào hồ sơ legacy thuộc [S05](slices/01_DATABASE_BE.md#s05). Xem [API đang chạy](../be/README.md).
 
@@ -305,6 +305,10 @@ Không cần lưu `ledgerVersion` riêng trên từng balance vì transaction ch
 - Archive revoke mọi invite: để không fan-out hàng loạt, dùng `trip.inviteEpoch` tăng khi archive; invite lưu `epoch`, accept yêu cầu epoch khớp. Trip khởi tạo inviteEpoch = 1.
 - Reopen không hồi sinh link cũ. Không dùng TTL làm kiểm tra hạn; luôn so expiresAt ngay lúc request.
 
+**S08 đã triển khai trên Emulator (18/11/2026):** `POST /trips/:tripId/invites` nhận `{expiresInDays?: 1..7, maxUses?: 1..20}`; raw token chỉ có ở response commit mới, replay trả `tokenAvailable=false` và hướng dẫn thu hồi/tạo mới. `GET invites` phân trang theo createdAt/id và revision, không có token. Revoke nhận `{}` với If-Match invite.version (accept mới cũng tăng version), cho phép cả archived/suspended. Preview nhận `{token}`, chỉ trả trip `{id,name}`, inviter `{displayName}`, expiresAt; không cần key và không tăng usage. Accept nhận `{token}` cùng key, trả `{tripId,uid,status: joined|already-member,participantId,version}`; active join lại không tốn lượt kể cả exhausted, nhưng vẫn kiểm hạn/revoke/epoch/trip. Removed cần owner restore. Token không đưa vào URL API. [OpenAPI thực thi](../be/openapi.json) và [hướng dẫn thử](../be/README.md).
+
+S08 còn có `GET /trips/:tripId/members` trả hai danh sách giới hạn 50; remove/restore nhận `{reason}` với If-Match membership.version. Remove giữ participant/link/sổ tiền, được cả archived/suspended; restore cần trip writable, user active và liên kết còn nhất quán, không tăng all-time count. Transfer-owner nhận `{uid,reason}` với If-Match trip.version, tăng version của root và hai memberships, giữ ledgerVersion. Owner cũ vẫn active có thể replay key chuyển chủ đã commit; mất membership thì replay trả 404.
+
 ### 3.9. Audit và operation
 
 Audit có `eventId, actorUid, actorDisplayNameSnapshot, action, entityType, entityId, before, after, reason, revision, ledgerVersion, operationKey, createdAt`. Snapshot chỉ giữ trường cần đối soát; không chứa signed URL, raw token hay file bytes. Giá trị tiền trước/sau và shares phải đủ tính lại thay đổi.
@@ -401,7 +405,12 @@ Tất cả dòng có “ghi” đều dùng idempotency key. Cột Version chỉ
 | GET | `/trips/:tripId/receipts/:id/view-url` | Member xem ảnh attached hoặc uploader xem ready | — |
 | POST | `/trips/:tripId/receipts/:id/discard` | Uploader/owner, chỉ ảnh chưa attached | Receipt |
 | GET | `/trips/:tripId/activity?cursor=` | Member active | — |
-| GET | `/operations/:key` | Actor của operation + quyền hiện tại | — |
+| GET | `/trips/:tripId/itinerary` | Membership active | Hoạt động, đề xuất, version |
+| POST | `/trips/:tripId/itinerary` | Chuyến đang mở, chủ chuyến quản lý và thành viên gửi đề xuất, key + If-Match lịch trình | ID và version |
+| POST | `/support-tickets` | User active, key, kiểm membership nếu kèm chuyến, 5 báo lỗi/ngày theo giờ Việt Nam | Mã và trạng thái báo lỗi |
+| GET | `/support-tickets` | Người gửi, cursor, tối đa 25 | Danh sách báo lỗi của mình |
+| GET | `/support-tickets/:id` | Người gửi | Báo lỗi và mô tả |
+| GET | `/operations/:key` | Actor của operation, quyền chuyến hiện tại hoặc quyền sở hữu báo lỗi | — |
 
 `/invites/preview` là POST đọc vì token không đưa vào URL; không thay đổi dữ liệu, không cần idempotency key. Profile bootstrap có key nhưng không phải transaction tiền.
 
@@ -446,7 +455,7 @@ Không có DELETE sổ tiền hay participant P0. Không có `/balance/update` t
 
 Response minh họa rút gọn; DTO thật còn các trường metadata theo schema. Client không truyền computed shares trong chế độ equal.
 
-API hiện nhận `split` trong payload tạo khoản chi; document mới lưu dạng chuẩn `splitInput`. GET danh sách/chi tiết trả `splitInput` cả với bản ghi legacy chỉ có `split`. Có thể gửi `receiptIds: []`; receipt ID khác rỗng trả 422 cho tới khi luồng upload/finalize/claim ảnh được triển khai.
+API hiện nhận `split` trong payload tạo khoản chi; document mới lưu dạng chuẩn `splitInput`. GET danh sách/chi tiết trả `splitInput` cả với bản ghi legacy chỉ có `split`. S10 nhận tối đa ba `receiptIds` không trùng, ready/cùng chuyến/do actor upload; create/PATCH claim ảnh cùng transaction. PATCH có thể giữ attached của expense dù uploader khác; ảnh bỏ chuyển discarded grace 7 ngày, ảnh của expense void giữ attached.
 
 Chia exact thay `splitMethod` bằng `exact`, `split` bằng:
 
@@ -461,6 +470,10 @@ Chia exact thay `splitMethod` bằng `exact`, `split` bằng:
 ```
 
 PATCH chấp nhận toàn bộ block tiền `amountMinor, payerParticipantId, splitMethod, split` nếu thay một trường trong block, tránh dữ liệu cũ/mới không đồng bộ; các trường metadata có thể patch riêng. Không nhận `status` để lách route void.
+
+**S09 đã triển khai trên Emulator (18/11/2026):** PATCH kiểm creator/owner, If-Match và trip writable; tính contribution mới trừ cũ theo participant, giữ counters all-time/active và settlement lịch sử. Đổi category chỉ dịch category totals; metadata hoặc đổi cách diễn đạt split nhưng giữ amount/payer/shares không tăng ledgerVersion. Đảo phần cũ không yêu cầu người cũ active, còn toàn bộ người trong block tiền gửi mới phải active. PATCH chỉ sửa document v1 hợp lệ; legacy cần migration trước nếu trả `EXPENSE_INVARIANT_FAILED`. [OpenAPI](../be/openapi.json) có request/response cho 37 endpoints.
+
+S09 thêm cancel pending (creator/owner, body `{}`) và void confirmed (owner, `{reason}`), đều có key/If-Match settlement.version; chỉ void đổi balances/ledgerVersion và giữ nguyên `confirmedBy/At/Mode`. Archive/reopen nhận `{}` với key/If-Match trip.version. Archive transaction kiểm balances đủ cho participants, net từng người bằng 0 và cả pending counter/rows; trả `TRIP_NOT_BALANCED`, `PENDING_SETTLEMENTS` hoặc `PROJECTION_INVARIANT_FAILED` khi chưa đủ điều kiện. Archive tăng epoch để vô hiệu mọi lời mời cũ; reopen đặt archivedAt=null, không giảm epoch. Cả hai giữ ledgerVersion; trip suspended không được archive/reopen. [Bằng chứng kiểm thử S09](slices/02_NGHIEP_VU_BE.md#s09).
 
 ### 4.3. Ví dụ settlement
 
@@ -738,6 +751,8 @@ receipt-processed/{tripId}/{receiptId}/{processingAttemptId}.jpg
 Không dùng tên file gốc làm path. Một receipt chỉ thuộc một expense; không cho gắn cùng ảnh vào nhiều khoản trong P0. Cả hai vùng đều không public.
 
 ### 8.2. Luồng chuẩn
+
+**S10 đã triển khai trên local/Emulator:** bốn endpoint receipt trong OpenAPI (41 endpoints toàn API), Sharp processor thật, quota cấp policy 10 lần/giờ/UID/trip gồm replay, workflow reservation theo UID/key, attach/detach transaction, Storage Rules/CORS config và cleanup CLI có dry-run/apply/checkpoint/lease/retry. Dữ liệu capability không lưu vào DB/op/audit/log. Test state machine inject Storage adapter memory; Rules được kiểm qua client đã đăng nhập trên Storage Emulator. Chưa có bucket cloud/deploy/smoke IAM/CORS/signed policy thật. Xem [hướng dẫn S10](RECEIPTS.md).
 
 1. API `upload-intents`: transaction kiểm user/membership/trip active và normal/quota, tạo receipt awaiting_upload, version 1, expiresAt +15 phút. Sau commit cấp GCS V4 signed POST policy TTL5 phút cho đúng stagingPath, size1..5MiB và exact contentType. Không lưu policy signature trong operation/log; replay có thể cấp lại policy với hạn không vượt expiresAt sau khi kiểm quyền hiện tại.
 2. FE upload trực tiếp vào bucket Firebase Storage qua Cloud Storage XML POST endpoint bằng FormData policy. Mọi Firebase client SDK read/write đều deny; quyền upload nằm trong policy ngắn hạn do API cấp, không tạo Firebase download token dài hạn. Bucket CORS chỉ cho app origins, không public IAM.

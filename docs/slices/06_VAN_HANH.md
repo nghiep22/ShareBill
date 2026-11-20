@@ -8,7 +8,7 @@ Kiểm hành trình qua browser, chạy staging và diễn tập khôi phục tr
 
 **CI browser, realtime và offline**
 
-- **Trạng thái** Chưa làm
+- **Trạng thái** Đã có browser CI, polling có kiểm quyền, PWA và nháp opt-in. Còn nghiệm thu thiết bị thật
 - **Phụ thuộc** [S12](04_FRONTEND_APP.md#s12), [S13](04_FRONTEND_APP.md#s13)
 - **Kết quả** Đưa frontend vào CI, kiểm hành trình browser, cập nhật qua signal và bổ sung PWA, snapshot offline, bản nháp opt-in.
 - **Nghiệm thu** E2E chạy qua FE/API/DB. Realtime phản ánh thu hồi quyền. PWA giữ bản nháp qua update và yêu cầu người dùng gửi lại giao dịch khi online.
@@ -39,6 +39,8 @@ Kiểm hành trình qua browser, chạy staging và diễn tập khôi phục tr
 <a id="o03"></a>
 
 **O03 · Realtime invalidation theo signal**
+
+Triển khai hiện tại dùng REST signal kiểm quyền mỗi 30 giây khi tab đang hiện, cùng revalidation ở foreground/reconnect/chuyển màn hình. Client Rules tiếp tục deny toàn bộ. SDK listener ở các bước dưới là phương án có thể bổ sung sau khi đo tải. [Mã workspace](../../fe/src/connected-workspace.tsx)
 
 - **Kết quả** Tab đang mở nhận biết dữ liệu/quyền thay đổi.
 - **Phạm vi file/module** `be/firestore.rules`, signal/membership subscription FE.
@@ -72,10 +74,12 @@ Kiểm hành trình qua browser, chạy staging và diễn tập khôi phục tr
 
 **Cloud staging và smoke test**
 
-- **Trạng thái** Chưa làm
+- **Trạng thái** Đã deploy FE/API cùng SHA, CI, Auth/tiền/index cloud và browser 390px đạt. Còn Google operator, bucket ảnh và thiết bị thật
 - **Phụ thuộc** [S16](05_ADMIN_HO_TRO.md#s16), [S17](#s17)
 - **Kết quả** Cấu hình Firebase/Vercel staging, deploy BE/FE/admin và smoke các index/cursor trên Firestore thật.
 - **Nghiệm thu** Health, Auth, preflight, luồng browser và admin guard đạt trên staging đúng SHA. Chạy query sau khi index ready và lưu kết quả.
+
+[Công cụ và runbook smoke S18](../STAGING_SMOKE.md) kiểm FE/API cùng SHA/project/môi trường, CORS, guard và luồng tiền trong chuyến synthetic riêng. Kết quả Emulator không thay bằng chứng IAM/index/Google/bucket cloud.
 
 <details>
 <summary>Các bước và tiêu chí chi tiết</summary>
@@ -114,7 +118,7 @@ Kiểm hành trình qua browser, chạy staging và diễn tập khôi phục tr
 
 **O09 · Smoke index và cursor trên Firestore thật**
 
-- **Kết quả** Từng IX01..16 dùng được trên cloud và phân trang đúng.
+- **Kết quả** Từng IX01..18 dùng được trên cloud và phân trang đúng.
 - **Phạm vi file/module** Index deployment và staging query smoke scripts (mới).
 - **Việc làm** Deploy index/Rules theo cấu hình, đợi ready, seed synthetic scope, chạy query real credentials; ghi report index/query/cursor.
 - **Kiểm thử** Tất cả composite inventory, ngày/timestamp trùng, filter sai và cursor stale.
@@ -126,10 +130,18 @@ Kiểm hành trình qua browser, chạy staging và diễn tập khôi phục tr
 
 **Workers, backup, restore và sửa sai lệch**
 
-- **Trạng thái** Chưa làm
+- **Trạng thái** Đang làm: log, đối soát, repair và diễn tập backup/restore Auth/Firestore/Storage đạt local. Còn lịch/backup/restore/repair cloud và cảnh báo
 - **Phụ thuộc** [S18](#s18)
 - **Kết quả** Lập lịch worker và reconcile, cấu hình backup, triển khai repair projection có kiểm soát, diễn tập restore và thiết lập cảnh báo.
 - **Nghiệm thu** Kiểm retry/lease, backup có scope, restore đo RPO/RTO và repair chỉ áp khi version còn khớp. Checker sau repair đạt và cảnh báo đến người phụ trách.
+
+[Log HTTP và cách tra lỗi](../OPERATIONS_LOGGING.md) đã có trong runtime; không ghi query/body/exception tự do. Các kiểm thử riêng kiểm dữ liệu riêng tư và mã request.
+
+[Worker đối soát từng lượt](../LEDGER_RECONCILIATION.md) có CLI, lease chống trùng, retry có giới hạn và summary trong Hệ thống. Nguồn tiền chỉ đọc; chưa lên lịch cloud.
+
+[Repair projection B19](../PROJECTION_REPAIR.md) đã có dry-run, file snapshot/diff, fence bằng tạm khóa chuyến, kiểm version/updateTime, transaction sửa + audit/job và checker sau apply. Có kiểm tranh chấp, replay/no-op và summary quản trị; chỉ áp dụng trên Emulator.
+
+[O11/O12 local](../RESTORE_REHEARSAL.md) đã export/import ba dịch vụ trong hai bộ Emulator riêng, kiểm 18 cổng và repair sau khôi phục. Báo cáo có số lượng/hash/thời gian thực đo; CI chỉ upload summary. Chưa có nghiệm thu cloud hoặc mục tiêu RPO/RTO production.
 
 <details>
 <summary>Các bước và tiêu chí chi tiết</summary>
@@ -158,6 +170,8 @@ Kiểm hành trình qua browser, chạy staging và diễn tập khôi phục tr
 
 **B19 · Repair projection có kiểm soát**
 
+- **Tiến độ 20/11/2026** Hoàn tất bản local/Emulator; chưa mở apply cloud hoặc nghiệm thu backup/restore cloud. [Runbook và kiểm chứng](../PROJECTION_REPAIR.md).
+
 - **Kết quả** Operator sửa projection sai từ ledger nguồn với diff được kiểm trước.
 - **Phạm vi file/module** `be/scripts/repair-projections.ts` (mới), maintenance service.
 - **Việc làm** Dry-run mặc định; backup reference, maintenance fence, expected ledgerVersion/revision; commit projection+signal/audit/job; không sửa ledger; chạy cloud chỉ sau backup đã xác minh.
@@ -167,6 +181,8 @@ Kiểm hành trình qua browser, chạy staging và diễn tập khôi phục tr
 <a id="o12"></a>
 
 **O12 · Diễn tập restore và repair**
+
+- **Tiến độ 20/11/2026** Đạt bản synthetic local cho Auth/Firestore/Storage, Rules/indexes, quyền/API/replay/receipt và repair; phần staging/cloud còn mở. [Runbook và số đo](../RESTORE_REHEARSAL.md).
 
 - **Kết quả** Khôi phục vào project/database cách ly và chứng minh sổ tiền đúng.
 - **Phạm vi file/module** Restore rehearsal report/runbook, checker/repair scripts.

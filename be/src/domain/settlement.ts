@@ -1,4 +1,4 @@
-import type { Balance } from './money.js';
+import { assertAmount, type Balance } from './money.js';
 
 export type Suggestion = { fromParticipantId: string; toParticipantId: string; amountMinor: number };
 
@@ -26,10 +26,12 @@ export function suggestSettlements(balances: Balance[]): Suggestion[] {
 }
 
 export function applySettlement(balance: Balance, role: 'from' | 'to', amountMinor: number, sign: 1 | -1): Balance {
+  assertAmount(amountMinor);
   const next = role === 'from'
     ? { ...balance, sentMinor: balance.sentMinor + sign * amountMinor, netMinor: balance.netMinor + sign * amountMinor }
     : { ...balance, receivedMinor: balance.receivedMinor + sign * amountMinor, netMinor: balance.netMinor - sign * amountMinor };
   if (!Number.isSafeInteger(next.netMinor) || !Number.isSafeInteger(next.sentMinor) || !Number.isSafeInteger(next.receivedMinor) ||
+      next.sentMinor < 0 || next.receivedMinor < 0 ||
       next.netMinor !== next.paidMinor - next.owedMinor + next.sentMinor - next.receivedMinor) {
     throw new Error('BALANCE_INVARIANT_FAILED');
   }

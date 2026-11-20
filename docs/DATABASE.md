@@ -25,18 +25,20 @@ Node API xác minh JWT rồi kiểm quyền trên dữ liệu. Mọi lệnh ghi 
 | Nhóm | Có trong code | Cần hoàn thiện |
 | --- | --- | --- |
 | Auth/user | Register, login, refresh JWT; bootstrap hồ sơ v1 dùng chung | Migration hồ sơ legacy [S05](slices/01_DATABASE_BE.md#s05) và quản trị tài khoản [S15](slices/05_ADMIN_HO_TRO.md#s15) |
-| Trip | Tạo chuyến v1 với metadata, moderation mặc định, counters và category totals; create/void expense cập nhật cùng transaction | Chốt/mở lại [S09](slices/02_NGHIEP_VU_BE.md#s09) và migration [S05](slices/01_DATABASE_BE.md#s05) |
-| Membership | Owner membership đủ timestamps và tripRef trong cùng transaction | Invite/join/remove/restore; API phân trang |
-| Participant | Owner và người thêm sau có participant/balance zero với metadata v1; owner có participantLink | Link/unlink/inactive; migration dữ liệu cũ |
-| Expense | Writer v1 lưu `splitInput`, shares, currency/receiptIds và void metadata; reader đọc được legacy `split`; create/void đồng bộ tổng chi và số dư | Sửa khoản chi [S09](slices/02_NGHIEP_VU_BE.md#s09), migration [S05](slices/01_DATABASE_BE.md#s05) và vòng đời ảnh [S10](slices/03_HOA_DON.md#s10) |
-| Settlement | Writer v1 tạo pending/confirm đủ currency, metadata nullable, actor/mode/timestamps; giữ mốc ledger lúc tạo | Hủy/đảo trả nợ [S09](slices/02_NGHIEP_VU_BE.md#s09) và migration [S05](slices/01_DATABASE_BE.md#s05) |
+| Trip | Tạo/sửa metadata, S09 archive/reopen với balance/pending checks và epoch, moderation mặc định, counters và category totals nguyên tử | Cloud smoke [S18](slices/06_VAN_HANH.md#s18) |
+| Membership | S08 join unlinked, remove/restore/tripRef và transfer-owner nguyên tử; giới hạn 50 UID all-time, giữ joinedAt/link khi khôi phục | Realtime/Rules read có kiểm thử [S17](slices/06_VAN_HANH.md#s17) |
+| Participant | Owner và người thêm sau có participant/balance zero với metadata v1; S07 đổi tên, active/inactive và link/unlink UID; S08 join không tự nhận participant | UI quản lý [S14](slices/04_FRONTEND_APP.md#s14) |
+| Expense | Writer v1 create/PATCH/void đồng bộ tổng chi/category/balances; S10 attach/detach receipt nguyên tử; metadata giữ ledgerVersion; reader đọc legacy `split` | Giao diện chi/ảnh [S12](slices/04_FRONTEND_APP.md#s12) |
+| Settlement | V1 đủ pending/confirm/cancel/void, giữ mốc ledger lúc tạo và metadata confirm sau void; cancel không đổi tiền | UI [S13](slices/04_FRONTEND_APP.md#s13), cloud smoke [S18](slices/06_VAN_HANH.md#s18) |
 | Balance/signal | Balance có `updatedAt` khi tạo và khi ghi tiền; signal giữ schemaVersion, revision và ledgerVersion theo root | Kiểm tra/đối soát [S04](slices/01_DATABASE_BE.md#s04), migration [S05](slices/01_DATABASE_BE.md#s05) và repair [S19](slices/06_VAN_HANH.md#s19) |
-| Audit/operation | Sáu mutation chuyến hiện có ghi audit v1 và operation chuẩn cùng transaction; hỗ trợ replay key legacy | Migration operation và baseline audit [S05](slices/01_DATABASE_BE.md#s05), tra kết quả operation [S06](slices/01_DATABASE_BE.md#s06) |
-| Receipt/invite/admin/support/jobs | Đã có mô tả trong tài liệu | Chưa có lifecycle/API/worker hoàn chỉnh |
+| Audit/operation | Mutation ghi audit/operation nguyên tử, hỗ trợ replay legacy và lookup S06; S10 thêm resource/action receipt, workflow reserve key trước finalize committed | UI hoạt động [S14](slices/04_FRONTEND_APP.md#s14), vận hành S19 |
+| Invite | S08 tạo/list/revoke/preview/accept; token trả một lần, lookup hash SHA-256; S09 archive tăng epoch, reopen không hồi sinh link | Cloud smoke [S18](slices/06_VAN_HANH.md#s18) |
+| Receipt/cleanup jobs | S10 intent/policy/quota, lease/hash/baseVersion/attempt, image processor, generation, attach/view/discard và worker dry-run/apply/checkpoint/retry | Bucket thật/IAM/CORS/policy smoke S18, scheduler S19 |
+| Admin/support/jobs còn lại | Đã có mô tả trong tài liệu | Chưa có lifecycle/API/worker hoàn chỉnh |
 | Index | Đã bổ sung file cấu hình trong lần cập nhật này | Deploy staging, đợi index ready và chạy query thật; API hiện vẫn chỉ lấy 20/30 bản gần nhất |
 | Dữ liệu mẫu | Đã bổ sung `pnpm --dir be db:seed` | Seed chỉ chạy emulator và đi qua API hiện có; không thay migration |
 
-File [firestore.indexes.json](../be/firestore.indexes.json) chứa 16 composite index của thiết kế P0 và 15 field exemption. Có index cho chức năng chưa code để hai phía có hợp đồng rõ ràng; không có nghĩa API tương ứng đã tồn tại.
+File [firestore.indexes.json](../be/firestore.indexes.json) chứa 18 composite index của thiết kế P0 và 17 field exemption, gồm hai index pending theo participant và hai exemption lịch trình. Có index cho chức năng chưa code để hai phía có hợp đồng rõ ràng; không có nghĩa API tương ứng đã tồn tại.
 
 ## 3. Quan hệ và cây dữ liệu
 
@@ -177,6 +179,8 @@ Mật khẩu chỉ do Firebase Auth quản lý. User profile không chứa `role
 
 Chỉ một membership active role owner khớp `ownerUid`. Archive chỉ thực hiện khi mọi balance net =0 và không còn settlement pending. Archive không xóa dữ liệu; reopen không hồi sinh invite cũ.
 
+S09 archive kiểm đủ balance cho từng participant và cả pending rows/counter trong transaction. `archivedAt` được đặt lúc archive, về null khi reopen; timestamp lần chốt trước giữ trong audit. Hai thao tác tăng trip.version/revision nhưng giữ ledgerVersion; chỉ archive tăng inviteEpoch.
+
 ### 5.4. Membership, participant và khóa liên kết
 
 | Collection | Trường đầy đủ ngoài schemaVersion | Ràng buộc |
@@ -309,6 +313,8 @@ Key UUID v4 unique trong namespace UID. Cùng key cùng command trả kết qu�
 
 Các trường cleanup bổ sung vào đặc tả ảnh cũ để worker biết thời điểm được xóa bytes và việc xóa đã hoàn tất. Chúng không tự kích hoạt TTL xóa document receipt.
 
+S10 dùng `users/{uid}/receiptWorkflows/{key}` chứa requestHash/tripId/receiptId/baseVersion/attemptId/state/leaseUntil/updatedAt để reserve key và continuation khi chưa có OperationDoc committed. Mọi writer kiểm reservation trong transaction; workflow không chứa policy, URL hay file bytes. `rateLimits/{sha256(scope/UID/trip/hour)}` giữ count/expiry cho quota cấp policy, không dùng TTL làm kiểm tra hạn. Worker có `maintenanceJobs/{uuid}` với trip scope/checkpoint/lease/retryPaths/failedPaths/attempts/summary; xóa staging lỗi sau ready có job pending riêng. [Luồng API và worker đã triển khai](RECEIPTS.md).
+
 ```text
 receipt-staging/{tripId}/{uploaderUid}/{receiptId}/original
 receipt-processed/{tripId}/{receiptId}/{processingAttemptId}.jpg
@@ -352,6 +358,7 @@ Không đưa lý do khóa user hoặc support nội bộ vào activity của nh�
 | --- | --- |
 | Auth job | uid; desiredDisabled boolean; moderationVersion>=1; status queued/running/succeeded/failed/superseded; availableAt; attempts integer>=0; leaseOwner string?; leaseUntil Timestamp?; lastErrorCode string?; createdBy UID; createdAt; updatedAt; completedAt Timestamp? |
 | Per-user lease | uid; jobId; owner string; leaseUntil Timestamp; updatedAt Timestamp |
+| `adminAuthReconciliation/current` | lastUid string hoặc null; updatedAt Timestamp. Checkpoint sweep có giới hạn theo document ID, đối chiếu Auth với desired state đã đồng bộ. |
 
 Đổi trạng thái app, desired Auth state, job và audit/operation trong Firestore transaction. Worker gọi Firebase Auth ngoài transaction, kiểm lại desired state/version trước khi hoàn tất. Khóa user có hiệu lực ngay qua UserDoc; mở user chỉ active sau khi Auth sync thành công. Job cũ không được mở lại một user vừa bị khóa bởi lệnh mới. Retry có backoff/attempt limit; failed được theo dõi trong admin system, không chạy lại vô hạn.
 
@@ -361,9 +368,15 @@ Không đưa lý do khóa user hoặc support nội bộ vào activity của nh�
 | --- | --- | --- |
 | rateLimits | scope enum; subjectHash string; windowStart Timestamp; count integer>=0; expiresAt Timestamp | Key hash scope/subject/window; tăng count trong transaction; không lưu IP/email raw |
 | maintenanceJobs | type cleanup_receipts/reconcile_balances/backup_check/repair_projection; targetTripId UUID?; status queued/running/succeeded/failed; availableAt; leaseOwner string?; leaseUntil Timestamp?; attempts; cursor map?; expectedLedgerVersion integer?; resultSummary map?; lastErrorCode string?; createdAt; updatedAt; completedAt Timestamp? | Cursor nhỏ, không dump ledger; repair không được tự bật theo lịch |
-| schemaMigrations | migrationId string; checksum SHA-256; status running/completed/failed; projectId string; releaseCommit string; cursor map?; processed integer; failed integer; leaseOwner string?; leaseUntil Timestamp?; startedAt; updatedAt; completedAt Timestamp? | Một runner giữ lease; checkpoint sau trang; rerun không áp delta tiền lần hai |
+| schemaMigrations | migrationId string; checksum SHA-256; status running/interrupted/completed/completed_with_exceptions/failed; projectId string; releaseCommit string; cursor string?; processed integer; failed integer; exceptionCount integer; leaseOwner string?; leaseUntil Timestamp?; startedAt; updatedAt; completedAt Timestamp? | Một runner giữ lease; checkpoint theo document; rerun không áp delta tiền lần hai |
 
 `rateLimits` là lựa chọn lưu counter server cho scope cần dùng chung nhiều instance; quota 5 ticket/ngày phải có record riêng theo UID/ngày. Anti-abuse auth ở ingress/Firebase vẫn cần cấu hình riêng, không xem counter Firestore là cơ chế duy nhất. TTL chỉ dự kiến cho record tạm đã hết hạn; file index hiện chưa bật TTL policy.
+
+### 6.8. `trips/{tripId}/itinerary/current`
+
+Tài liệu lưu version, updatedAt, tối đa 100 hoạt động và 100 đề xuất. Chuyến cũ có lịch trình rỗng ở version 1 cho đến lần ghi đầu tiên. Mỗi thay đổi đọc và kiểm quyền hiện tại trong transaction. Lên lịch đề xuất cập nhật cả hai mảng cùng lúc. Transaction ghi revision, signal, operation và audit của chuyến. Sổ tiền dùng ledgerVersion riêng. Mảng hoạt động và đề xuất được miễn index.
+
+Báo lỗi của người dùng dùng collection `supportTickets` ở mục 6.4, index theo createdBy và createdAt, và quota 5 lượt/ngày theo múi giờ Việt Nam. Operation của báo lỗi có resourceType `supportTicket` và tripId null. Ngữ cảnh chuyến nằm trên báo lỗi, còn quyền đọc kết quả thuộc người gửi.
 
 ## 7. Transaction và toàn vẹn dữ liệu
 
@@ -387,7 +400,7 @@ Tạo/sửa/void tác động tiền tăng `ledgerVersion` đúng một lần; m
 
 ## 8. Query, index và phân trang
 
-File thực thi: [be/firestore.indexes.json](../be/firestore.indexes.json); đã nối trong [be/firebase.json](../be/firebase.json). Bảng dưới mô tả 16 composite index theo đúng thứ tự file. Tất cả là COLLECTION scope, trừ ba index receipt dùng COLLECTION_GROUP để worker tìm xuyên chuyến.
+File thực thi: [be/firestore.indexes.json](../be/firestore.indexes.json); đã nối trong [be/firebase.json](../be/firebase.json). Bảng dưới mô tả 18 composite index theo đúng thứ tự file. Tất cả là COLLECTION scope, trừ ba index receipt dùng COLLECTION_GROUP để worker tìm xuyên chuyến.
 
 | Mã | Collection | Equality filter | Sort chính | Mục đích |
 | --- | --- | --- | --- | --- |
@@ -407,6 +420,8 @@ File thực thi: [be/firestore.indexes.json](../be/firestore.indexes.json); đã
 | IX14 | receipts (group) | status | expiresAt ASC | Intent hết hạn |
 | IX15 | receipts (group) | status | updatedAt ASC | Ready/failed cũ, ứng viên cleanup |
 | IX16 | receipts (group) | status | processingLeaseUntil ASC | Lease processing hết hạn |
+| IX17 | settlements | status | fromParticipantId ASC | Pending theo người gửi khi đổi liên kết |
+| IX18 | settlements | status | toParticipantId ASC | Pending theo người nhận khi đổi liên kết |
 
 Query mặc định hiện tại `orderBy(createdAt DESC)` và `orderBy(joinedAt DESC)` không có equality filter dùng single-field index mặc định. Exact lookup UID/tripId dùng document path; exact `emailLower == value` không sort dùng single-field index mặc định. Activity/note list chỉ sort createdAt cũng dùng single-field. Không disable các field này.
 
@@ -430,7 +445,7 @@ Xem trạng thái xây index trong Firebase Console và chạy query smoke sau k
 
 ## 9. Nâng schema dữ liệu cũ
 
-Chưa có lệnh `db:migrate` trong repo. Quy trình dưới đây là yêu cầu để triển khai runner; không chạy tự động khi API boot hoặc khi Vercel build. Không xóa dữ liệu hiện có để làm schema “đúng”.
+Đã có lệnh `pnpm --dir be db:migrate --project demo-sharebill` để dry-run trên Emulator và `--apply` để ghi vào Emulator; chưa chạy migration trên dữ liệu cloud. Runner không chạy tự động khi API boot hoặc khi Vercel build. Không xóa dữ liệu hiện có để làm schema “đúng”. Xem [hướng dẫn chạy local](../be/README.md#chuyển-dữ-liệu-legacy-trên-emulator).
 
 ### 9.1. Các migration cần viết
 
@@ -467,6 +482,8 @@ Checker cần kiểm shape/type, FK cùng chuyến, owner unique, liên kết ba
 
 Checker chỉ đọc và xuất diff tổng hợp. Scheduled reconcile không tự sửa tiền. Repair cần backup, maintenance, dry-run diff, expected ledgerVersion, actor/reason và audit; sau repair chạy checker lại. Tiền nguồn không bao giờ được sửa để làm “hết cảnh báo”.
 
+Bản [B19 local/Emulator](PROJECTION_REPAIR.md) đã triển khai `projection_repair` trong maintenanceJobs: snapshot/diff riêng, tạm khóa chuyến, kiểm version/updateTime và nguồn trong transaction, ghi projection + signal + job + admin audit, rồi chạy checker. Cloud apply vẫn bị chặn; bản sao scope này chưa thay cho backup/restore toàn dự án.
+
 ### 10.2. Retention đề xuất cho P0
 
 Đây là lựa chọn vận hành dự kiến, không phải TTL policy đã bật hay yêu cầu pháp lý.
@@ -486,6 +503,8 @@ Checker chỉ đọc và xuất diff tổng hợp. Scheduled reconcile không t�
 TTL không xóa subcollections và không bảo đảm xóa ngay khi hết hạn. Xóa document bằng SDK cũng không tự xóa cây con. Bất kỳ workflow xóa chuyến/user nào sau P0 phải liệt kê subcollections, Storage objects, Auth identity và operation tombstones trước khi triển khai. [TTL](https://firebase.google.com/docs/firestore/ttl), [xóa document và subcollections](https://firebase.google.com/docs/firestore/manage-data/delete-data).
 
 ### 10.3. Backup và phục hồi
+
+Đã có [diễn tập local và báo cáo](RESTORE_REHEARSAL.md) cho native export/import Auth/Firestore/Storage, collection con, Rules/indexes, đăng nhập, ảnh đúng generation, checker và repair. Bộ này luôn dùng project/cổng Emulator riêng; không áp số đo local thành nghiệm thu RPO/RTO cloud.
 
 - Mục tiêu thiết kế ban đầu: RPO <=24 giờ, RTO <=4 giờ cho sự cố dữ liệu quy mô P0; chỉ xác nhận đạt sau một buổi restore rehearsal có đo thời gian.
 - Thiết lập backup Firestore hằng ngày, đề xuất retention 30 ngày theo khả năng gói đang dùng. Backup/export không thay việc version index/Rules trong Git.
@@ -561,7 +580,7 @@ Root kỳ vọng: totalExpenseMinor=1200000, expenseCountAllTime=2, activeExpens
 | DATA-12 | Reconcile | Phát hiện cố ý làm hỏng projection; ledger đổi giữa scan thì retry, không false mismatch |
 | DATA-13 | Migration | Chạy hai lần không đổi tiền, không reset disabled/version, tiếp tục sau crash, invalid rows có report |
 | DATA-14 | Rules và API quyền | Firebase client không đọc/ghi private collections; outsider 404; user thường bị chặn namespace admin |
-| DATA-15 | Index staging | Từng IX01..IX16 và cursor nhiều trang chạy được trên Firestore thật, không missing-index |
+| DATA-15 | Index staging | Từng IX01..IX18 và cursor nhiều trang chạy được trên Firestore thật, không missing-index |
 | DATA-16 | Restore | Khôi phục ledger/projection/Auth/ảnh theo scope, chạy checker và đạt mục tiêu RPO/RTO đã đo |
 
 Kiểm thử emulator hiện có mới bao phủ một phần auth và ledger happy path/outsider/retry; chưa xem ma trận này là đã pass. Trạng thái thực thi được theo dõi trong [ROADMAP_TESTING.md](ROADMAP_TESTING.md).

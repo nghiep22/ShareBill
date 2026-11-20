@@ -3,7 +3,7 @@ import { Timestamp } from 'firebase-admin/firestore';
 import { z } from 'zod';
 import { ApiError } from '../http.js';
 
-type OperationCommand = {
+export type OperationCommand = {
   method: string;
   canonicalPath: string;
   body: Record<string, unknown>;
@@ -24,22 +24,31 @@ export const operationDocumentSchema = z.strictObject({
   canonicalPath: z.string().startsWith('/'),
   requestHash: z.string().regex(/^[0-9a-f]{64}$/),
   state: z.literal('committed'),
-  resourceType: z.enum(['trip', 'participant', 'expense', 'settlement']),
-  resourceId: z.uuid(),
+  resourceType: z.enum(['trip', 'participant', 'expense', 'settlement', 'invite', 'membership', 'receipt', 'itinerary', 'supportTicket', 'adminUser']),
+  resourceId: z.string().min(1).max(128).regex(/^[^/]+$/),
   httpStatus: z.int().min(200).max(299),
   responseSnapshot: responseSnapshotSchema,
   responseEtag: z.string().regex(/^"[1-9][0-9]*"$/).nullable(),
   committedAt: z.instanceof(Timestamp),
-});
+}).refine(value => value.resourceType === 'membership' || value.resourceType === 'adminUser' || z.uuid().safeParse(value.resourceId).success,
+  { path: ['resourceId'] });
 
 type OperationDocument = z.infer<typeof operationDocumentSchema>;
 export type OperationOutcome = Pick<OperationDocument, 'tripId' | 'httpStatus' | 'responseSnapshot' | 'responseEtag'>;
+
+/** A running receipt workflow reserves the UID-scoped key before it has a committed OperationDoc. */
+export async function readOperationSnapshot(tx: FirebaseFirestore.Transaction, ref: FirebaseFirestore.DocumentReference) {
+  const workflowRef = ref.parent.parent!.collection('receiptWorkflows').doc(ref.id);
+  const [operation, workflow] = await Promise.all([tx.get(ref), tx.get(workflowRef)]);
+  if (!operation.exists && workflow.exists) keyReused();
+  return operation;
+}
 
 function sha256(serialized: string): string {
   return createHash('sha256').update(serialized).digest('hex');
 }
 
-function canonicalHash({ method, canonicalPath, body, ifMatch }: OperationCommand): string {
+export function operationRequestHash({ method, canonicalPath, body, ifMatch }: OperationCommand): string {
   const serialized = JSON.stringify({ method, canonicalPath, body, ifMatch: ifMatch ?? null }, (_key, value: unknown) => {
     if (value === null || typeof value !== 'object' || Array.isArray(value)) return value;
     const fields = value as Record<string, unknown>;
@@ -61,7 +70,7 @@ export function createOperationDocument(command: OperationCommand, input: Operat
     ...input,
     method: command.method,
     canonicalPath: command.canonicalPath,
-    requestHash: canonicalHash(command),
+    requestHash: operationRequestHash(command),
     state: 'committed',
     responseEtag: typeof version === 'number' ? `"${version}"` : null,
   });
@@ -81,7 +90,7 @@ export function readOperationResult(
   if (!stored) return null;
   if ('canonicalPath' in stored) {
     if (stored.method !== command.method || stored.canonicalPath !== command.canonicalPath ||
-        stored.requestHash !== canonicalHash(command)) keyReused();
+        stored.requestHash !== operationRequestHash(command)) keyReused();
     const parsed = operationDocumentSchema.safeParse(stored);
     if (!parsed.success || parsed.data.actorUid !== actorUid || (tripId !== undefined && parsed.data.tripId !== tripId)) {
       resultUnavailable();

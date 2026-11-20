@@ -87,6 +87,13 @@ async function checkMemberships(
   participants: Documents, links: Documents, validateProfiles: boolean,
 ) {
   const owners = [...members.values()].filter(member => member.get('role') === 'owner' && member.get('status') === 'active');
+  if (trip.get('sharingMode') === 'group-equal' && trip.get('status') === 'active') {
+    const expected = [...members.values()].filter(member => member.get('status') === 'active').map(member => member.get('participantId')).sort();
+    const stored = trip.get('equalParticipantIds');
+    if (!Array.isArray(stored) || expected.some(id => !id) || JSON.stringify([...stored].sort()) !== JSON.stringify(expected)) {
+      issues.push({ code: 'GROUP_MEMBERSHIP_MISMATCH', path: trip.ref.path, fields: ['equalParticipantIds'] });
+    }
+  }
   if (owners.length !== 1 || owners[0]?.id !== trip.get('ownerUid') ||
       !entityId.safeParse(owners[0]?.get('participantId')).success) {
     issues.push({ code: 'OWNER_INVARIANT_FAILED', path: trip.ref.path, fields: ['ownerUid'] });
@@ -217,7 +224,13 @@ function checkLedger(
     issues.push({ code: 'RECONCILIATION_SKIPPED', path: trip.ref.path });
     return;
   }
-  const result = reconcileLedger(participants.keys(), expenseRows, settlementRows);
+  const equalIds = trip.get('sharingMode') === 'group-equal' ? trip.get('equalParticipantIds') : undefined;
+  if (trip.get('sharingMode') === 'group-equal' && (!Array.isArray(equalIds) || !equalIds.length || equalIds.length > 50 ||
+      new Set(equalIds).size !== equalIds.length || equalIds.some(id => !participants.has(id)))) {
+    issues.push({ code: 'GROUP_SHARING_INVARIANT_FAILED', path: trip.ref.path, fields: ['equalParticipantIds'] });
+    return;
+  }
+  const result = reconcileLedger(participants.keys(), expenseRows, settlementRows, equalIds);
   for (const [field, value] of Object.entries(result.counts)) compareNumber(trip, field, value, issues);
   compareNumber(trip, 'totalExpenseMinor', result.totalExpenseMinor, issues);
   for (const category of EXPENSE_CATEGORIES) {

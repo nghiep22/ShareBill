@@ -9,6 +9,9 @@
     "db:seed": "npm --prefix be run db:seed",
     "dev:be": "pnpm --dir be dev",
     "test:be": "pnpm --dir be test",
-    "check:be": "pnpm --dir be check"
+    "check:be": "pnpm --dir be check",
+    "smoke": "node scripts/smoke.mjs",
+    "test:smoke": "node --test scripts/smoke.test.mjs scripts/firestore-index-smoke.test.mjs",
+    "smoke:indexes": "node scripts/firestore-index-smoke.mjs"
   }
 }
