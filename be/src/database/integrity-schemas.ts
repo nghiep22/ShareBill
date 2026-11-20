@@ -19,6 +19,8 @@ export const tripSchema = z.strictObject({
     try { new Intl.DateTimeFormat('en', { timeZone: value }); return true; } catch { return false; }
   }),
   currency: z.literal('VND'), currencyExponent: z.literal(0), ownerUid: uid, createdBy: uid,
+  sharingMode: z.enum(['group-equal', 'per-expense']).optional(),
+  equalParticipantIds: z.array(entityId).min(1).max(50).refine(ids => new Set(ids).size === ids.length).optional(),
   status: z.enum(['active', 'archived']), moderationStatus: z.enum(['normal', 'suspended']),
   moderationVersion: version, moderationReason: z.string().max(500).nullable(), moderatedAt: timestamp.nullable(), moderatedBy: uid.nullable(),
   inviteEpoch: version, version, revision: version, ledgerVersion: count,

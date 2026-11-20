@@ -214,7 +214,8 @@ export async function registerAdminRoutes(app: FastifyInstance) {
         const version = increment(expected), revision = increment(trip.get('revision'));
         tx.update(trip.ref, { moderationStatus: status, moderationVersion: version, moderationReason: body.reason,
           moderatedAt: now, moderatedBy: uid, revision, updatedAt: now });
-        tx.update(trip.ref.collection('signals').doc('current'), { revision, updatedAt: now });
+        tx.set(trip.ref.collection('signals').doc('current'), { schemaVersion: 1, revision,
+          ledgerVersion: trip.get('ledgerVersion'), updatedAt: now }, { merge: true });
         return { targetType: 'trip', action: 'trip.' + action, reason: body.reason, before: { moderationStatus: before.moderationStatus, version: expected },
           after: { id, moderationStatus: status, version } };
       });
@@ -302,7 +303,10 @@ export async function registerAdminRoutes(app: FastifyInstance) {
 }
 
 function jobSummary(doc: DocumentSnapshot) {
+  const repair = doc.get('kind') === 'projection_repair';
+  const repairResult = repair ? z.strictObject({ changedDocuments: z.number().int().min(1).max(102) }).safeParse(doc.get('resultSummary')) : undefined;
   return { id: doc.id, uid: doc.get('uid') ?? null, status: doc.get('status'), attempts: doc.get('attempts') ?? 0,
     moderationVersion: doc.get('moderationVersion') ?? null, lastErrorCode: doc.get('lastErrorCode') ?? null, updatedAt: dateOf(doc.get('updatedAt')),
+    ...(repair && { kind: 'projection_repair', repairSummary: repairResult?.success ? repairResult.data : null }),
     ...(doc.get('kind') === 'ledger_reconcile' && { kind: 'ledger_reconcile', resultSummary: reconciliationSummary(doc.get('resultSummary')) }) };
 }

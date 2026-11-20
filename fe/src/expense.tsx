@@ -3,7 +3,7 @@
 import { Camera, Check, ImagePlus, Pencil, ReceiptText, Trash2, X } from 'lucide-react';
 import { useEffect, useRef, useState, type ChangeEvent, type FormEvent } from 'react';
 import {
-  canEditExpense, canWrite, categories, dateLabel, money, nameOf, newId, ownerOf, record, splitEqually, today, viewerOf,
+  canEditExpense, canWrite, categories, dateLabel, money, nameOf, newId, ownerOf, record, sharingMembers, splitEqually, today, viewerOf,
   type Category, type Demo, type Expense, type Receipt,
 } from './model';
 import { Amount, Avatar, CategoryIcon, CategorySelect, Dialog, PageTitle } from './ui';
@@ -48,11 +48,13 @@ export function ExpenseForm({ data, expense: latest, update, receiptActions, dis
   const writable = canWrite(data);
   const back = expense ? tripHref(data, 'khoan-chi', expense.id) : tripHref(data, 'chi-tieu');
   const me = viewerOf(data);
-  const active = data.members.filter(member => !member.inactive);
-  const eligible = data.members.filter(member => !member.inactive || expense?.payer === member.id || member.id in (expense?.shares ?? {}));
+  const groupEqual = data.remote?.sharingMode === 'group-equal';
+  const active = sharingMembers(data);
+  const eligible = data.members.filter(member => groupEqual ? active.some(person => person.id === member.id) || expense?.payer === member.id : !member.inactive || expense?.payer === member.id || member.id in (expense?.shares ?? {}));
   const [amount, setAmount] = useState(expense ? String(expense.amount) : '');
   const [payer, setPayer] = useState(expense?.payer ?? (active.some(member => member.id === me) ? me : ''));
-  const [mode, setMode] = useState(expense?.mode ?? 'equal');
+  const [selectedMode, setMode] = useState(expense?.mode ?? 'equal');
+  const mode = groupEqual ? 'equal' : selectedMode;
   const [selected, setSelected] = useState<string[]>(expense ? Object.keys(expense.shares) : active.map(member => member.id));
   const [exact, setExact] = useState<Record<string, string>>(
     Object.fromEntries(Object.entries(expense?.shares ?? {}).map(([id, share]) => [id, String(share)])),
@@ -71,10 +73,10 @@ export function ExpenseForm({ data, expense: latest, update, receiptActions, dis
   const [savedDraft, setSavedDraft] = useState<{ value: ExpenseDraft; at: number }>();
   const [draftError, setDraftError] = useState(false);
   const firstForm = useRef<ExpenseDraft>({ fields, amount, payer, mode, selected, exact });
-  const ids = eligible.filter(member => selected.includes(member.id)).map(member => member.id);
+  const ids = (groupEqual ? active : eligible.filter(member => selected.includes(member.id))).map(member => member.id);
   if (data.remote) ids.sort();
   const total = Number(amount);
-  const originalSplit = expense && total === expense.amount && mode === expense.mode &&
+  const originalSplit = !groupEqual && expense && total === expense.amount && mode === expense.mode &&
     ids.length === Object.keys(expense.shares).length && ids.every(id => id in expense.shares);
   const shares = mode === 'exact' ? Object.fromEntries(ids.map(id => [id, Number(exact[id] ?? 0)])) :
     originalSplit ? expense.shares : splitEqually(total, ids);
@@ -113,7 +115,8 @@ export function ExpenseForm({ data, expense: latest, update, receiptActions, dis
       category: keepChanges && fields.category !== start.category ? fields.category : server.category,
       note: keepChanges && fields.note !== start.note ? fields.note : server.note,
     });
-    const changedShares = !originalSplit || payer !== expense.payer || Object.entries(shares).some(([id, share]) => expense.shares[id] !== share);
+    const changedShares = groupEqual ? total !== expense.amount || payer !== expense.payer :
+      !originalSplit || payer !== expense.payer || Object.entries(shares).some(([id, share]) => expense.shares[id] !== share);
     if (!keepChanges || !changedShares) {
       setAmount(String(latest.amount));
       setPayer(latest.payer);
@@ -206,14 +209,19 @@ export function ExpenseForm({ data, expense: latest, update, receiptActions, dis
       setError('Kiểm tra tên, người trả, số tiền và phần chia. Tổng phần chia cần khớp số tiền đã trả.');
       return;
     }
-    const sameSplit = originalSplit && payer === expense.payer && ids.every(id => shares[id] === expense.shares[id]);
-    if (!sameSplit && ![payer, ...selected].every(id => active.some(member => member.id === id))) {
+    const sameSplit = expense && (groupEqual ? total === expense.amount && payer === expense.payer :
+      originalSplit && payer === expense.payer && ids.every(id => shares[id] === expense.shares[id]));
+    const validPeople = groupEqual ? payer === expense?.payer || active.some(member => member.id === payer) :
+      sameSplit || [payer, ...selected].every(id => active.some(member => member.id === id));
+    if (!validPeople) {
       setError('Chọn người trả và người chia đang hoạt động để thay đổi số tiền hoặc cách chia.');
       return;
     }
 
     const item: Expense = {
-      id: expense?.id ?? newId(), title, payer, amount: total, mode, shares, receipts,
+      id: expense?.id ?? newId(), title, payer, amount: total,
+      mode: groupEqual && sameSplit ? expense.mode : mode,
+      shares: groupEqual && sameSplit ? expense.shares : shares, receipts,
       date: fields.date, category: fields.category, note: fields.note.trim(),
       createdBy: expense ? (expense.createdBy ?? ownerOf(data)) : me, editedBy: expense ? me : undefined,
     };
@@ -285,7 +293,11 @@ export function ExpenseForm({ data, expense: latest, update, receiptActions, dis
           </label>)}
         </div>
       </fieldset>
-      <fieldset className="card field-card">
+      {groupEqual ? <section className="card field-card" aria-label="Chia đều tự động">
+        <h2>Chia đều cho cả nhóm</h2>
+        <p>Khoản này được cộng vào tổng chi, rồi chia đều cho {active.length} tài khoản đang trong nhóm. Ai vào nhóm cũng tự được tính, kể cả các khoản chi trước đó.</p>
+        <a className="text-button" href={tripHref(data, 'so-du')}>Xem số tiền của từng người</a>
+      </section> : <fieldset className="card field-card">
         <legend>Chia cho ai?</legend>
         {expense && active.some(member => !(member.id in expense.shares)) && <p className="inline-note">Khoản chi này giữ danh sách người được chia đã lưu trước đó. Để chia thêm người, tích tên bên dưới hoặc bấm Chọn tất cả, kiểm tra phần phải chịu rồi lưu.</p>}
         <div className="split-heading"><span>{ids.length} người được chia</span>
@@ -319,7 +331,7 @@ export function ExpenseForm({ data, expense: latest, update, receiptActions, dis
         {mode === 'exact' && <p className={'inline-note ' + (difference ? 'error' : 'positive')} aria-live="polite">
           Đã chia {money(assigned)} / {money(total)}. {difference > 0 ? 'Còn thiếu ' + money(difference) : difference < 0 ? 'Vượt ' + money(-difference) : 'Tổng phần chia đã khớp.'}
         </p>}
-      </fieldset>
+      </fieldset>}
       <details className="card optional-fields" open={!data.remote || Boolean(expense?.receipts?.length)}>
         <summary>Thêm thông tin</summary>
         <div className="field-card">
@@ -400,6 +412,11 @@ export function ExpenseDetail({ data, expense, update, receiptActions }: { data:
       <p>{expense.createdBy && 'Được tạo bởi ' + nameOf(data, expense.createdBy)}{expense.editedBy && ' · Sửa lần cuối bởi ' + nameOf(data, expense.editedBy)}</p>
     </section>
     <section>
+      {data.remote?.sharingMode === 'group-equal' ? <>
+        <div className="section-heading"><h2>Chi chung của nhóm</h2><span className="tag">Tự chia đều</span></div>
+        <p className="inline-note money-explainer">{expense.voided ? 'Khoản này đã hủy và không còn tính vào tổng chi.' : nameOf(data, expense.payer) + ' đã ứng khoản này. ' + (data.trip.closed ? 'Tổng chi đã được chia đều cho ' + sharingMembers(data).length + ' tài khoản tại lúc chốt chuyến.' : 'Tổng chi của cả chuyến được tự động chia đều cho ' + sharingMembers(data).length + ' tài khoản đang trong nhóm, kể cả người vừa tham gia.')}</p>
+        <a className="text-button" href={tripHref(data, 'so-du')}>Xem số tiền còn cần trả / được nhận</a>
+      </> : <>
       <div className="section-heading"><h2>Mỗi người phải chịu</h2><span className="tag">{expense.mode === 'equal' ? 'Chia đều' : 'Theo số tiền'}</span></div>
       <p className="inline-note money-explainer">{expense.voided ? 'Khoản chi đã hủy. Các phần chia dưới đây chỉ để xem lại, không còn tính vào số dư.' : nameOf(data, expense.payer) + ' đã ứng toàn bộ. Đây là phần chi của từng người, chưa phải khoản chuyển tiền đã xác nhận.'}</p>
       <div className="card rows">{data.members.filter(member => member.id in expense.shares).map(member =>
@@ -407,6 +424,7 @@ export function ExpenseDetail({ data, expense, update, receiptActions }: { data:
           <strong className="row-end"><Amount value={expense.shares[member.id]} /></strong></div>
       )}</div>
       <a className="text-button" href={tripHref(data, 'so-du')}>Xem số tiền còn cần trả / được nhận</a>
+      </>}
     </section>
     {Boolean(expense.receipts?.length) && <section className="card field-card">
       <h2>Ảnh hóa đơn</h2>

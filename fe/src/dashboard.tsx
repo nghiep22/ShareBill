@@ -7,7 +7,7 @@ import {
 import { useState, type FormEvent } from 'react';
 import {
   activeExpenses, balances, canWrite, categories, dateLabel, dateRange, isOwner, memberFor, money, nameOf, netLabel,
-  newId, record, settlementStatus, suggestions, today, viewerOf, type Demo, type Expense, type Settlement, type Transfer,
+  newId, record, settlementStatus, sharingMembers, suggestions, today, viewerOf, type Demo, type Expense, type Settlement, type Transfer,
 } from './model';
 import { Amount, Avatar, CategoryIcon, Dialog, Empty, PageTitle } from './ui';
 import type { UpdateTrip } from './trip-command';
@@ -26,7 +26,7 @@ function ExpenseRow({ expense, data }: { expense: Expense; data: Demo }) {
       <span>{expense.voided ? 'Đã hủy' : nameOf(data, expense.payer) + ' đã trả'} <span aria-hidden>·</span> {categories[expense.category]}</span>
     </div>
     <div className="row-end expense-money"><strong><Amount value={expense.amount} /></strong>
-      {!expense.voided && me && <small>Phần của bạn: <Amount value={share} /></small>}
+      {!expense.voided && me && <small>{data.remote?.sharingMode === 'group-equal' ? 'Chi chung của nhóm' : <>Phần của bạn: <Amount value={share} /></>}</small>}
     </div>
     <ChevronRight className="row-chevron" size={16} aria-hidden />
   </a>;
@@ -42,7 +42,7 @@ function TransferRow({ data, transfer }: { data: Demo; transfer: Transfer }) {
 
 export function Overview({ data, loadingExpenses, loadingTransfers }: { data: Demo; loadingExpenses?: boolean; loadingTransfers?: boolean }) {
   const { trip } = data;
-  const members = data.members.filter(member => !member.inactive);
+  const members = sharingMembers(data);
   const expenses = activeExpenses(data).sort(sortExpenses);
   const me = viewerOf(data);
   const finance = financialSnapshot(data);
@@ -189,8 +189,12 @@ export function Balances({ data, update, loading, disabled }: { data: Demo; upda
   const hasPersonal = complete && Object.hasOwn(totals, me);
   const pending = data.remote?.pendingCount ?? data.settlements.filter(item => settlementStatus(item) === 'pending').length;
   const allSettled = finance.balanced;
-  const singleParticipant = complete && data.members.length === 1 && data.remote!.total > 0;
-  const withoutCosts = new Set(complete && data.remote!.total > 0 ? data.members.filter(member => {
+  const groupEqual = data.remote?.sharingMode === 'group-equal';
+  const group = sharingMembers(data);
+  const visibleMembers = data.members.filter(member => !groupEqual || group.some(person => person.id === member.id) ||
+    finance.lines[member.id] && [finance.lines[member.id].paidMinor, finance.lines[member.id].sentMinor, finance.lines[member.id].receivedMinor].some(value => value > 0));
+  const singleParticipant = complete && (groupEqual ? group.length : data.members.length) === 1 && data.remote!.total > 0;
+  const withoutCosts = new Set(!groupEqual && complete && data.remote!.total > 0 ? data.members.filter(member => {
     const row = finance.lines[member.id];
     return !member.inactive && [row.owedMinor, row.paidMinor, row.sentMinor, row.receivedMinor].every(value => value === 0);
   }).map(member => member.id) : []);
@@ -239,6 +243,11 @@ export function Balances({ data, update, loading, disabled }: { data: Demo; upda
       </>}
       {pending > 0 && <a className="text-button" href={tripHref(data, 'quyet-toan')}>{pending} khoản đang chờ xác nhận <ChevronRight size={15} aria-hidden /></a>}
     </div>
+    {groupEqual && complete && <section className="card field-card" aria-label="Cách chia đều của nhóm">
+      <h2>Tổng chi chia đều cho {group.length} thành viên</h2>
+      <p><Amount value={data.remote!.total} /> ÷ {group.length} người. Mỗi người chịu <strong><Amount value={Number(BigInt(data.remote!.total) / BigInt(group.length))} />{data.remote!.total % group.length > 0 && <> – <Amount value={Number(BigInt(data.remote!.total) / BigInt(group.length)) + 1} /></>}</strong>.</p>
+      <p>Số cần trả / được nhận đã trừ tiền mỗi người ứng và các khoản chuyển được xác nhận. {data.trip.closed ? 'Phần chia được giữ theo lúc chốt; mở lại chuyến sẽ chia lại cho các tài khoản còn trong nhóm.' : 'Người mới vào nhóm được tính cả tổng chi trước đó.'}</p>
+    </section>}
     <section aria-label="Số tiền cần chuyển">
       <div className="section-heading"><h2>Số tiền cần chuyển</h2>
         {complete && canWrite(data) && debtors.length > 0 && creditors.length > 0 &&
@@ -249,14 +258,14 @@ export function Balances({ data, update, loading, disabled }: { data: Demo; upda
         <h3>{allSettled && !withoutCosts.size ? <CircleCheck size={23} aria-hidden /> : <Wallet size={23} aria-hidden />}{emptyTransferTitle}</h3>
         {allSettled && !singleParticipant && withoutCosts.size > 0 && <p><b>Chưa có chi phí phải chịu:</b> {withoutCostNames}. Thêm người hoặc liên kết tài khoản không tự thay đổi phần chia của khoản chi cũ.</p>}
         {singleParticipant ? <>
-          <p>Hiện chuyến chỉ có 1 người chia tiền là <b>{nameOf(data, data.members[0].id)}</b>. Toàn bộ <Amount value={data.remote!.total} /> được tính cho người này nên số cần chuyển là <Amount value={0} />.</p>
-          <p>Để chia tiền cho nhóm, {isOwner(data) ? 'thêm những người cùng chia' : 'nhờ chủ chuyến thêm những người cùng chia'}, rồi mở từng khoản chi cũ → Sửa → Chia cho ai? → chọn đủ người → Lưu khoản chi.</p>
+          <p>Hiện chuyến chỉ có 1 người chia tiền là <b>{nameOf(data, (groupEqual ? group : data.members)[0].id)}</b>. Toàn bộ <Amount value={data.remote!.total} /> được tính cho người này nên số cần chuyển là <Amount value={0} />.</p>
+          <p>{groupEqual ? 'Mời bạn vào nhóm để tổng chi tự chia đều ngay khi họ tham gia.' : <>Để chia tiền cho nhóm, {isOwner(data) ? 'thêm những người cùng chia' : 'nhờ chủ chuyến thêm những người cùng chia'}, rồi mở từng khoản chi cũ → Sửa → Chia cho ai? → chọn đủ người → Lưu khoản chi.</>}</p>
         </> : allSettled && data.remote!.total > 0 ?
-          <p>Hiện số cần chuyển bằng 0 theo phần chia đã lưu. Nếu bạn vừa thêm người chia tiền, khoản chi cũ vẫn giữ phần chia đã lưu. Mở từng khoản chi → Sửa → Chia cho ai? để chọn thêm người khi cần.</p> :
+          <p>{groupEqual ? 'Tổng chi đã được chia đều và mọi người không còn số tiền cần chuyển.' : 'Hiện số cần chuyển bằng 0 theo phần chia đã lưu. Nếu bạn vừa thêm người chia tiền, khoản chi cũ vẫn giữ phần chia đã lưu. Mở từng khoản chi → Sửa → Chia cho ai? để chọn thêm người khi cần.'}</p> :
           <p>{!complete ? 'Tải lại dữ liệu để kiểm tra số tiền cần chuyển.' : pending ? 'Kiểm tra các khoản đang chờ trong Lịch sử chuyển tiền.' : allSettled ? 'Chuyến chưa có khoản chi. Thêm khoản chi và chọn những người cùng chia để tính số tiền cần chuyển.' : 'Tải lại gợi ý hoặc kiểm tra số dư của từng thành viên bên dưới.'}</p>}
         {complete && !data.trip.closed && <div className="money-actions">
-          {singleParticipant && isOwner(data) && canWrite(data) && <a className="primary-button compact" href={tripHref(data, 'thanh-vien', 'them-nguoi')}>Thêm người chia tiền</a>}
-          {data.remote!.total > 0 && <a className="secondary-button compact" href={tripHref(data, 'chi-tieu')}>Xem và sửa khoản chi</a>}
+          {singleParticipant && isOwner(data) && canWrite(data) && <a className="primary-button compact" href={tripHref(data, groupEqual ? 'loi-moi' : 'thanh-vien', groupEqual ? undefined : 'them-nguoi')}>{groupEqual ? 'Mời bạn vào nhóm' : 'Thêm người chia tiền'}</a>}
+          {data.remote!.total > 0 && <a className="secondary-button compact" href={tripHref(data, 'chi-tieu')}>{groupEqual ? 'Xem khoản chi' : 'Xem và sửa khoản chi'}</a>}
           {data.remote!.total === 0 && canWrite(data) && <a className="primary-button compact" href={tripHref(data, 'them-khoan-chi')}>Thêm khoản chi</a>}
           {allSettled && !singleParticipant && isOwner(data) && <a className="secondary-button compact" href={tripHref(data, 'cai-dat')}>Chốt chuyến đi</a>}
         </div>}
@@ -269,9 +278,9 @@ export function Balances({ data, update, loading, disabled }: { data: Demo; upda
       </div>)}</div>
     </section>
     <section>
-      <div className="section-heading"><h2>Số tiền của từng thành viên</h2><span className="tag">{data.members.length} người</span></div>
-      <p className="inline-note money-explainer">Phải chịu là tổng phần được chia từ các khoản chi. Cần trả / được nhận đã trừ tiền ứng và các khoản chuyển được xác nhận.</p>
-      <div className="card rows">{data.members.map(member => {
+      <div className="section-heading"><h2>Số tiền của từng thành viên</h2><span className="tag">{visibleMembers.length} người</span></div>
+      <p className="inline-note money-explainer">{groupEqual ? data.trip.closed ? 'Phải chịu là phần tổng chi đã chia đều lúc chốt chuyến.' : 'Phải chịu = tổng chi của nhóm chia đều cho số tài khoản đang trong nhóm.' : 'Phải chịu là tổng phần được chia từ các khoản chi.'} Cần trả / được nhận đã trừ tiền ứng và các khoản chuyển được xác nhận.</p>
+      <div className="card rows">{visibleMembers.map(member => {
         const total = totals[member.id];
         const row = finance.lines[member.id];
         if (total === undefined) return <div className="list-row" key={member.id}><Avatar member={member} />

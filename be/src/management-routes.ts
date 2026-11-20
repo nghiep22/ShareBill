@@ -1,4 +1,5 @@
 import type { FastifyInstance } from 'fastify';
+import { isGroupEqual } from './services/group-sharing.js';
 import { randomUUID } from 'node:crypto';
 import { Timestamp } from 'firebase-admin/firestore';
 import { z } from 'zod';
@@ -110,6 +111,9 @@ export async function registerManagementRoutes(app: FastifyInstance) {
       if (replay) return { outcome: replay, replayed: true };
       owner(member); writable(trip);
       if (!participant.exists) throw new ApiError(404, 'NOT_FOUND', 'Không tìm thấy người tham gia.');
+      if (isGroupEqual(trip) && input.status === 'inactive' && (trip.get('equalParticipantIds') as string[]).includes(id)) {
+        throw new ApiError(422, 'GROUP_SHARING_AUTOMATIC', 'Dùng quản lý tài khoản để gỡ thành viên khỏi nhóm.');
+      }
       if (participant.get('version') !== expectedVersion) throw new ApiError(409, 'VERSION_CONFLICT', 'Người tham gia đã thay đổi.');
       const now = Timestamp.now(), revision = nextRevision(trip), ledgerVersion = trip.get('ledgerVersion');
       const patch = { ...input, version: expectedVersion + 1, updatedAt: now };
@@ -151,6 +155,7 @@ export async function registerManagementRoutes(app: FastifyInstance) {
       const replay = readOperationResult(op.data(), command, actorUid, tripId);
       if (replay) return { outcome: replay, replayed: true };
       owner(actor); writable(trip);
+      if (isGroupEqual(trip)) throw new ApiError(422, 'GROUP_SHARING_AUTOMATIC', 'Tài khoản vào nhóm được tự động liên kết để chia đều.');
       if (!targetMember.exists) throw new ApiError(404, 'NOT_FOUND', 'Không tìm thấy thành viên.');
       if (targetMember.get('version') !== expectedVersion) throw new ApiError(409, 'VERSION_CONFLICT', 'Liên kết đã thay đổi.');
       if (targetUid === trip.get('ownerUid')) throw new ApiError(422, 'OWNER_LINK_REQUIRED', 'Không thể đổi liên kết chủ chuyến.');

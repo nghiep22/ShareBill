@@ -15,6 +15,7 @@ import { applyBalanceDelta, applyExpenseTotals, expenseChangeDelta } from './dom
 import { applySettlement } from './domain/settlement.js';
 import { expenseEditAudit, planExpenseEdit } from './services/expense-edit.js';
 import { increment, readTripActor, requireOwner, requireWritable } from './services/trip-access.js';
+import { isGroupEqual, projectGroup, readGroupLedger, readGroupMemberships, writeGroupBalances } from './services/group-sharing.js';
 
 const tripParams = z.strictObject({ tripId: z.uuid() });
 const entityParams = z.strictObject({ tripId: z.uuid(), id: z.uuid() });
@@ -72,7 +73,14 @@ export async function registerLedgerRoutes(app: FastifyInstance) {
       if (expense.get('status') !== 'active') throw new ApiError(409, 'INVALID_STATE_TRANSITION', 'Khoản chi đã hủy.');
       const parsed = expenseDocumentSchema.safeParse(expense.data());
       if (!parsed.success || parsed.data.id !== id) throw new ApiError(409, 'EXPENSE_INVARIANT_FAILED', 'Khoản chi cần được kiểm tra dữ liệu trước khi sửa.');
-      const previous = parsed.data, plan = planExpenseEdit(previous, input);
+      const previous = parsed.data;
+      const group = isGroupEqual(trip) ? await readGroupLedger(tx, trip) : undefined;
+      if (group && input.splitMethod === 'exact') throw new ApiError(422, 'GROUP_EQUAL_SHARING_REQUIRED', 'Nhóm tự chia đều tổng chi cho các thành viên.');
+      if (group && input.payerParticipantId && !group.ids.includes(input.payerParticipantId) && input.payerParticipantId !== previous.payerParticipantId) {
+        throw new ApiError(422, 'INVALID_PARTICIPANTS', 'Người ứng tiền phải đang ở trong nhóm.');
+      }
+      const effectiveInput = group && input.amountMinor !== undefined ? { ...input, splitMethod: 'equal' as const, split: { participantIds: group.ids } } : input;
+      const plan = planExpenseEdit(previous, effectiveInput);
       const now = Timestamp.now(), revision = increment(trip.get('revision'));
       const ledgerVersion = count(trip, 'ledgerVersion') + (plan.financialChanged ? 1 : 0);
       const changes = { ...plan.patch, version: increment(expectedVersion), updatedAt: now, updatedBy: uid };
@@ -81,24 +89,29 @@ export async function registerLedgerRoutes(app: FastifyInstance) {
       const newIds = [...new Set([next.data.payerParticipantId, ...next.data.shares.map(share => share.participantId)])];
       const participants = plan.hasFinancialBlock ? await Promise.all(newIds.map(personId =>
         tx.get(tripRef.collection('participants').doc(personId)))) : [];
-      if (participants.some(doc => !doc.exists || doc.get('status') !== 'active')) {
+      if (participants.some(doc => !doc.exists || doc.get('status') !== 'active' &&
+          !(group && doc.id === previous.payerParticipantId && doc.id === next.data.payerParticipantId))) {
         throw new ApiError(422, 'INVALID_PARTICIPANTS', 'Có người không thuộc chuyến hoặc đã ngừng chia.');
       }
       const deltas: ReturnType<typeof expenseChangeDelta> = plan.financialChanged ? expenseChangeDelta(previous, next.data) : new Map();
-      const balances = await Promise.all([...deltas.keys()].map(personId => tx.get(tripRef.collection('balances').doc(personId))));
+      const balances = group ? [] : await Promise.all([...deltas.keys()].map(personId => tx.get(tripRef.collection('balances').doc(personId))));
       let nextBalances, totals;
       try {
-        nextBalances = balances.map(doc => ({ ...applyBalanceDelta(balance(doc), deltas.get(doc.id)!), updatedAt: now }));
         if (previous.amountMinor !== next.data.amountMinor || previous.category !== next.data.category) {
           const reversed = applyExpenseTotals(trip.get('totalExpenseMinor'), trip.get('categoryTotalsMinor'), previous.category, previous.amountMinor, -1);
           totals = applyExpenseTotals(reversed.totalExpenseMinor, reversed.categoryTotalsMinor, next.data.category, next.data.amountMinor, 1);
         }
+        const paid = new Map([[previous.payerParticipantId, -previous.amountMinor]]);
+        paid.set(next.data.payerParticipantId, (paid.get(next.data.payerParticipantId) ?? 0) + next.data.amountMinor);
+        nextBalances = group && plan.financialChanged ? projectGroup(group, totals?.totalExpenseMinor ?? trip.get('totalExpenseMinor'), group.ids, paid) :
+          balances.map(doc => ({ ...applyBalanceDelta(balance(doc), deltas.get(doc.id)!), updatedAt: now }));
       } catch { return invariant(); }
       const receiptPlans = input.receiptIds ? await planReceiptAttachments(tx, tripRef, id, uid, input.receiptIds, previous.receiptIds, now) : [];
       tx.update(expenseRef, changes);
       applyReceiptAttachments(tx, tripRef, receiptPlans, { uid, displayName: user.get('displayName'), key,
         auditIds: receiptAuditIds, revision, ledgerVersion, now });
-      for (const value of nextBalances) tx.set(tripRef.collection('balances').doc(value.participantId), value);
+      if (group) writeGroupBalances(tx, trip, nextBalances, now);
+      else for (const value of nextBalances) tx.set(tripRef.collection('balances').doc(value.participantId), value);
       for (const person of participants) if (person.get('hasLedgerReferences') !== true) {
         tx.update(person.ref, { hasLedgerReferences: true, updatedAt: now });
       }
@@ -216,13 +229,21 @@ export async function registerLedgerRoutes(app: FastifyInstance) {
             throw new ApiError(409, 'TRIP_NOT_BALANCED', 'Còn số dư chưa quyết toán. Hãy đưa số dư từng người về 0 trước khi chốt.');
           }
         }
-        const now = Timestamp.now(), revision = increment(trip.get('revision')), ledgerVersion = count(trip, 'ledgerVersion');
+        const group = action === 'reopen' && isGroupEqual(trip) ? await readGroupLedger(tx, trip) : undefined;
+        const members = group ? await readGroupMemberships(tx, trip) : undefined;
+        const ids = members?.filter(member => member.status === 'active').map(member => member.participantId);
+        if (group && ids?.some(id => !id)) return invariant();
+        const groupIds = ids as string[] | undefined;
+        const rows = group && groupIds ? projectGroup(group, trip.get('totalExpenseMinor'), groupIds) : undefined;
+        const changed = groupIds && JSON.stringify([...groupIds].sort()) !== JSON.stringify([...group!.ids].sort());
+        const now = Timestamp.now(), revision = increment(trip.get('revision')), ledgerVersion = count(trip, 'ledgerVersion') + (changed ? 1 : 0);
         const patch = { status: action === 'archive' ? 'archived' : 'active', archivedAt: action === 'archive' ? now : null,
           inviteEpoch: action === 'archive' ? increment(trip.get('inviteEpoch')) : trip.get('inviteEpoch'),
-          version: increment(expectedVersion), revision, updatedAt: now };
+          version: increment(expectedVersion), revision, ledgerVersion, ...(groupIds && { equalParticipantIds: groupIds.sort() }), updatedAt: now };
         if (!tripSchema.safeParse({ ...trip.data(), ...patch }).success) return invariant();
         const before = tripState(trip), after = { id: tripId, status: patch.status, archivedAt: patch.archivedAt?.toDate().toISOString() ?? null,
           inviteEpoch: patch.inviteEpoch, version: patch.version };
+        if (rows) writeGroupBalances(tx, trip, rows, now);
         tx.update(tripRef, patch);
         tx.update(tripRef.collection('signals').doc('current'), { revision, ledgerVersion, updatedAt: now });
         tx.create(tripRef.collection('auditEvents').doc(auditId), createAuditEvent({

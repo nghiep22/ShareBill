@@ -41,7 +41,7 @@ describe.skipIf(!enabled)('S10 private receipt lifecycle', () => {
   }
   function get(path: string, actor: Identity) { return app.inject({ method: 'GET', url: path, headers: { authorization: `Bearer ${actor.accessToken}` } }); }
   async function fixture() {
-    const owner = await register('An'), response = await send('POST', '/api/v1/trips', { name: 'Đà Lạt', ownerName: 'An' }, owner);
+    const owner = await register('An'), response = await send('POST', '/api/v1/trips', { name: 'Đà Lạt', sharingMode: 'per-expense', ownerName: 'An' }, owner);
     expect(response.statusCode).toBe(200);
     const { id, ownerParticipantId } = response.json().data;
     return { owner, id: id as string, participantId: ownerParticipantId as string, path: `/api/v1/trips/${id}`, trip: db().doc(`trips/${id}`) };

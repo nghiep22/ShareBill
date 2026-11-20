@@ -6,8 +6,9 @@ import { after, before, test } from 'node:test';
 import { chromium, request } from 'playwright';
 import { runSmoke, smokeConfig } from '../../scripts/smoke.mjs';
 
-const web = 'http://localhost:3000';
-const api = 'http://localhost:3001/api/v1/';
+const web = process.env.SHAREBILL_TEST_WEB_URL ?? 'http://localhost:3000';
+const apiOrigin = process.env.SHAREBILL_TEST_API_URL ?? 'http://localhost:3001';
+const api = apiOrigin + '/api/v1/';
 let http, browser;
 let fixtureApp;
 
@@ -38,11 +39,11 @@ async function call(path, session, { method = 'GET', body, version } = {}) {
   return result.data;
 }
 
-async function fixture(t) {
+async function fixture(t, sharingMode = 'per-expense') {
   const session = await call('auth/register', null, { method: 'POST', body: {
     email: randomUUID() + '@example.test', password: 'BrowserFixture-123!', displayName: 'An E2E',
   } });
-  const trip = await call('trips', session, { method: 'POST', body: { name: 'Đà Lạt E2E', ownerName: 'An' } });
+  const trip = await call('trips', session, { method: 'POST', body: { name: 'Đà Lạt E2E', ...(sharingMode && { sharingMode }), ownerName: 'An' } });
   const expenses = 'trips/' + trip.id + '/expenses';
   const screen = route => web + '/#chuyen/' + trip.id + '/' + route;
   const context = await browser.newContext();
@@ -132,7 +133,7 @@ test('S18 smoke validates the built web/API release and archives its isolated le
   const email = randomUUID() + '@example.test';
   const password = 'SmokeFixture-' + randomUUID();
   await call('auth/register', null, { method: 'POST', body: { email, password, displayName: 'Release smoke fixture' } });
-  const config = smokeConfig(['--api-url', 'http://localhost:3001', '--web-url', web, '--environment', 'local',
+  const config = smokeConfig(['--api-url', apiOrigin, '--web-url', web, '--environment', 'local',
     '--project', 'demo-sharebill', '--commit', process.env.RELEASE_COMMIT, '--exercise']);
   const report = await runSmoke(config, { env: { SMOKE_EMAIL: email, SMOKE_PASSWORD: password } });
   if (process.env.SHAREBILL_SMOKE_REPORT) {
@@ -551,6 +552,174 @@ test('linked users with zero assigned costs are distinguished from settled users
   assert.equal(await memberPage.evaluate(() => document.documentElement.scrollWidth > innerWidth), false);
 });
 
+test('joining a group automatically shares old and new totals without linking or choosing expense participants', { timeout: 90000 }, async t => {
+  const { page, session, trip, screen } = await fixture(t, null);
+  const root = 'trips/' + trip.id;
+  await page.goto(screen('them-khoan-chi'));
+  await heading(page, 'Thêm khoản chi');
+  await page.getByLabel('Tên khoản chi').fill('Chi chung trước khi aaa vào');
+  await page.getByLabel('Số tiền đã trả').fill('2.100.000');
+  await page.getByRole('heading', { name: 'Chia đều cho cả nhóm', exact: true }).waitFor();
+  assert.equal(await page.getByRole('button', { name: 'Chọn tất cả', exact: true }).count(), 0);
+  assert.equal(await page.getByRole('button', { name: 'Nhập từng phần', exact: true }).count(), 0);
+  await page.getByRole('button', { name: /Lưu khoản chi/ }).click();
+  await heading(page, 'Chi chung trước khi aaa vào');
+  await heading(page, 'Chi chung của nhóm');
+  const member = await call('auth/register', null, { method: 'POST', body: {
+    email: randomUUID() + '@example.test', password: 'BrowserFixture-123!', displayName: 'aaa',
+  } });
+  const invite = await call(root + '/invites', session, { method: 'POST', body: {} });
+  const context = await browser.newContext({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true });
+  t.after(() => context.close());
+  await context.addInitScript(session => sessionStorage.setItem('sharebill-live-session-v1', JSON.stringify(session)), { ...member, expiresAt: Date.now() + member.expiresIn * 1000 });
+  const memberPage = await context.newPage();
+  await memberPage.goto(web + '/#tham-gia/' + invite.token);
+  await memberPage.getByText(/Vào nhóm là tự chia đều tổng chi/).waitFor();
+  await memberPage.getByRole('button', { name: 'Tham gia chuyến đi', exact: true }).click();
+  await heading(memberPage, 'Tổng quan');
+  await memberPage.goto(screen('so-du'));
+  await memberPage.locator('.balance-hero').getByText('Bạn cần trả', { exact: true }).waitFor();
+  await memberPage.locator('.balance-hero').getByText('1.050.000đ', { exact: true }).waitFor();
+  await memberPage.getByRole('heading', { name: 'Tổng chi chia đều cho 2 thành viên', exact: true }).waitFor();
+  await memberPage.getByRole('region', { name: 'Số tiền cần chuyển', exact: true }).getByText('1.050.000đ', { exact: true }).waitFor();
+  assert.equal(await memberPage.getByText('Chưa liên kết', { exact: true }).count(), 0);
+  await memberPage.goto(screen('thanh-vien'));
+  await memberPage.getByText('aaa (bạn)', { exact: true }).waitFor();
+  assert.equal(await memberPage.getByRole('button', { name: 'Tài khoản truy cập', exact: true }).count(), 0);
+  assert.equal(await memberPage.getByRole('button', { name: 'Thêm người', exact: true }).count(), 0);
+  const third = await call('auth/register', null, { method: 'POST', body: {
+    email: randomUUID() + '@example.test', password: 'BrowserFixture-123!', displayName: 'bbb',
+  } });
+  await call('invites/accept', third, { method: 'POST', body: { token: invite.token } });
+  await memberPage.goto(screen('so-du'));
+  await memberPage.locator('.balance-hero').getByText('700.000đ', { exact: true }).waitFor();
+  await memberPage.goto(screen('them-khoan-chi'));
+  await heading(memberPage, 'Thêm khoản chi');
+  await memberPage.getByLabel('Tên khoản chi').fill('aaa ứng thêm');
+  await memberPage.getByLabel('Số tiền đã trả').fill('300.000');
+  await memberPage.getByRole('button', { name: /Lưu khoản chi/ }).click();
+  await heading(memberPage, 'aaa ứng thêm');
+  await memberPage.getByRole('link', { name: 'Xem số tiền còn cần trả / được nhận', exact: true }).click();
+  await memberPage.locator('.balance-hero').getByText('500.000đ', { exact: true }).waitFor();
+  const aaa = page.getByRole('region', { name: 'Số dư của aaa', exact: true });
+  await page.goto(screen('so-du'));
+  await aaa.locator('dl > div').filter({ hasText: 'Phải chịu' }).getByText('800.000đ', { exact: true }).waitFor();
+  await aaa.locator('dl > div').filter({ hasText: 'Đã ứng' }).getByText('300.000đ', { exact: true }).waitFor();
+  assert.equal(await memberPage.evaluate(() => document.documentElement.scrollWidth > innerWidth), false);
+});
+
+test('group expense edits preserve financial history after a payer leaves and restoring access redistributes the total', { timeout: 90000 }, async t => {
+  const { page, session, trip, screen, expenses } = await fixture(t, null);
+  const root = 'trips/' + trip.id;
+  const member = await call('auth/register', null, { method: 'POST', body: {
+    email: randomUUID() + '@example.test', password: 'BrowserFixture-123!', displayName: 'Bình',
+  } });
+  const invite = await call(root + '/invites', session, { method: 'POST', body: {} });
+  const joined = await call('invites/accept', member, { method: 'POST', body: { token: invite.token } });
+  const expense = await call(expenses, session, { method: 'POST', body: {
+    title: 'Bình ứng trước khi rời nhóm', category: 'other', amountMinor: 200000,
+    payerParticipantId: joined.participantId, occurredOn: '2026-11-19', splitMethod: 'equal', split: { participantIds: [trip.ownerParticipantId] },
+  } });
+  await page.goto(screen('thanh-vien'));
+  await page.getByRole('button', { name: 'Quản lý tài khoản Bình', exact: true }).click();
+  await page.getByRole('button', { name: 'Gỡ quyền truy cập', exact: true }).click();
+  let dialog = page.getByRole('dialog');
+  await dialog.getByText(/Tổng chi sẽ chia lại cho những người còn trong nhóm/).waitFor();
+  await dialog.getByLabel('Lý do').fill('Bình rời nhóm');
+  await dialog.getByRole('button', { name: 'Xác nhận', exact: true }).click();
+  await page.getByText('Đã gỡ quyền · Không còn tính vào số người chia', { exact: true }).waitFor();
+  const before = await call(root + '/overview', session);
+  await page.goto(screen('sua-khoan-chi/' + expense.id));
+  await heading(page, 'Sửa khoản chi');
+  await page.getByLabel('Tên khoản chi').fill('Đổi tên sau khi Bình rời nhóm');
+  await page.getByRole('button', { name: /Lưu khoản chi/ }).click();
+  await heading(page, 'Đổi tên sau khi Bình rời nhóm');
+  const metadata = await call(expenses + '/' + expense.id, session);
+  assert.deepEqual(metadata.shares, expense.shares);
+  assert.deepEqual((await call(root + '/overview', session)).balances, before.balances);
+  assert.equal((await call(root + '/overview', session)).trip.ledgerVersion, before.trip.ledgerVersion);
+  await page.goto(screen('sua-khoan-chi/' + expense.id));
+  await heading(page, 'Sửa khoản chi');
+  await page.getByLabel('Số tiền đã trả').fill('300.000');
+  await page.getByRole('button', { name: /Lưu khoản chi/ }).click();
+  await heading(page, 'Đổi tên sau khi Bình rời nhóm');
+  const edited = await call(root + '/overview', session);
+  assert.equal(edited.balances.find(row => row.participantId === joined.participantId).paidMinor, 300000);
+  assert.equal(edited.balances.find(row => row.participantId === trip.ownerParticipantId).owedMinor, 300000);
+  await page.goto(screen('thanh-vien'));
+  await page.getByRole('button', { name: 'Quản lý tài khoản Bình', exact: true }).click();
+  await page.getByRole('button', { name: 'Khôi phục quyền truy cập', exact: true }).click();
+  dialog = page.getByRole('dialog');
+  await dialog.getByText(/cùng chia toàn bộ tổng chi/).waitFor();
+  await dialog.getByLabel('Lý do').fill('Bình vào lại');
+  await dialog.getByRole('button', { name: 'Xác nhận', exact: true }).click();
+  await page.getByText('Thành viên · Tự chia đều tổng chi', { exact: true }).waitFor();
+  const restored = await call(root + '/overview', session);
+  assert.ok(restored.balances.every(row => row.owedMinor === 150000));
+  assert.equal(restored.balances.find(row => row.participantId === joined.participantId).netMinor, 150000);
+  const payment = await call(root + '/settlements', session, { method: 'POST', body: {
+    fromParticipantId: trip.ownerParticipantId, toParticipantId: joined.participantId, amountMinor: 150000,
+    occurredOn: '2026-11-19', note: null, basedOnLedgerVersion: restored.trip.ledgerVersion,
+  } });
+  await call(root + '/settlements/' + payment.id + '/confirm', session, { method: 'POST', version: payment.version,
+    body: { basedOnLedgerVersion: restored.trip.ledgerVersion } });
+  const balanced = await call(root + '/overview', session);
+  await call(root + '/archive', session, { method: 'POST', version: balanced.trip.version, body: {} });
+  await page.goto(screen('thanh-vien'));
+  await page.reload();
+  await page.getByText(/Chuyến đã chốt giữ nguyên phần chia lúc chốt/).waitFor();
+  await page.getByRole('button', { name: 'Quản lý tài khoản Bình', exact: true }).click();
+  await page.getByRole('button', { name: 'Gỡ quyền truy cập', exact: true }).click();
+  dialog = page.getByRole('dialog');
+  await dialog.getByText(/Phần chia và số dư lúc chốt được giữ nguyên/).waitFor();
+  await dialog.getByLabel('Lý do').fill('Thu hồi truy cập sau khi chốt');
+  await dialog.getByRole('button', { name: 'Xác nhận', exact: true }).click();
+  await page.getByText('Đã gỡ quyền · Giữ phần chia lúc chốt', { exact: true }).waitFor();
+  assert.deepEqual((await call(root + '/overview', session)).balances, balanced.balances);
+  await page.goto(screen('so-du'));
+  await page.getByText('Phần chia được giữ theo lúc chốt', { exact: false }).waitFor();
+  await page.getByRole('heading', { name: 'Tổng chi chia đều cho 2 thành viên', exact: true }).waitFor();
+});
+
+test('existing groups automatically upgrade old costs and hide unused manual duplicate names', async t => {
+  const { page, session, trip, screen, expenses } = await fixture(t);
+  const root = 'trips/' + trip.id;
+  const expense = await call(expenses, session, { method: 'POST', body: {
+    title: 'Khoản cũ cần tự chia', category: 'other', amountMinor: 240000, payerParticipantId: trip.ownerParticipantId,
+    occurredOn: '2026-11-19', splitMethod: 'exact', split: { shares: [{ participantId: trip.ownerParticipantId, amountMinor: 240000 }] },
+  } });
+  await call(root + '/participants', session, { method: 'POST', body: { displayName: 'An' } });
+  const member = await call('auth/register', null, { method: 'POST', body: {
+    email: randomUUID() + '@example.test', password: 'BrowserFixture-123!', displayName: 'aaa',
+  } });
+  const invite = await call(root + '/invites', session, { method: 'POST', body: {} });
+  await call('invites/accept', member, { method: 'POST', body: { token: invite.token } });
+  process.env.FIRESTORE_EMULATOR_HOST = '127.0.0.1:8080';
+  const require = createRequire(new URL('../../be/package.json', import.meta.url));
+  const { initializeApp } = require('firebase-admin/app');
+  const { getFirestore, FieldValue } = require('firebase-admin/firestore');
+  fixtureApp ??= initializeApp({ projectId: 'demo-sharebill' }, 'browser-fixtures');
+  await getFirestore(fixtureApp).doc(root).update({ sharingMode: FieldValue.delete() });
+  await page.goto(screen('so-du'));
+  await heading(page, 'Tổng chi chia đều cho 2 thành viên');
+  await page.getByRole('region', { name: 'Số dư của aaa', exact: true }).getByText('120.000đ', { exact: true }).first().waitFor();
+  await page.getByRole('region', { name: 'Số tiền cần chuyển', exact: true }).getByText('120.000đ', { exact: true }).waitFor();
+  assert.equal(await page.locator('.balance-member').count(), 2);
+  const overview = await call(root + '/overview', session);
+  assert.equal(overview.trip.sharingMode, 'group-equal');
+  assert.equal(overview.trip.equalParticipantIds.length, 2);
+  assert.equal(overview.participants.length, 3);
+  await page.goto(screen('sua-khoan-chi/' + expense.id));
+  await heading(page, 'Sửa khoản chi');
+  await page.getByLabel('Tên khoản chi').fill('Đổi tên khoản cũ chia chính xác');
+  await page.getByRole('button', { name: /Lưu khoản chi/ }).click();
+  await heading(page, 'Đổi tên khoản cũ chia chính xác');
+  const saved = await call(expenses + '/' + expense.id, session);
+  assert.equal(saved.splitMethod, 'exact');
+  assert.deepEqual(saved.shares, expense.shares);
+  assert.equal((await call(root + '/overview', session)).trip.ledgerVersion, overview.trip.ledgerVersion);
+});
+
 test('incomplete financial snapshots never show a zero debt or enable archive', async t => {
   const { page, context, session, trip, screen } = await fixture(t);
   await call('trips/' + trip.id + '/participants', session, { method: 'POST', body: { displayName: 'Bình' } });
@@ -701,15 +870,21 @@ test('a Google operator processes a user ticket through the admin screens', asyn
   await admin.getByRole('cell', { name: ticket.id, exact: false }).first().waitFor();
   const store = getFirestore(fixtureApp);
   const job = store.doc('maintenanceJobs/ledger-reconcile-' + randomUUID());
+  const repair = store.doc('maintenanceJobs/projection-repair-' + randomUUID());
   await job.set({ kind: 'ledger_reconcile', status: 'failed', attempts: 1, lastErrorCode: 'RECONCILE_ISSUES_FOUND',
     resultSummary: { tripsScanned: 3, tripsChecked: 2, tripsWithIssues: 1, issueCount: 2, scanErrors: 1 },
     checkpoint: 'private-reconcile-checkpoint', privateDiff: 'private-reconcile-financial-values',
     updatedAt: Timestamp.now() });
+  await repair.set({ kind: 'projection_repair', status: 'succeeded', attempts: 1,
+    resultSummary: { changedDocuments: 4 }, backupRef: 'private-repair-backup', reason: 'private-repair-reason', updatedAt: Timestamp.now() });
   try {
     await admin.getByRole('link', { name: 'Hệ thống', exact: true }).click();
     await admin.getByText('Đối soát sổ tiền', { exact: false }).waitFor();
     await admin.getByText('Đã kiểm 2/3 chuyến · 1 chuyến cần kiểm tra · 2 sai lệch · 1 lỗi quét', { exact: true }).waitFor();
+    await admin.getByText('Sửa số dư từ sổ tiền', { exact: false }).waitFor();
+    await admin.getByText('Đã sửa 4 bản ghi số dư, bộ đếm và thông báo cập nhật. Chuyến tiếp tục tạm khóa để kiểm tra.', { exact: true }).waitFor();
     assert.equal(await admin.getByText(/private-reconcile/).count(), 0);
-  } finally { await job.delete(); }
+    assert.equal(await admin.getByText(/private-repair/).count(), 0);
+  } finally { await Promise.all([job.delete(), repair.delete()]); }
   assert.deepEqual(errors, []);
 });

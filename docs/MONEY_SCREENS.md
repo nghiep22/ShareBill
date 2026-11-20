@@ -1,5 +1,7 @@
 # Màn hình và quy tắc hiển thị tiền
 
+Nhóm mới và nhóm cũ đang mở chưa có chính sách riêng dùng **tổng chi chia đều cho các tài khoản đang trong nhóm**. Vào nhóm tự được liên kết và chia cả chi phí cũ; giao diện bỏ bước chọn người/nhập từng phần. Xem [quy tắc chia đều tổng chi](GROUP_SHARING.md). Các phần mô tả chọn người bên dưới chỉ áp dụng luồng tương thích `per-expense` và lịch sử cũ.
+
 ## Phần phải chịu và số còn cần trả
 
 Sau khi nhập khoản chi chia đều, form hiện **Phải chịu** bên cạnh mỗi người được chọn. Tổng phần chia bằng số tiền khoản chi; phần lẻ VND được phân bổ theo ID thành viên cố định, chênh lệch tối đa 1đ. Ví dụ 100.000đ chia ba người sẽ có một phần 33.334đ và hai phần 33.333đ. Mỗi lần nhập lại cùng danh sách cho cùng kết quả với backend.

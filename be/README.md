@@ -1,6 +1,6 @@
 # ShareBill backend
 
-Backend Node.js/Fastify + TypeScript, dùng Firebase Authentication và Cloud Firestore. Đã có đăng ký/đăng nhập email và mật khẩu, làm mới phiên bằng Firebase ID token (JWT), tạo/sửa/chốt/mở lại chuyến, quản lý người tham gia và liên kết danh tính, lời mời có hạn, gỡ/khôi phục thành viên, chuyển chủ chuyến, tạo/sửa/hủy khoản chi chia đều/chia số tiền riêng, xem tổng quan và gợi ý trả nợ, tạo/xác nhận/hủy/đảo trả nợ. Có backend ảnh hóa đơn, cleanup, lịch trình, hỗ trợ và API quản trị với worker đồng bộ Firebase Auth. Đặc tả đầy đủ nằm trong [BACKEND.md](../docs/BACKEND.md), hướng dẫn ảnh tại [RECEIPTS.md](../docs/RECEIPTS.md).
+Backend Node.js/Fastify + TypeScript, dùng Firebase Authentication và Cloud Firestore. Đã có đăng ký/đăng nhập email và mật khẩu, làm mới phiên bằng Firebase ID token (JWT), tạo/sửa/chốt/mở lại chuyến, quản lý người tham gia và liên kết danh tính, lời mời có hạn, gỡ/khôi phục thành viên, chuyển chủ chuyến, tạo/sửa/hủy khoản chi, xem tổng quan và gợi ý trả nợ, tạo/xác nhận/hủy/đảo trả nợ. Nhóm mới tự chia tổng chi cho các tài khoản active; nhận lời mời tự liên kết và chia cả chi phí cũ. Luồng chia từng khoản vẫn có cho dữ liệu tương thích. Xem [quy tắc chia tổng chi](../docs/GROUP_SHARING.md). Có backend ảnh hóa đơn, cleanup, lịch trình, hỗ trợ và API quản trị với worker đồng bộ Firebase Auth. Đặc tả đầy đủ nằm trong [BACKEND.md](../docs/BACKEND.md), hướng dẫn ảnh tại [RECEIPTS.md](../docs/RECEIPTS.md).
 
 ## Yêu cầu máy
 
@@ -34,7 +34,7 @@ Trong terminal **cmd** của VS Code, có thể chạy `cd be` rồi `npm run em
 
 ### Thử API trên Swagger UI
 
-Khi Emulator và API đã chạy, mở **http://localhost:3001/docs/**. Trang này mô tả 67 thao tác hiện có. Đặc tả JSON ở `http://localhost:3001/docs/json`.
+Khi Emulator và API đã chạy, mở **http://localhost:3001/docs/**. Trang này mô tả 68 thao tác hiện có. Đặc tả JSON ở `http://localhost:3001/docs/json`.
 
 1. Mở **Tài khoản → POST /api/v1/auth/register** (hoặc `login`), bấm **Try it out**, điền email/mật khẩu/tên rồi **Execute**. Mỗi lần đăng ký cần email mới.
 2. Trong response, sao chép **`data.accessToken`**. Bấm **Authorize** ở đầu trang, dán token vào ô BearerAuth **không thêm chữ `Bearer`**, rồi **Authorize**.
@@ -106,6 +106,7 @@ Frontend dùng Firebase Web SDK gọi `POST /api/v1/me/bootstrap` một lần sa
 | POST | `/api/v1/trips` | Firebase ID token, Idempotency-Key, body `{name, ownerName}` |
 | GET | `/api/v1/trips` | `status`, `limit` tối đa 20, `cursor`; kiểm membership hiện tại |
 | GET | `/api/v1/trips/:tripId/overview` | ID token, membership active |
+| POST | `/api/v1/trips/:tripId/share-equally` | Thành viên active của nhóm đang mở; body `{}`, Idempotency-Key; nâng cấp sang chia đều tổng chi, giữ lịch sử và khoản chuyển |
 | PATCH | `/api/v1/trips/:tripId` | Owner sửa tên/địa điểm/ngày/ghi chú/múi giờ; Idempotency-Key, If-Match trip.version |
 | POST | `/api/v1/trips/:tripId/archive` | Owner chốt khi từng net=0, không pending, balances đầy đủ; body `{}`, key, If-Match trip.version |
 | POST | `/api/v1/trips/:tripId/reopen` | Owner mở lại trip archived/normal; body `{}`, key, If-Match trip.version; không hồi sinh invite cũ |
@@ -236,6 +237,10 @@ Cần cấu hình scheduler chạy worker định kỳ trên môi trường tri�
 ## Deploy
 
 Đối soát theo từng lượt: `pnpm --dir be db:reconcile --project demo-sharebill --limit 5`. Worker chỉ ghi tiến độ và summary vào maintenanceJobs, không sửa ledger/số dư. Có lease, retry tối đa 3 lần và chu kỳ mới sau 15 phút; kết quả hiện trong trang Hệ thống của admin. Xem [runbook đối soát](../docs/LEDGER_RECONCILIATION.md); lịch cloud chưa được cấu hình.
+
+Sửa projection local: `pnpm --dir be db:repair --project demo-sharebill --trip <trip-uuid>` mặc định chỉ xem diff. Apply cần file snapshot đã lưu, chuyến tạm khóa và operator active; kiểm toàn bộ dữ liệu/version trước khi commit, rồi chạy checker. Chỉ hỗ trợ loopback Emulator, không sửa nguồn ledger. Xem [hướng dẫn B19](../docs/PROJECTION_REPAIR.md).
+
+Diễn tập phục hồi: `pnpm --dir be backup:rehearse` tạo hai môi trường demo riêng, export/import Auth + Firestore + Storage, kiểm fingerprint, đăng nhập, ảnh, quyền, replay và repair. Không dừng/import đè Emulator đang dùng. Xem [runbook và báo cáo local](../docs/RESTORE_REHEARSAL.md); CI chỉ lưu báo cáo tổng hợp, không upload bản sao riêng.
 
 Log HTTP sử dụng mã request UUID, route template, status, thời gian xử lý và SHA. Response trả `X-Request-Id` để đối chiếu log. Xem [cách tra lỗi và phạm vi S19](../docs/OPERATIONS_LOGGING.md).
 

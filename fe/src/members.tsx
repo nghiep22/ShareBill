@@ -9,8 +9,9 @@ import { tripHref } from './workspace-route';
 import type { ReactNode } from 'react';
 
 export function Members({ data, update, accounts, view }: { data: Demo; update: UpdateTrip; accounts?: ReactNode; view?: string }) {
+  const groupEqual = data.remote?.sharingMode === 'group-equal';
   const [filter, setFilter] = useState<'all' | 'linked'>(view === 'tai-khoan' ? 'linked' : 'all');
-  const [editing, setEditing] = useState<Member | 'new' | null>(view === 'them-nguoi' && isOwner(data) && canWrite(data) ? 'new' : null);
+  const [editing, setEditing] = useState<Member | 'new' | null>(!groupEqual && view === 'them-nguoi' && isOwner(data) && canWrite(data) ? 'new' : null);
   const [confirm, setConfirm] = useState<'owner' | 'inactive' | 'unlink' | null>(null);
   const [error, setError] = useState('');
   const owner = isOwner(data);
@@ -61,13 +62,13 @@ export function Members({ data, update, accounts, view }: { data: Demo; update: 
       <p><strong>{data.remote && !data.ownerId ? 'Chủ chuyến' : nameOf(data, ownerOf(data))}</strong> quản lý thành viên, lời mời và chốt chuyến. Thành viên có tài khoản có thể ghi khoản chi.</p>
     </section>
     <div className="section-heading"><h2><Users size={20} aria-hidden /> Danh sách thành viên</h2>
-      {canEdit && <button className="secondary-button" onClick={() => edit('new')}><UserPlus size={17} aria-hidden /> Thêm người</button>}</div>
-    <div className="segmented compact-segments" aria-label="Loại thành viên">
+      {canEdit && !groupEqual && <button className="secondary-button" onClick={() => edit('new')}><UserPlus size={17} aria-hidden /> Thêm người</button>}</div>
+    {!groupEqual && <div className="segmented compact-segments" aria-label="Loại thành viên">
       <button aria-pressed={filter === 'all'} onClick={() => setFilter('all')}>Người chia tiền</button>
       <button aria-pressed={filter === 'linked'} onClick={() => setFilter('linked')}>Tài khoản truy cập</button>
-    </div>
-    {filter === 'all' && <p className="inline-note money-explainer">Người chia tiền là những người được chọn trong khoản chi, không cần có tài khoản. Thêm người mới giữ nguyên phần chia của khoản chi cũ; vào Chi tiêu → mở khoản chi → Sửa → Chia cho ai? để chọn thêm người.</p>}
-    {data.remote && filter === 'linked' ? accounts : <div className="card rows">
+    </div>}
+    {!groupEqual && filter === 'all' && <p className="inline-note money-explainer">Người chia tiền là những người được chọn trong khoản chi, không cần có tài khoản. Thêm người mới giữ nguyên phần chia của khoản chi cũ; vào Chi tiêu → mở khoản chi → Sửa → Chia cho ai? để chọn thêm người.</p>}
+    {data.remote && (groupEqual || filter === 'linked') ? accounts : <div className="card rows">
       {!members.length && <Empty>Chưa có tài khoản truy cập.</Empty>}
       {members.map(member => {
         const id = member.id;

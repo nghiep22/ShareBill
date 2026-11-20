@@ -28,7 +28,7 @@ Khi có phiên bản mới, app hỏi trước khi tải lại. Khi thử trên 
 
 Backend nằm trong `../be`. Hợp đồng API của người dùng và quản trị nằm ở [BACKEND.md](../docs/BACKEND.md) và [ADMIN_WEB.md](../docs/ADMIN_WEB.md).
 
-Giao diện chính gọi REST cho tài khoản, chuyến đi, thành viên, lời mời, chi tiêu, quyết toán, lịch trình, hỗ trợ và lịch sử. Phiên đăng nhập được lưu trong `sessionStorage` của tab. Trên localhost, API mặc định dùng cổng 3001. Đặt `NEXT_PUBLIC_SHAREBILL_API_URL` khi build nếu cần chỉ định API khác.
+Giao diện chính gọi REST cho tài khoản, chuyến đi, thành viên, lời mời, chi tiêu, quyết toán, lịch trình, hỗ trợ và lịch sử. Nhóm mới tự chia tổng chi cho các tài khoản đang trong nhóm, kể cả chi phí trước khi họ tham gia; không cần liên kết hay chọn lại từng khoản. Sửa tên/ghi chú của khoản cũ giữ nguyên dữ liệu tiền, kể cả sau khi người ứng rời nhóm. [Quy tắc chia tổng chi](../docs/GROUP_SHARING.md). Phiên đăng nhập được lưu trong `sessionStorage` của tab. Trên localhost, API mặc định dùng cổng 3001. Đặt `NEXT_PUBLIC_SHAREBILL_API_URL` khi build nếu cần chỉ định API khác.
 
 Trong **Lịch trình**, chủ chuyến thêm, sửa, xóa hoạt động và duyệt đề xuất. Thành viên có quyền truy cập chuyến xem lịch trình và đề xuất điểm đến. Mở **Trợ giúp và báo lỗi** từ **Tài khoản**, hoặc mở **Báo lỗi về chuyến đi** trong cài đặt chuyến để kèm ngữ cảnh. Người gửi tra mã và trạng thái trong **Báo lỗi của tôi**. Operator xử lý tại `/admin`. [Hướng dẫn quản trị](../be/README.md#quản-trị)
 
@@ -36,7 +36,7 @@ Link màn hình chuyến có dạng `/#chuyen/{tripId}/khoan-chi/{expenseId}?cat
 
 ## Kiểm thử trình duyệt và quản trị
 
-`pnpm --dir fe test:browser` chạy 9 hành trình bằng Playwright với frontend cổng 3000, API 3001 và Emulator 8080/9099. Cài Chromium bằng `pnpm --dir fe exec playwright install chromium`. Trên Windows có thể đặt `PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH` tới Chrome. Đặt `SHAREBILL_PWA_TEST=1` khi kiểm bản static production để kiểm cả reload offline và hành trình thứ 10 cho smoke S18; đặt cùng `RELEASE_COMMIT` khi build FE, chạy API và chạy bộ test. [Hướng dẫn smoke và cấu hình cloud](../docs/STAGING_SMOKE.md).
+`pnpm --dir fe test:browser` chạy 14 hành trình bằng Playwright với frontend cổng 3000, API 3001 và Emulator 8080/9099. Cài Chromium bằng `pnpm --dir fe exec playwright install chromium`. Trên Windows có thể đặt `PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH` tới Chrome. Đặt `SHAREBILL_PWA_TEST=1` khi kiểm bản static production để kiểm cả reload offline và hành trình thứ 15 cho smoke S18; đặt cùng `RELEASE_COMMIT` khi build FE, chạy API và chạy bộ test. [Hướng dẫn smoke và cấu hình cloud](../docs/STAGING_SMOKE.md).
 
 Trang `/admin` dùng Google sign-in và quyền server trong `platformAdmins/{uid}`. Sao chép các trường Firebase public trong [.env.example](.env.example) và đặt giá trị của môi trường khi build. Với project demo trên localhost, Google popup dùng Auth Emulator. Môi trường cloud cần Google provider và authorized domains đã cấu hình. Phiên quản trị nằm trong bộ nhớ, đăng nhập lại sau reload. API kiểm quyền ở mỗi request và yêu cầu xác thực trong 10 phút cho lệnh ghi.
 

@@ -10,6 +10,7 @@ import { auditActorName, createAuditEvent } from './database/audit.js';
 import { membershipSchema, tripRefSchema, tripSchema, uid as uidSchema } from './database/integrity-schemas.js';
 import { requireConsistentIdentity } from './services/memberships.js';
 import { increment, readTripActor, requireOwner, requireWritable } from './services/trip-access.js';
+import { enrollGroupMember, isGroupEqual, projectGroup, readGroupLedger, writeGroupBalances } from './services/group-sharing.js';
 
 const tripParams = z.strictObject({ tripId: z.uuid() });
 const memberParams = z.strictObject({ tripId: z.uuid(), uid: uidSchema });
@@ -72,18 +73,39 @@ export async function registerMembershipRoutes(app: FastifyInstance) {
           if (targetProfile.get('status') !== 'active') throw new ApiError(409, 'TARGET_USER_UNAVAILABLE', 'Tài khoản chưa sẵn sàng.');
           await requireConsistentIdentity(tx, tripRef, targetUid, target.get('participantId'));
         }
-        const now = Timestamp.now(), revision = increment(trip.get('revision')), ledgerVersion = trip.get('ledgerVersion');
+        const now = Timestamp.now(), revision = increment(trip.get('revision'));
+        let ledgerVersion = trip.get('ledgerVersion');
+        const group = isGroupEqual(trip) && trip.get('status') === 'active' ? await readGroupLedger(tx, trip) : undefined;
+        const person = group && action === 'restore' && !target.get('participantId') ?
+          enrollGroupMember(group, targetUid, auditActorName(targetProfile.get('displayName')) ?? 'Thành viên', uid, now) : undefined;
+        const personId = person?.participantId ?? target.get('participantId') as string | null;
+        if (group && (!personId || (action === 'remove') !== group.ids.includes(personId))) {
+          throw new ApiError(409, 'GROUP_SHARING_INVARIANT_FAILED', 'Thành viên chia tiền chưa đồng nhất.');
+        }
+        const groupIds = group && personId ? action === 'remove' ? group.ids.filter(id => id !== personId) : [...group.ids, personId].sort() : undefined;
+        const rows = group && groupIds ? projectGroup(group, trip.get('totalExpenseMinor'), groupIds) : undefined;
+        if (group) ledgerVersion += 1;
         const patch = { status: action === 'remove' ? 'removed' : 'active', version: increment(expectedVersion),
+          ...(person && { participantId: person.participantId }),
           removedAt: action === 'remove' ? now : null, updatedAt: now };
         if (!membershipSchema.safeParse({ ...target.data(), ...patch }).success) {
           throw new ApiError(409, 'MEMBERSHIP_INVARIANT_FAILED', 'Dữ liệu thành viên chưa hợp lệ.');
         }
         tx.update(targetRef, patch);
+        if (person) {
+          tx.create(tripRef.collection('participants').doc(person.participantId), person.participant);
+          tx.create(tripRef.collection('participantLinks').doc(targetUid), person.link);
+        }
+        const restoredPerson = group && action === 'restore' && personId ? group.participants.get(personId) : undefined;
+        if (restoredPerson?.status === 'inactive') tx.update(tripRef.collection('participants').doc(restoredPerson.id), {
+          status: 'active', version: increment(restoredPerson.version), updatedAt: now,
+        });
+        if (rows) writeGroupBalances(tx, trip, rows, now);
         tx.set(store.doc(`users/${targetUid}/tripRefs/${tripId}`), tripRefSchema.parse({ schemaVersion: 1,
           tripId, status: patch.status, joinedAt: target.get('joinedAt'), updatedAt: now }));
-        tx.update(tripRef, { revision, updatedAt: now });
+        tx.update(tripRef, { revision, ledgerVersion, ...(group && { equalParticipantIds: groupIds, participantCount: group.participants.size }), updatedAt: now });
         tx.update(tripRef.collection('signals').doc('current'), { revision, ledgerVersion, updatedAt: now });
-        const before = memberAudit(target), after = { ...before, status: patch.status, version: patch.version };
+        const before = memberAudit(target), after = { ...before, status: patch.status, version: patch.version, participantId: personId };
         tx.create(tripRef.collection('auditEvents').doc(auditId), createAuditEvent({
           eventId: auditId, actorUid: uid, actorDisplayNameSnapshot: user.get('displayName'),
           action: action === 'remove' ? 'membership.removed' : 'membership.restored', entityType: 'membership',
@@ -91,7 +113,7 @@ export async function registerMembershipRoutes(app: FastifyInstance) {
         }));
         const outcome = createOperationDocument(command, { actorUid: uid, tripId, resourceType: 'membership', resourceId: targetUid,
           httpStatus: 200, responseSnapshot: { data: { uid: targetUid, role: target.get('role'), status: patch.status,
-            participantId: target.get('participantId'), version: patch.version }, meta: { revision, ledgerVersion } }, committedAt: now });
+            participantId: personId, version: patch.version }, meta: { revision, ledgerVersion } }, committedAt: now });
         tx.create(opRef, outcome);
         return { outcome, replayed: false };
       });

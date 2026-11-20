@@ -17,6 +17,20 @@ function fixture(): Demo {
 }
 
 describe('money views', () => {
+  it('accepts group totals and rejects a valid-looking old per-expense allocation in group mode', () => {
+    const data = fixture();
+    data.remote!.sharingMode = 'group-equal'; data.remote!.equalParticipantIds = ['c', 'a', 'b'];
+    expect(financialSnapshot(data).complete).toBe(true);
+    for (const row of data.remote!.balances) {
+      row.owedMinor = row.participantId === 'a' ? 100000 : 0;
+      row.netMinor = row.paidMinor - row.owedMinor + row.sentMinor - row.receivedMinor;
+    }
+    expect(financialSnapshot(data).complete).toBe(false);
+  });
+  it.each([{ ids: undefined }, { ids: [] }, { ids: ['a', 'a'] }, { ids: ['outside'] }])('requires a complete group membership set $ids', ({ ids }) => {
+    const data = fixture(); data.remote!.sharingMode = 'group-equal'; data.remote!.equalParticipantIds = ids;
+    expect(financialSnapshot(data).complete).toBe(false);
+  });
   it('keeps the full owed share separate from remaining debt after partial confirmed transfers', () => {
     const state = financialSnapshot(fixture());
     expect(state.complete).toBe(true);

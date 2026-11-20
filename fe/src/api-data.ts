@@ -9,6 +9,7 @@ export type TripDto = {
   ownerUid: string; moderationStatus: string; version: number; ledgerVersion: number; timezone?: string;
   participantCount: number; activeExpenseCount: number; totalExpenseMinor: number; pendingSettlementCount: number;
   myParticipantId?: string | null;
+  sharingMode?: 'group-equal' | 'per-expense'; equalParticipantIds?: string[];
 };
 type ParticipantDto = { id: string; displayName: string; status: 'active' | 'inactive'; linkedUid: string | null; version: number };
 export type Membership = {
@@ -34,7 +35,7 @@ export type InviteDto = {
   status: 'active' | 'revoked' | 'invalidated' | 'exhausted' | 'expired';
   token?: string; message?: string;
 };
-export type InvitePreview = { trip: { id: string; name: string }; inviter: { displayName: string | null }; expiresAt: string; alreadyMember?: boolean };
+export type InvitePreview = { trip: { id: string; name: string; sharingMode?: 'group-equal' | 'per-expense' | null }; inviter: { displayName: string | null }; expiresAt: string; alreadyMember?: boolean };
 export type ItineraryDto = {
   version: number;
   activities: (Omit<Plan, 'suggestionId'> & { suggestionId: string | null })[];
@@ -64,6 +65,7 @@ export function tripSnapshot(overview: TripOverview, uid: string): Demo {
       version: trip.version, ledgerVersion: trip.ledgerVersion, participantCount: trip.participantCount,
       expenseCount: trip.activeExpenseCount, pendingCount: trip.pendingSettlementCount, total: trip.totalExpenseMinor,
       balances, suggestions: [],
+      sharingMode: trip.sharingMode, equalParticipantIds: trip.equalParticipantIds,
     },
   };
 }
@@ -87,6 +89,7 @@ export const settlementFrom = (item: SettlementDto): Settlement => ({
 
 const activityLabels: Record<string, string> = {
   'trip.created': 'Tạo chuyến đi', 'trip.updated': 'Cập nhật chuyến đi', 'trip.archived': 'Chốt chuyến đi', 'trip.reopened': 'Mở lại chuyến đi',
+  'trip.sharing_equal': 'Chia đều tổng chi cho nhóm',
   'participant.created': 'Thêm người chia tiền', 'participant.updated': 'Cập nhật người chia tiền',
   'expense.created': 'Thêm khoản chi', 'expense.updated': 'Sửa khoản chi', 'expense.voided': 'Hủy khoản chi',
   'settlement.created': 'Ghi nhận chuyển tiền', 'settlement.confirmed': 'Xác nhận chuyển tiền',

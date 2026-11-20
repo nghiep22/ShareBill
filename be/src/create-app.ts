@@ -10,6 +10,7 @@ import { registerManagementRoutes } from './management-routes.js';
 import { registerInviteRoutes } from './invite-routes.js';
 import { registerMembershipRoutes } from './membership-routes.js';
 import { registerLedgerRoutes } from './ledger-routes.js';
+import { registerGroupSharingRoutes } from './group-sharing-routes.js';
 import { registerReceiptRoutes } from './receipt-routes.js';
 import { ReceiptService } from './services/receipts.js';
 import { sendError } from './http.js';
@@ -55,6 +56,7 @@ export async function buildApp(app = createServer(), options: { receipts?: Recei
   await registerInviteRoutes(app);
   await registerMembershipRoutes(app);
   await registerLedgerRoutes(app);
+  await registerGroupSharingRoutes(app);
   await registerReceiptRoutes(app, options.receipts ?? new ReceiptService());
   await registerItineraryRoutes(app);
   await registerSupportRoutes(app);

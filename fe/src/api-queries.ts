@@ -11,7 +11,7 @@ function errorMessage(error: unknown) {
   return error instanceof Error ? error.message : 'Chưa tải được dữ liệu.';
 }
 
-export function useApiRead<T>(api: ShareBillApi, path: string | undefined, epoch: number, body?: object) {
+export function useApiRead<T>(api: ShareBillApi, path: string | undefined, epoch: number, body?: object, prepareGroupSharing = false) {
   const bodyString = body && JSON.stringify(body);
   const key = path + ':' + (bodyString ?? '');
   const [result, setResult] = useState<{ key: string; epoch: number; data?: T; error?: string; status?: number; loadedAt?: number }>();
@@ -19,7 +19,16 @@ export function useApiRead<T>(api: ShareBillApi, path: string | undefined, epoch
   useEffect(() => {
     if (!path) { setResult(undefined); return; }
     let valid = true;
-    api.read<T>(path, bodyString ? JSON.parse(bodyString) : undefined).then(
+    const load = async () => {
+      let data = await api.read<T>(path, bodyString ? JSON.parse(bodyString) : undefined);
+      const trip = (data as { trip?: { sharingMode?: string; status?: string; moderationStatus?: string } }).trip;
+      if (prepareGroupSharing && trip && trip.sharingMode === undefined && trip.status === 'active' && trip.moderationStatus === 'normal') {
+        await api.write(path.replace(/\/overview$/, '/share-equally'), {});
+        data = await api.read<T>(path);
+      }
+      return data;
+    };
+    load().then(
       data => { if (valid) setResult({ key, epoch, data, loadedAt: Date.now() }); },
       cause => {
         if (valid) setResult(previous => ({
@@ -30,7 +39,7 @@ export function useApiRead<T>(api: ShareBillApi, path: string | undefined, epoch
       },
     );
     return () => { valid = false; };
-  }, [api, path, epoch, bodyString, key]);
+  }, [api, path, epoch, bodyString, key, prepareGroupSharing]);
 
   const visible = path && result?.key === key ? result : undefined;
   return { data: visible?.data, error: visible?.error, status: visible?.status, loadedAt: visible?.loadedAt,

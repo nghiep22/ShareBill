@@ -25,7 +25,7 @@ describe.skipIf(!enabled)('Firebase emulator API flow', () => {
     const key = randomUUID();
     const store = db();
     const initial = createTripDocuments({ tripId, participantId, auditEventId, ownerUid,
-      ownerName: 'An', name: 'Chuyến lỗi', operationKey: key, now: Timestamp.now() });
+      sharingMode: 'per-expense', ownerName: 'An', name: 'Chuyến lỗi', operationKey: key, now: Timestamp.now() });
     const entries = [
       [`trips/${tripId}`, initial.trip],
       [`trips/${tripId}/memberships/${ownerUid}`, initial.membership],
@@ -64,7 +64,7 @@ describe.skipIf(!enabled)('Firebase emulator API flow', () => {
     expect(userDocumentSchema.safeParse(profile).success).toBe(true);
     expect(profile).toMatchObject({ status: 'active', schemaVersion: 1, displayName: 'An' });
     const tripHeaders = { authorization: `Bearer ${session.accessToken}`, 'idempotency-key': randomUUID() };
-    const details = { name: 'Huế', ownerName: 'An', destination: 'Huế', note: 'Đi cuối tuần', startDate: '2026-12-18', endDate: '2026-12-20' };
+    const details = { name: 'Huế', sharingMode: 'per-expense', ownerName: 'An', destination: 'Huế', note: 'Đi cuối tuần', startDate: '2026-12-18', endDate: '2026-12-20' };
     const invalidTrip = await app.inject({ method: 'POST', url: '/api/v1/trips', headers: tripHeaders, payload: { ...details, endDate: null } });
     expect(invalidTrip.statusCode).toBe(422);
     const trip = await app.inject({ method: 'POST', url: '/api/v1/trips', headers: tripHeaders, payload: details });
@@ -131,7 +131,7 @@ describe.skipIf(!enabled)('Firebase emulator API flow', () => {
     const directEmail = `direct-${randomUUID()}@example.test`;
     const direct = await auth().createUser({ email: directEmail, password });
     const directToken = await signIn(directEmail);
-    const created = await app.inject({ method: 'POST', url: '/api/v1/trips', headers: { authorization: `Bearer ${directToken}`, 'idempotency-key': randomUUID() }, payload: { name: 'Sa Pa', ownerName: 'An' } });
+    const created = await app.inject({ method: 'POST', url: '/api/v1/trips', headers: { authorization: `Bearer ${directToken}`, 'idempotency-key': randomUUID() }, payload: { name: 'Sa Pa', sharingMode: 'per-expense', ownerName: 'An' } });
     expect(created.statusCode).toBe(200);
     expect(userDocumentSchema.safeParse((await db().doc(`users/${direct.uid}`).get()).data()).success).toBe(true);
 
@@ -156,7 +156,7 @@ describe.skipIf(!enabled)('Firebase emulator API flow', () => {
     const { accessToken, user } = registered.json().data;
     const authorization = `Bearer ${accessToken}`;
     const created = await app.inject({ method: 'POST', url: '/api/v1/trips',
-      headers: { authorization, 'idempotency-key': randomUUID() }, payload: { name: 'Đà Nẵng', ownerName: 'An' } });
+      headers: { authorization, 'idempotency-key': randomUUID() }, payload: { name: 'Đà Nẵng', sharingMode: 'per-expense', ownerName: 'An' } });
     expect(created.statusCode).toBe(200);
     const tripId = created.json().data.id as string;
     const url = `/api/v1/trips/${tripId}/participants`;
@@ -242,7 +242,7 @@ describe.skipIf(!enabled)('Firebase emulator API flow', () => {
     const { accessToken, user } = registered.json().data;
     const authorization = `Bearer ${accessToken}`;
     const created = await app.inject({ method: 'POST', url: '/api/v1/trips',
-      headers: { authorization, 'idempotency-key': randomUUID() }, payload: { name: 'Hội An', ownerName: 'An' } });
+      headers: { authorization, 'idempotency-key': randomUUID() }, payload: { name: 'Hội An', sharingMode: 'per-expense', ownerName: 'An' } });
     expect(created.statusCode).toBe(200);
     const { id: tripId, ownerParticipantId } = created.json().data;
     const participant = await app.inject({ method: 'POST', url: `/api/v1/trips/${tripId}/participants`,
@@ -355,7 +355,7 @@ describe.skipIf(!enabled)('Firebase emulator API flow', () => {
     expect(signIn.ok).toBe(true);
     const { idToken } = await signIn.json() as { idToken: string };
     const headers = { authorization: `Bearer ${idToken}`, 'idempotency-key': randomUUID() };
-    const tripPayload = { name: 'Đà Lạt', ownerName: 'An' };
+    const tripPayload = { name: 'Đà Lạt', ownerName: 'An', sharingMode: 'per-expense' };
     const created = await app.inject({ method: 'POST', url: '/api/v1/trips', headers, payload: tripPayload });
     expect(created.statusCode).toBe(200);
     const { id: tripId, ownerParticipantId } = created.json().data;
@@ -409,10 +409,10 @@ describe.skipIf(!enabled)('Firebase emulator API flow', () => {
     const tripCountBeforeReplay = (await store.collection('trips').get()).size;
     const tripList = await app.inject({ method: 'GET', url: '/api/v1/trips', headers: { authorization: `Bearer ${idToken}` } });
     expect(tripList.json().data.items.some((trip: { id: string }) => trip.id === tripId)).toBe(true);
-    const replay = await app.inject({ method: 'POST', url: '/api/v1/trips', headers, payload: { name: 'Đà Lạt', ownerName: 'An' } });
+    const replay = await app.inject({ method: 'POST', url: '/api/v1/trips', headers, payload: { name: 'Đà Lạt', sharingMode: 'per-expense', ownerName: 'An' } });
     expect(replay.json().data.id).toBe(tripId);
     expect(replay.json().meta.replayed).toBe(true);
-    const reused = await app.inject({ method: 'POST', url: '/api/v1/trips', headers, payload: { name: 'Chuyến khác', ownerName: 'An' } });
+    const reused = await app.inject({ method: 'POST', url: '/api/v1/trips', headers, payload: { name: 'Chuyến khác', sharingMode: 'per-expense', ownerName: 'An' } });
     expect(reused.statusCode).toBe(409);
     expect((await store.collection('trips').get()).size).toBe(tripCountBeforeReplay);
     expect((await store.collection(`trips/${tripId}/auditEvents`).get()).size).toBe(1);

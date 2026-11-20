@@ -6,7 +6,7 @@ import { z } from 'zod';
 import { auth, db } from './firebase.js';
 import { ApiError, operationKey, requireTripAccess, requireUser, sendOperationResult } from './http.js';
 import { tripInput, participantInput, expenseInput } from './schemas.js';
-import { splitEqual, validateExact, expenseDelta, applyBalanceDelta, applyExpenseTotals, type Balance } from './domain/money.js';
+import { splitEqual, validateExact, expenseDelta, applyBalanceDelta, applyExpenseTotals, type Balance, type Share } from './domain/money.js';
 import { ensureUserProfileDocument } from './services/user-profile.js';
 import { createTripDocuments } from './database/trip.js';
 import { createParticipantDocuments } from './database/participant.js';
@@ -15,6 +15,7 @@ import { createAuditEvent } from './database/audit.js';
 import { createOperationDocument, readOperationResult, readOperationSnapshot } from './database/operation.js';
 import { readTripActor } from './services/trip-access.js';
 import type { releaseIdentity } from './release.js';
+import { isGroupEqual, projectGroup, readGroupLedger, writeGroupBalances } from './services/group-sharing.js';
 
 function parse<T>(schema: { safeParse: (value: unknown) => { success: true; data: T } | { success: false } }, body: unknown): T {
   const result = schema.safeParse(body);
@@ -130,6 +131,7 @@ export async function registerRoutes(app: FastifyInstance, release: ReturnType<t
       if (replay) return { outcome: replay, replayed: true };
       if (member.get('role') !== 'owner') throw new ApiError(403, 'FORBIDDEN', 'Chỉ chủ nhóm có thể thêm người.');
       if (trip.get('status') !== 'active' || trip.get('moderationStatus') !== 'normal') throw new ApiError(409, 'TRIP_NOT_WRITABLE', 'Chuyến đi đang khóa thao tác.');
+      if (isGroupEqual(trip)) throw new ApiError(422, 'GROUP_SHARING_AUTOMATIC', 'Mời tài khoản vào nhóm để tự tham gia chia đều.');
       if (trip.get('participantCount') >= 50) throw new ApiError(422, 'TRIP_LIMIT_REACHED', 'Chuyến đi đã đủ 50 người.');
       const now = Timestamp.now();
       const revision = trip.get('revision') + 1;
@@ -161,8 +163,8 @@ export async function registerRoutes(app: FastifyInstance, release: ReturnType<t
     const key = operationKey(request);
     const { tripId } = params(request.params);
     const body = parse(expenseInput, request.body);
-    let shares;
-    try { shares = body.splitMethod === 'equal' ? splitEqual(body.amountMinor, body.split.participantIds) : validateExact(body.amountMinor, body.split.shares); }
+    let requestedShares: Share[];
+    try { requestedShares = body.splitMethod === 'equal' ? splitEqual(body.amountMinor, body.split.participantIds) : validateExact(body.amountMinor, body.split.shares); }
     catch (error) { throw new ApiError(422, error instanceof Error ? error.message : 'INVALID_SPLIT', 'Cách chia tiền chưa hợp lệ.'); }
     // Empty receiptIds was absent from requests before D05; preserve their operation hash.
     const command = { method: request.method, canonicalPath: `/api/v1/trips/${tripId}/expenses`, body,
@@ -174,23 +176,30 @@ export async function registerRoutes(app: FastifyInstance, release: ReturnType<t
     const result = await store.runTransaction(async tx => {
       const opRef = store.doc(`users/${uid}/operations/${key}`);
       const tripRef = store.doc(`trips/${tripId}`);
-      const participantIds = [...new Set([body.payerParticipantId, ...shares.map(x => x.participantId)])];
+      const requestedIds = [...new Set([body.payerParticipantId, ...requestedShares.map(x => x.participantId)])];
       const [op, trip, member, user, ...participantSnaps] = await Promise.all([
         readOperationSnapshot(tx, opRef), tx.get(tripRef), tx.get(store.doc(`trips/${tripId}/memberships/${uid}`)), tx.get(store.doc(`users/${uid}`)),
-        ...participantIds.map(id => tx.get(store.doc(`trips/${tripId}/participants/${id}`))),
+        ...requestedIds.map(id => tx.get(store.doc(`trips/${tripId}/participants/${id}`))),
       ]);
       requireTripAccess(member, trip);
       if (user.get('status') === 'disabled') throw new ApiError(403, 'ACCOUNT_DISABLED', 'Tài khoản đang tạm khóa.');
       const replay = readOperationResult(op.data(), command, uid, tripId);
       if (replay) return { outcome: replay, replayed: true };
       if (trip.get('status') !== 'active' || trip.get('moderationStatus') !== 'normal') throw new ApiError(409, 'TRIP_NOT_WRITABLE', 'Chuyến đi đang khóa thao tác.');
+      const group = isGroupEqual(trip) ? await readGroupLedger(tx, trip) : undefined;
+      if (group) {
+        if (body.splitMethod !== 'equal') throw new ApiError(422, 'GROUP_EQUAL_SHARING_REQUIRED', 'Nhóm tự chia đều tổng chi cho các thành viên.');
+        if (!group.ids.includes(body.payerParticipantId)) throw new ApiError(422, 'INVALID_PARTICIPANTS', 'Người ứng tiền phải đang ở trong nhóm.');
+      }
+      const shares = group ? splitEqual(body.amountMinor, group.ids) : requestedShares;
+      const participantIds = [...new Set([body.payerParticipantId, ...shares.map(row => row.participantId)])];
       const expenseCount = trip.get('expenseCountAllTime'), activeExpenseCount = trip.get('activeExpenseCount');
       if (!Number.isSafeInteger(expenseCount) || !Number.isSafeInteger(activeExpenseCount) ||
           expenseCount < 0 || activeExpenseCount < 0 || activeExpenseCount > expenseCount) {
         throw new ApiError(409, 'PROJECTION_INVARIANT_FAILED', 'Số đếm chuyến chưa sẵn sàng.');
       }
       if (expenseCount >= 2000) throw new ApiError(422, 'TRIP_LIMIT_REACHED', 'Chuyến đi đã đạt giới hạn khoản chi.');
-      if (participantSnaps.some(p => !p.exists || p.get('status') !== 'active')) throw new ApiError(422, 'INVALID_PARTICIPANTS', 'Có người chưa thuộc chuyến đi hoặc đã ngừng tham gia.');
+      if (!group && participantSnaps.some(p => !p.exists || p.get('status') !== 'active')) throw new ApiError(422, 'INVALID_PARTICIPANTS', 'Có người chưa thuộc chuyến đi hoặc đã ngừng tham gia.');
       let totals;
       try { totals = applyExpenseTotals(trip.get('totalExpenseMinor'), trip.get('categoryTotalsMinor'), body.category, body.amountMinor, 1); }
       catch { throw new ApiError(409, 'PROJECTION_INVARIANT_FAILED', 'Thống kê chuyến chưa sẵn sàng.'); }
@@ -198,7 +207,7 @@ export async function registerRoutes(app: FastifyInstance, release: ReturnType<t
       const balanceSnaps = await Promise.all([...deltas.keys()].map(id => tx.get(store.doc(`trips/${tripId}/balances/${id}`))));
       if (balanceSnaps.some(snapshot => !snapshot.exists)) throw new ApiError(409, 'PROJECTION_INVARIANT_FAILED', 'Số dư chuyến chưa sẵn sàng.');
       const now = Timestamp.now();
-      const nextBalances = [...deltas].map(([, delta], index) => ({
+      const nextBalances = group ? projectGroup(group, totals.totalExpenseMinor, group.ids, new Map([[body.payerParticipantId, body.amountMinor]])) : [...deltas].map(([, delta], index) => ({
         ...applyBalanceDelta(balanceSnaps[index]!.data() as Balance, delta), updatedAt: now,
       }));
       const revision = trip.get('revision') + 1;
@@ -206,16 +215,18 @@ export async function registerRoutes(app: FastifyInstance, release: ReturnType<t
       if (!Number.isSafeInteger(revision) || !Number.isSafeInteger(ledgerVersion)) {
         throw new ApiError(409, 'PROJECTION_INVARIANT_FAILED', 'Phiên bản chuyến chưa sẵn sàng.');
       }
-      const document = createExpenseDocument({ id: expenseId, body, shares, actorUid: uid, now });
+      const effectiveBody = group && body.splitMethod === 'equal' ? { ...body, split: { participantIds: group.ids } } : body;
+      const document = createExpenseDocument({ id: expenseId, body: effectiveBody, shares, actorUid: uid, now });
       const receiptPlans = await planReceiptAttachments(tx, tripRef, expenseId, uid, body.receiptIds, [], now);
-      const response = { id: expenseId, ...body, currency: 'VND', splitInput: body.split, shares, status: 'active', version: 1 };
+      const response = { id: expenseId, ...effectiveBody, currency: 'VND', splitInput: effectiveBody.split, shares, status: 'active', version: 1 };
       tx.create(store.doc(`trips/${tripId}/expenses/${expenseId}`), document);
       applyReceiptAttachments(tx, tripRef, receiptPlans, { uid, displayName: user.get('displayName'), key,
         auditIds: receiptAuditIds, revision, ledgerVersion, now });
-      nextBalances.forEach(b => tx.set(store.doc(`trips/${tripId}/balances/${b.participantId}`), b));
-      participantSnaps.forEach((snapshot, index) => {
-        if (snapshot?.get('hasLedgerReferences') !== true) {
-          tx.update(store.doc(`trips/${tripId}/participants/${participantIds[index]}`), { hasLedgerReferences: true, updatedAt: now });
+      if (group) writeGroupBalances(tx, trip, nextBalances, now);
+      else nextBalances.forEach(b => tx.set(store.doc(`trips/${tripId}/balances/${b.participantId}`), b));
+      participantIds.forEach((id, index) => {
+        if ((group ? group.participants.get(id)?.hasLedgerReferences : participantSnaps[index]?.get('hasLedgerReferences')) !== true) {
+          tx.update(store.doc(`trips/${tripId}/participants/${id}`), { hasLedgerReferences: true, updatedAt: now });
         }
       });
       tx.update(tripRef, { expenseCountAllTime: expenseCount + 1, activeExpenseCount: activeExpenseCount + 1,

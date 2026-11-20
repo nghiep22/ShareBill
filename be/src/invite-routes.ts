@@ -12,6 +12,7 @@ import { cursorValue, decodeCursor, encodeCursor, timestampPoint, type CursorSco
 import { inviteDocumentSchema, inviteDto, inviteLookupSchema, inviteTokenHash, newInviteToken,
   resolveInvite, unavailableInvite, type InviteDocument } from './services/invites.js';
 import { increment, readTripActor, requireActiveProfile, requireOwner, requireWritable } from './services/trip-access.js';
+import { enrollGroupMember, isGroupEqual, projectGroup, readGroupLedger, writeGroupBalances } from './services/group-sharing.js';
 
 const tripParams = z.strictObject({ tripId: z.uuid() });
 const inviteParams = z.strictObject({ tripId: z.uuid(), id: z.uuid() });
@@ -133,11 +134,11 @@ export async function registerInviteRoutes(app: FastifyInstance) {
       if (data.usedCount >= data.maxUses) {
         const member = await tx.get(trip.ref.collection('memberships').doc(uid));
         if (member.get('status') !== 'active') return unavailableInvite();
-        return { data: { trip: { id: trip.id, name: trip.get('name') }, alreadyMember: true,
+        return { data: { trip: { id: trip.id, name: trip.get('name'), sharingMode: trip.get('sharingMode') ?? null }, alreadyMember: true,
           inviter: { displayName: null }, expiresAt: data.expiresAt.toDate().toISOString() } };
       }
       const inviter = await tx.get(store.doc(`users/${data.createdBy}`));
-      return { data: { trip: { id: trip.id, name: trip.get('name') },
+      return { data: { trip: { id: trip.id, name: trip.get('name'), sharingMode: trip.get('sharingMode') ?? null },
         inviter: { displayName: auditActorName(inviter.get('displayName')) }, expiresAt: data.expiresAt.toDate().toISOString() } };
     }, { readOnly: true });
   });
@@ -159,7 +160,9 @@ export async function registerInviteRoutes(app: FastifyInstance) {
       if (member.exists && member.get('status') !== 'active') {
         throw new ApiError(409, 'MEMBERSHIP_REMOVED', 'Bạn đã bị gỡ khỏi chuyến. Hãy nhờ chủ chuyến khôi phục quyền.');
       }
-      const now = Timestamp.now(), ledgerVersion = trip.get('ledgerVersion');
+      const now = Timestamp.now();
+      let ledgerVersion = trip.get('ledgerVersion');
+      let participantId = member.exists ? member.get('participantId') as string | null : null;
       let revision = trip.get('revision');
       if (!member.exists) {
         if (data.usedCount >= data.maxUses) return unavailableInvite();
@@ -167,27 +170,41 @@ export async function registerInviteRoutes(app: FastifyInstance) {
         if (!Number.isSafeInteger(count) || count < 1 || count >= 50) {
           throw new ApiError(409, 'MEMBERSHIP_LIMIT_REACHED', 'Chuyến đã đủ 50 tài khoản từng tham gia.');
         }
+        const group = isGroupEqual(trip) ? await readGroupLedger(tx, trip) : undefined;
+        const link = group ? await tx.get(tripRef.collection('participantLinks').doc(uid)) : undefined;
+        if (link?.exists) throw new ApiError(409, 'LINK_INVARIANT_FAILED', 'Liên kết thành viên chưa đồng nhất.');
+        const person = group ? enrollGroupMember(group, uid, auditActorName(user.get('displayName')) ?? 'Thành viên', uid, now) : undefined;
+        participantId = person?.participantId ?? null;
+        const groupIds = group && person ? [...group.ids, person.participantId].sort() : undefined;
+        const groupBalances = group && groupIds ? projectGroup(group, trip.get('totalExpenseMinor'), groupIds) : undefined;
+        if (group) ledgerVersion += 1;
         const newMember = membershipSchema.parse({ schemaVersion: 1, uid, role: 'member', status: 'active',
-          participantId: null, version: 1, joinedAt: now, updatedAt: now, removedAt: null });
+          participantId, version: 1, joinedAt: now, updatedAt: now, removedAt: null });
         revision = increment(revision);
         tx.create(memberRef, newMember);
+        if (person && group && groupBalances) {
+          tx.create(tripRef.collection('participants').doc(person.participantId), person.participant);
+          tx.create(tripRef.collection('participantLinks').doc(uid), person.link);
+          writeGroupBalances(tx, trip, groupBalances, now);
+        }
         tx.set(store.doc(`users/${uid}/tripRefs/${trip.id}`), tripRefSchema.parse({
           schemaVersion: 1, tripId: trip.id, status: 'active', joinedAt: now, updatedAt: now,
         }));
         tx.update(invite.ref, { usedCount: data.usedCount + 1, version: increment(data.version) });
-        tx.update(tripRef, { membershipCountAllTime: count + 1, revision, updatedAt: now });
+        tx.update(tripRef, { membershipCountAllTime: count + 1, revision, ledgerVersion,
+          ...(group && { participantCount: group.participants.size, equalParticipantIds: groupIds }), updatedAt: now });
         tx.update(tripRef.collection('signals').doc('current'), { revision, ledgerVersion, updatedAt: now });
         tx.create(tripRef.collection('auditEvents').doc(auditId), createAuditEvent({
           eventId: auditId, actorUid: uid, actorDisplayNameSnapshot: user.get('displayName'), action: 'membership.joined',
           entityType: 'membership', entityId: uid, before: null,
-          after: { id: uid, role: 'member', status: 'active', participantId: null, version: 1 }, reason: null,
+          after: { id: uid, role: 'member', status: 'active', participantId, version: 1 }, reason: null,
           revision, ledgerVersion, operationKey: key, createdAt: now,
         }));
       }
       const outcome = createOperationDocument(command, { actorUid: uid, tripId: trip.id,
         resourceType: 'membership', resourceId: uid, httpStatus: 200,
         responseSnapshot: { data: { tripId: trip.id, uid, status: member.exists ? 'already-member' : 'joined',
-          participantId: member.exists ? member.get('participantId') : null, version: member.exists ? member.get('version') : 1 },
+          participantId, version: member.exists ? member.get('version') : 1 },
         meta: { revision, ledgerVersion } }, committedAt: now });
       tx.create(opRef, outcome);
       return { outcome, replayed: false };

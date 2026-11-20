@@ -142,7 +142,7 @@ export async function runSmoke(config, { env = process.env, fetcher = fetch } = 
       let trip, peer, expense, expenseBody, expenseKey;
       const day = new Date().toISOString().slice(0, 10);
       await check('create-isolated-trip', async () => {
-        trip = await command('/trips', { name: 'SMOKE ' + randomUUID(), ownerName: 'Smoke owner', timezone: 'UTC' });
+        trip = await command('/trips', { name: 'SMOKE ' + randomUUID(), sharingMode: 'per-expense', ownerName: 'Smoke owner', timezone: 'UTC' });
         ensure(trip.id && trip.ownerParticipantId, 'INVALID_TRIP');
         report.tripId = trip.id;
         peer = await command('/trips/' + trip.id + '/participants', { displayName: 'Smoke participant' });

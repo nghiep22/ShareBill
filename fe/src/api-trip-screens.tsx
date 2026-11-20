@@ -86,6 +86,7 @@ export function JoinPreview({ preview, onJoin }: { preview: InvitePreview; onJoi
       <span className="tile-icon"><UserPlus size={21} aria-hidden /></span><h2>{preview.trip.name}</h2>
       {preview.alreadyMember ? <p>Bạn đã là thành viên của chuyến đi này.</p> : <>
         <p>{preview.inviter.displayName ?? 'Chủ chuyến'} đã mời bạn tham gia chuyến đi.</p>
+        {preview.trip.sharingMode !== 'per-expense' && <p className="inline-note">Vào nhóm là tự chia đều tổng chi, gồm cả các khoản đã có trước khi bạn tham gia. Tiền bạn ứng sẽ được trừ khi tính số cần trả.</p>}
         <p>Hết hạn {dateTime.format(new Date(preview.expiresAt))}</p>
       </>}
       <button className="primary-button" onClick={onJoin}>{preview.alreadyMember ? 'Mở chuyến đi' : 'Tham gia chuyến đi'}</button>
@@ -125,20 +126,23 @@ export function MemberAccounts({ data, accounts, tripId, api, run }: {
   }
 
   return <>
-    <p className="inline-note money-explainer">Tài khoản truy cập cho phép đăng nhập vào chuyến. Chủ chuyến bấm nút quản lý cạnh tài khoản → Liên kết người chia tiền → chọn đúng tên. Liên kết chỉ xác định số dư của tài khoản; không chia lại khoản chi cũ.</p>
+    <p className="inline-note money-explainer">{data.remote?.sharingMode === 'group-equal' ? data.trip.closed
+      ? 'Chuyến đã chốt giữ nguyên phần chia lúc chốt. Gỡ quyền truy cập không đổi tiền; khi mở lại, tổng chi sẽ được chia lại cho các tài khoản còn trong nhóm.'
+      : 'Mỗi tài khoản đang trong nhóm là một người chia tiền. Tổng chi tự chia đều, kể cả các khoản trước khi người đó tham gia. Chỉ cần gửi lời mời và vào nhóm, không cần liên kết hay chọn lại khoản chi.'
+      : 'Tài khoản truy cập cho phép đăng nhập vào chuyến. Chủ chuyến bấm nút quản lý cạnh tài khoản → Liên kết người chia tiền → chọn đúng tên. Liên kết chỉ xác định số dư của tài khoản; không chia lại khoản chi cũ.'}</p>
     <div className="card rows">
       {!accounts.length && <Empty>Chưa có tài khoản trong chuyến.</Empty>}
       {accounts.map(account => <div className="list-row member-row" key={account.uid}>
         <Avatar member={account.participantId ? memberFor(data, account.participantId) : { id: account.uid, tone: 1, name: label(account) }} />
         <div className="row-text"><strong>{label(account)}{ownUid === account.uid && ' (bạn)'}</strong>
-          <span>{account.status === 'removed' ? 'Đã gỡ quyền' : account.role === 'owner' ? 'Chủ chuyến' : 'Thành viên'} · {account.participantId ? 'Chia tiền với tên ' + nameOf(data, account.participantId) : 'Chưa liên kết người chia tiền'}</span>
+          <span>{account.status === 'removed' ? 'Đã gỡ quyền' : account.role === 'owner' ? 'Chủ chuyến' : 'Thành viên'} · {data.remote?.sharingMode === 'group-equal' ? data.trip.closed ? 'Giữ phần chia lúc chốt' : account.status === 'active' ? 'Tự chia đều tổng chi' : 'Không còn tính vào số người chia' : account.participantId ? 'Chia tiền với tên ' + nameOf(data, account.participantId) : 'Chưa liên kết người chia tiền'}</span>
         </div>
         {owner && account.role !== 'owner' && <button className="icon-button member-settings" aria-label={'Quản lý tài khoản ' + label(account)} onClick={() => setChosen({ ...account, tripVersion: version })}><Settings2 size={18} aria-hidden /></button>}
       </div>)}
     </div>
     {chosen && !action && <Dialog title={'Quản lý ' + label(chosen)} onClose={close}>
       <div className="member-actions">
-        {writable && (chosen.status === 'active' || chosen.participantId) && <button className="secondary-button" onClick={() => setAction('link')}>{actionTitle.link}</button>}
+        {data.remote?.sharingMode !== 'group-equal' && writable && (chosen.status === 'active' || chosen.participantId) && <button className="secondary-button" onClick={() => setAction('link')}>{actionTitle.link}</button>}
         {writable && chosen.status === 'active' && chosen.participantId && !memberFor(data, chosen.participantId)?.inactive &&
           <button className="secondary-button" onClick={() => setAction('transfer')}>{actionTitle.transfer}</button>}
         {chosen.status === 'active' ? <button className="danger-button" onClick={() => setAction('remove')}>{actionTitle.remove}</button>
@@ -153,7 +157,11 @@ export function MemberAccounts({ data, accounts, tripId, api, run }: {
           {chosen.status === 'active' && data.members.filter(member => !member.inactive && (!member.linked || member.id === chosen.participantId))
             .map(member => <option key={member.id} value={member.id}>{nameOf(data, member.id)}</option>)}
         </select></label>}
-        {action === 'remove' && <p>Tài khoản sẽ mất quyền mở chuyến. Khoản chi và số dư đã ghi vẫn được giữ.</p>}
+        {action === 'remove' && <p>{data.remote?.sharingMode === 'group-equal' ? data.trip.closed
+          ? 'Tài khoản sẽ mất quyền mở chuyến. Phần chia và số dư lúc chốt được giữ nguyên; mở lại chuyến sẽ chia lại cho các tài khoản còn trong nhóm.'
+          : 'Tài khoản sẽ mất quyền mở chuyến và không còn chịu phần tổng chi. Tổng chi sẽ chia lại cho những người còn trong nhóm. Tiền đã ứng, đã chuyển và đã nhận vẫn được giữ, nên công nợ có thể thay đổi.'
+          : 'Tài khoản sẽ mất quyền mở chuyến. Khoản chi và số dư đã ghi vẫn được giữ.'}</p>}
+        {action === 'restore' && data.remote?.sharingMode === 'group-equal' && <p>Tài khoản sẽ vào lại nhóm và cùng chia toàn bộ tổng chi, kể cả chi phí trước đó. Tiền đã ứng và các khoản chuyển đã xác nhận vẫn được giữ; công nợ sẽ được tính lại.</p>}
         {action === 'transfer' && <p>Thành viên này sẽ quản lý chuyến đi. Bạn sẽ chuyển thành thành viên.</p>}
         <label>Lý do<input name="reason" required maxLength={300} /></label>
         {error && <p className="error" role="alert">{error}</p>}

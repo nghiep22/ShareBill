@@ -41,7 +41,7 @@ describe.skipIf(!enabled)('Itinerary and user support', () => {
   }
 
   async function createTrip(owner: Actor) {
-    const result = await send(api + '/trips', owner, { name: 'Đà Lạt', ownerName: 'An' });
+    const result = await send(api + '/trips', owner, { name: 'Đà Lạt', sharingMode: 'per-expense', ownerName: 'An' });
     expect(result.statusCode, result.body).toBe(200);
     const id = result.json().data.id as string;
     return { id, path: api + '/trips/' + id };

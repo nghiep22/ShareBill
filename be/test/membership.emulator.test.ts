@@ -35,7 +35,7 @@ describe.skipIf(!enabled)('S08 invites and membership lifecycle', () => {
   }
   async function fixture() {
     const owner = await register('An');
-    const response = await post('/api/v1/trips', { name: 'Đà Lạt', ownerName: 'An' }, owner);
+    const response = await post('/api/v1/trips', { name: 'Đà Lạt', sharingMode: 'per-expense', ownerName: 'An' }, owner);
     expect(response.statusCode).toBe(200);
     const { id, ownerParticipantId } = response.json().data;
     const path = `/api/v1/trips/${id}`, trip = db().doc(`trips/${id}`);
@@ -87,7 +87,7 @@ describe.skipIf(!enabled)('S08 invites and membership lifecycle', () => {
     expect((await get(`/api/v1/operations/${key}`, f.owner)).json().data.resourceType).toBe('invite');
     const preview = await post('/api/v1/invites/preview', { token: data.token }, outsider);
     expect(preview.statusCode).toBe(200);
-    expect(preview.json().data).toEqual({ trip: { id: f.id, name: 'Đà Lạt' }, inviter: { displayName: 'An' }, expiresAt: data.expiresAt });
+    expect(preview.json().data).toEqual({ trip: { id: f.id, name: 'Đà Lạt', sharingMode: 'per-expense' }, inviter: { displayName: 'An' }, expiresAt: data.expiresAt });
     expect((await f.trip.collection('invites').doc(data.id).get()).get('usedCount')).toBe(0);
     const unauthenticated = await app.inject({ method: 'POST', url: '/api/v1/invites/preview', payload: { token: data.token } });
     expect(unauthenticated.statusCode).toBe(401);

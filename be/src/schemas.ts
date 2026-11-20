@@ -8,6 +8,7 @@ const timezoneInput = z.string().trim().min(1).max(80).refine(value => {
 export const tripInput = z.strictObject({
   name: z.string().trim().min(1).max(100),
   ownerName: z.string().trim().min(1).max(80),
+  sharingMode: z.enum(['group-equal', 'per-expense']).optional(),
   destination: z.string().trim().min(1).max(150).nullable().optional(),
   note: z.string().trim().max(1000).nullable().optional(),
   startDate: z.iso.date().nullable().optional(),

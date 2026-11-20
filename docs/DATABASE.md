@@ -482,6 +482,8 @@ Checker cần kiểm shape/type, FK cùng chuyến, owner unique, liên kết ba
 
 Checker chỉ đọc và xuất diff tổng hợp. Scheduled reconcile không tự sửa tiền. Repair cần backup, maintenance, dry-run diff, expected ledgerVersion, actor/reason và audit; sau repair chạy checker lại. Tiền nguồn không bao giờ được sửa để làm “hết cảnh báo”.
 
+Bản [B19 local/Emulator](PROJECTION_REPAIR.md) đã triển khai `projection_repair` trong maintenanceJobs: snapshot/diff riêng, tạm khóa chuyến, kiểm version/updateTime và nguồn trong transaction, ghi projection + signal + job + admin audit, rồi chạy checker. Cloud apply vẫn bị chặn; bản sao scope này chưa thay cho backup/restore toàn dự án.
+
 ### 10.2. Retention đề xuất cho P0
 
 Đây là lựa chọn vận hành dự kiến, không phải TTL policy đã bật hay yêu cầu pháp lý.
@@ -501,6 +503,8 @@ Checker chỉ đọc và xuất diff tổng hợp. Scheduled reconcile không t�
 TTL không xóa subcollections và không bảo đảm xóa ngay khi hết hạn. Xóa document bằng SDK cũng không tự xóa cây con. Bất kỳ workflow xóa chuyến/user nào sau P0 phải liệt kê subcollections, Storage objects, Auth identity và operation tombstones trước khi triển khai. [TTL](https://firebase.google.com/docs/firestore/ttl), [xóa document và subcollections](https://firebase.google.com/docs/firestore/manage-data/delete-data).
 
 ### 10.3. Backup và phục hồi
+
+Đã có [diễn tập local và báo cáo](RESTORE_REHEARSAL.md) cho native export/import Auth/Firestore/Storage, collection con, Rules/indexes, đăng nhập, ảnh đúng generation, checker và repair. Bộ này luôn dùng project/cổng Emulator riêng; không áp số đo local thành nghiệm thu RPO/RTO cloud.
 
 - Mục tiêu thiết kế ban đầu: RPO <=24 giờ, RTO <=4 giờ cho sự cố dữ liệu quy mô P0; chỉ xác nhận đạt sau một buổi restore rehearsal có đo thời gian.
 - Thiết lập backup Firestore hằng ngày, đề xuất retention 30 ngày theo khả năng gói đang dùng. Backup/export không thay việc version index/Rules trong Git.

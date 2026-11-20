@@ -31,7 +31,7 @@ async function makeLedger() {
       return response.json();
     }
 
-    const created = await post('/api/v1/trips', { name: 'Đối soát', ownerName: 'An' });
+    const created = await post('/api/v1/trips', { name: 'Đối soát', sharingMode: 'per-expense', ownerName: 'An' });
     const tripId = created.data.id as string;
     const owner = created.data.ownerParticipantId as string;
     const base = `/api/v1/trips/${tripId}`;

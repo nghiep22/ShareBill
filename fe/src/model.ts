@@ -45,6 +45,8 @@ export type Activity = { id: string; at: string; title: string; detail: string; 
 export type Trip = { name: string; place: string; start: string; end: string; closed: boolean; note?: string; cover?: boolean; timezone?: string };
 export type BalanceLine = { participantId: string; paidMinor: number; owedMinor: number; sentMinor: number; receivedMinor: number; netMinor: number };
 export type RemoteSnapshot = {
+  sharingMode?: 'group-equal' | 'per-expense';
+  equalParticipantIds?: string[];
   tripId: string;
   expenseQuery?: string;
   actorUid: string;
@@ -105,6 +107,7 @@ export const canEditExpense = (data: Demo, expense: Expense) =>
   canWrite(data) && !expense.voided && (isOwner(data) || expense.createdBy === (data.remote?.actorUid ?? viewerOf(data)));
 export const settlementStatus = (entry: Settlement) => entry.status ?? (entry.confirmed ? 'confirmed' : 'pending');
 export const memberFor = (data: Demo, id: string) => data.members.find(member => member.id === id);
+export const sharingMembers = (data: Demo) => data.members.filter(member => data.remote?.sharingMode === 'group-equal' ? data.remote.equalParticipantIds?.includes(member.id) : !member.inactive);
 export function nameOf(data: Demo, id: string) {
   const member = memberFor(data, id) ?? data.members.find(item => item.uid === id);
   if (!member) return 'Thành viên';

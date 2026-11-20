@@ -29,7 +29,7 @@ describe.skipIf(!enabled)('legacy trip migration slices', () => {
         expect(response.statusCode, response.body).toBe(200);
         return response.json().data;
       }
-      const tripData = await post('/api/v1/trips', { name: 'Migration local', ownerName: 'An' });
+      const tripData = await post('/api/v1/trips', { name: 'Migration local', sharingMode: 'per-expense', ownerName: 'An' });
       const tripId = tripData.id as string;
       const owner = tripData.ownerParticipantId as string;
       const trip = store.doc(`trips/${tripId}`);

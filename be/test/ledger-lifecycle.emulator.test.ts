@@ -29,7 +29,7 @@ describe.skipIf(!enabled)('S09 ledger editing and trip lifecycle', () => {
   }
   async function fixture(linked = false) {
     const owner = await register('An');
-    const response = await send('POST', '/api/v1/trips', { name: 'Đà Lạt', ownerName: 'An' }, owner);
+    const response = await send('POST', '/api/v1/trips', { name: 'Đà Lạt', sharingMode: 'per-expense', ownerName: 'An' }, owner);
     expect(response.statusCode).toBe(200);
     const { id, ownerParticipantId } = response.json().data;
     const path = `/api/v1/trips/${id}`, trip = db().doc(`trips/${id}`);

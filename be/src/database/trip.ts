@@ -9,6 +9,7 @@ export type TripCreateData = {
   auditEventId: string;
   ownerUid: string;
   ownerName: string;
+  sharingMode?: 'group-equal' | 'per-expense';
   actorDisplayNameSnapshot?: unknown;
   name: string;
   destination?: string | null;
@@ -31,6 +32,8 @@ export function createTripDocuments(input: TripCreateData) {
     ownerUid, createdBy: ownerUid, status: 'active', moderationStatus: 'normal', moderationVersion: 1,
     moderationReason: null, moderatedAt: null, moderatedBy: null, inviteEpoch: 1,
     version: 1, revision: 1, ledgerVersion: 0, participantCount: 1, membershipCountAllTime: 1,
+    sharingMode: input.sharingMode ?? 'group-equal',
+    ...(input.sharingMode !== 'per-expense' && { equalParticipantIds: [participantId] }),
     expenseCountAllTime: 0, activeExpenseCount: 0, settlementCountAllTime: 0, pendingSettlementCount: 0,
     totalExpenseMinor: 0, categoryTotalsMinor, createdAt: now, updatedAt: now, archivedAt: null,
   } as const;

@@ -32,7 +32,7 @@ export function Trips({ state, onOpen, onStatus, remoteArchived, onMore, loading
         <span className="trip-tile-body">
           <span><MapPin size={15} aria-hidden /> {data.trip.place || 'Chưa chọn địa điểm'}</span>
           <span><CalendarDays size={15} aria-hidden /> {dateRange(data.trip)}</span>
-          <span className="trip-tile-total"><span>{data.remote?.participantCount ?? data.members.filter(member => !member.inactive).length} thành viên <span aria-hidden>·</span> <Amount value={data.remote?.total ?? activeExpenses(data).reduce((sum, expense) => sum + expense.amount, 0)} /></span><ChevronRight size={18} aria-hidden /></span>
+          <span className="trip-tile-total"><span>{data.remote?.equalParticipantIds?.length ?? data.remote?.participantCount ?? data.members.filter(member => !member.inactive).length} thành viên <span aria-hidden>·</span> <Amount value={data.remote?.total ?? activeExpenses(data).reduce((sum, expense) => sum + expense.amount, 0)} /></span><ChevronRight size={18} aria-hidden /></span>
         </span>
       </button>)}
     </div>

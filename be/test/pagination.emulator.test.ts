@@ -21,7 +21,7 @@ describe.skipIf(!enabled)('paginated read API', () => {
       for (let i = 0; i < 23; i++) {
         const result = await app.inject({ method: 'POST', url: '/api/v1/trips', headers: {
           ...headers, 'idempotency-key': randomUUID(),
-        }, payload: { name: `Chuyến ${i}`, ownerName: 'An' } });
+        }, payload: { name: `Chuyến ${i}`, sharingMode: 'per-expense', ownerName: 'An' } });
         expect(result.statusCode, result.body).toBe(200);
         ids.push(result.json().data.id);
       }
@@ -73,7 +73,7 @@ describe.skipIf(!enabled)('paginated read API', () => {
         expect(response.statusCode, response.body).toBe(200);
         return response.json().data;
       }
-      const trip = await post('/api/v1/trips', { name: 'Phân trang', ownerName: 'An' }, createKey);
+      const trip = await post('/api/v1/trips', { name: 'Phân trang', sharingMode: 'per-expense', ownerName: 'An' }, createKey);
       const tripId = trip.id as string, owner = trip.ownerParticipantId as string;
       const guest = (await post(`/api/v1/trips/${tripId}/participants`, { displayName: 'Bình' })).id as string;
       const expenseIds: string[] = [];

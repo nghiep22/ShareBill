@@ -1,4 +1,5 @@
 import type { FastifyInstance } from 'fastify';
+import { isGroupEqual, projectGroup, readGroupLedger, writeGroupBalances } from './services/group-sharing.js';
 import { randomUUID } from 'node:crypto';
 import { FieldValue, Timestamp } from 'firebase-admin/firestore';
 import { z } from 'zod';
@@ -198,14 +199,17 @@ export async function registerFinanceRoutes(app: FastifyInstance): Promise<void>
         expense.get('category') as ExpenseCategory, amount, -1); }
       catch { throw new ApiError(409, 'PROJECTION_INVARIANT_FAILED', 'Thống kê chuyến chưa sẵn sàng.'); }
       const deltas = expenseDelta(amount, payer, shares, -1);
-      const snaps = await Promise.all([...deltas.keys()].map(pid => tx.get(store.doc(`trips/${tripId}/balances/${pid}`))));
+      const group = isGroupEqual(trip) ? await readGroupLedger(tx, trip) : undefined;
+      const groupBalances = group ? projectGroup(group, totals.totalExpenseMinor, group.ids, new Map([[payer, -amount]])) : undefined;
+      const snaps = group ? [] : await Promise.all([...deltas.keys()].map(pid => tx.get(store.doc(`trips/${tripId}/balances/${pid}`))));
       const balances = balancesFrom(snaps);
       const now = Timestamp.now(), revision = trip.get('revision') + 1, ledgerVersion = trip.get('ledgerVersion') + 1;
       if (!Number.isSafeInteger(revision) || !Number.isSafeInteger(ledgerVersion)) {
         throw new ApiError(409, 'PROJECTION_INVARIANT_FAILED', 'Phiên bản chuyến chưa sẵn sàng.');
       }
       const response = { id, status: 'void', version: expectedVersion + 1 };
-      [...deltas].forEach(([pid, delta], index) => tx.set(store.doc(`trips/${tripId}/balances/${pid}`),
+      if (groupBalances) writeGroupBalances(tx, trip, groupBalances, now);
+      else [...deltas].forEach(([pid, delta], index) => tx.set(store.doc(`trips/${tripId}/balances/${pid}`),
         { ...applyBalanceDelta(balances[index]!, delta), updatedAt: now }));
       tx.update(expenseRef, { status: 'void', version: expectedVersion + 1, voidReason: body.reason, voidedBy: uid, voidedAt: now, updatedBy: uid, updatedAt: now });
       tx.update(tripRef, { activeExpenseCount: activeExpenseCount - 1, ...totals, revision, ledgerVersion, updatedAt: now });

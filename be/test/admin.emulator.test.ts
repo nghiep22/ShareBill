@@ -59,7 +59,7 @@ describe.skipIf(!enabled)('platform administration', () => {
     expect(dashboard.statusCode, dashboard.body).toBe(200);
     expect(dashboard.json().data.users).toBeGreaterThan(0);
     expect((await send('GET', root + '/system', undefined, google)).statusCode).toBe(200);
-    const trip = await send('POST', '/api/v1/trips', { name: 'Chuyến riêng', ownerName: 'An' }, password);
+    const trip = await send('POST', '/api/v1/trips', { name: 'Chuyến riêng', sharingMode: 'per-expense', ownerName: 'An' }, password);
     const id = trip.json().data.id;
     expect((await send('GET', '/api/v1/trips/' + id + '/overview', undefined, google)).statusCode).toBe(404);
     const metadata = await send('GET', root + '/trips/' + id, undefined, google);
@@ -89,6 +89,24 @@ describe.skipIf(!enabled)('platform administration', () => {
     } finally { await ref.delete(); }
   });
 
+  it('exposes only a validated repair count and keeps the backup, actor reason and source diff outside the system DTO', async () => {
+    const operator = await account(); await grant(operator);
+    const id = 'projection-repair-' + randomUUID(), ref = db().doc('maintenanceJobs/' + id);
+    await ref.set({ kind: 'projection_repair', status: 'succeeded', resultSummary: { changedDocuments: 4 }, attempts: 1,
+      backupRef: 'private-repair-backup', planDigest: 'private-repair-digest', reason: 'private-repair-reason',
+      privateDiff: 'private-repair-money', updatedAt: Timestamp.now() });
+    try {
+      const response = await send('GET', root + '/system', undefined, operator);
+      expect(response.statusCode).toBe(200);
+      expect(response.json().data.maintenance.find((job: { id: string }) => job.id === id)).toMatchObject({
+        kind: 'projection_repair', repairSummary: { changedDocuments: 4 } });
+      expect(response.body).not.toContain('private-repair');
+      await ref.update({ 'resultSummary.unexpected': 'private-repair-extra' });
+      const invalid = await send('GET', root + '/system', undefined, operator);
+      expect(invalid.json().data.maintenance.find((job: { id: string }) => job.id === id).repairSummary).toBeNull();
+    } finally { await ref.delete(); }
+  });
+
   it('processes a ticket with idempotent notes, version checks, private audit and safe user DTOs', async () => {
     const [operator, reporter] = await Promise.all([account(), account(false)]);
     await grant(operator);
@@ -113,11 +131,15 @@ describe.skipIf(!enabled)('platform administration', () => {
   it('suspends a trip without changing the ledger and serializes concurrent moderation', async () => {
     const [operator, owner] = await Promise.all([account(), account(false)]);
     await grant(operator);
-    const trip = await send('POST', '/api/v1/trips', { name: 'Kiểm khóa chuyến', ownerName: 'An' }, owner);
+    const trip = await send('POST', '/api/v1/trips', { name: 'Kiểm khóa chuyến', sharingMode: 'per-expense', ownerName: 'An' }, owner);
     const id = trip.json().data.id, ref = db().doc(`trips/${id}`), prefix = root + '/trips/' + id;
+      const balancesBefore = (await ref.collection('balances').get()).docs.map(doc => doc.data());
+      await ref.collection('signals').doc('current').delete(); // A missing projection must not prevent establishing the maintenance fence.
     const result = await Promise.all([1, 2].map(() => send('POST', prefix + '/suspend', { reason: 'Đang đối chiếu yêu cầu hỗ trợ' }, operator, 1)));
     expect(result.map(row => row.statusCode).sort()).toEqual([200, 409]);
     expect((await ref.get()).data()).toMatchObject({ moderationStatus: 'suspended', ledgerVersion: 0 });
+      expect((await ref.collection('signals').doc('current').get()).data()).toMatchObject({ schemaVersion: 1, ledgerVersion: 0, revision: (await ref.get()).get('revision') });
+      expect((await ref.collection('balances').get()).docs.map(doc => doc.data())).toEqual(balancesBefore);
     expect((await send('GET', '/api/v1/trips/' + id + '/overview', undefined, owner)).statusCode).toBe(200);
     expect((await send('POST', '/api/v1/trips/' + id + '/participants', { displayName: 'Bình' }, owner)).json().error.code).toBe('TRIP_NOT_WRITABLE');
     expect((await send('POST', prefix + '/resume', { reason: 'Đã kiểm tra và cho phép tiếp tục' }, operator, 2)).statusCode).toBe(200);

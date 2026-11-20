@@ -54,6 +54,9 @@ const itinerarySnapshot = z.strictObject({
 const reason = z.string().min(1).max(300);
 
 const specs = {
+  'trip.sharing_equal': { entityType: 'trip',
+    before: z.strictObject({ id: z.uuid(), sharingMode: z.enum(['group-equal', 'per-expense']).nullable(), equalParticipantIds: z.array(z.uuid()).max(50) }),
+    after: z.strictObject({ id: z.uuid(), sharingMode: z.literal('group-equal'), equalParticipantIds: z.array(z.uuid()).min(1).max(50) }), reason: z.null() },
   'trip.created': { entityType: 'trip', before: z.null(), after: tripSnapshot, reason: z.null() },
   'trip.updated': { entityType: 'trip', before: tripMetadataSnapshot, after: tripMetadataSnapshot, reason: z.null() },
   'trip.owner_transferred': { entityType: 'trip', before: ownerSnapshot, after: ownerSnapshot, reason },
@@ -90,7 +93,7 @@ const specs = {
   'itinerary.suggestion_declined': { entityType: 'itinerary', before: itinerarySnapshot.extend({ status: z.literal('pending') }), after: itinerarySnapshot.extend({ status: z.literal('declined') }), reason: z.null() },
 } as const;
 
-const actions = ['trip.created', 'trip.updated', 'participant.created', 'participant.updated',
+const actions = ['trip.created', 'trip.updated', 'trip.sharing_equal', 'participant.created', 'participant.updated',
   'participant.linked', 'participant.unlinked', 'expense.created', 'expense.voided',
   'settlement.created', 'settlement.confirmed', 'trip.owner_transferred', 'membership.joined',
   'membership.removed', 'membership.restored', 'invite.created', 'invite.revoked',
@@ -196,14 +199,15 @@ export const auditEventSchema = z.strictObject({
     context.addIssue({ code: 'custom', message: 'invalid owner transfer', path: ['after'] });
   }
   if (event.action === 'membership.joined' && (event.after.role !== 'member' ||
-      event.after.status !== 'active' || event.after.participantId !== null || event.after.version !== 1)) {
+      event.after.status !== 'active' || event.after.version !== 1)) {
     context.addIssue({ code: 'custom', message: 'invalid joined membership', path: ['after'] });
   }
   if ((event.action === 'membership.removed' || event.action === 'membership.restored') &&
       (event.before?.status !== (event.action === 'membership.removed' ? 'active' : 'removed') ||
         event.after.status !== (event.action === 'membership.removed' ? 'removed' : 'active') ||
         event.before.role !== 'member' || event.after.role !== 'member' ||
-        event.before.participantId !== event.after.participantId || event.after.version !== (event.before.version as number) + 1)) {
+        (event.before.participantId !== event.after.participantId && !(event.action === 'membership.restored' && event.before.participantId === null)) ||
+        event.after.version !== (event.before.version as number) + 1)) {
     context.addIssue({ code: 'custom', message: 'invalid membership transition', path: ['after'] });
   }
   if (event.action === 'invite.created' &&

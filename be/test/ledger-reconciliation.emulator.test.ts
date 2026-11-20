@@ -15,7 +15,7 @@ afterAll(async () => { await store?.terminate(); });
 
 async function fixture() {
   const tripId = randomUUID(), participantId = randomUUID(), ownerUid = randomUUID(), operationKey = randomUUID(), now = Timestamp.now();
-  const input = { tripId, participantId, ownerUid, operationKey, auditEventId: randomUUID(), now, name: 'Private fixture trip', ownerName: 'Private fixture owner' };
+  const input = { tripId, participantId, ownerUid, operationKey, auditEventId: randomUUID(), now, name: 'Private fixture trip', sharingMode: 'per-expense' as const, ownerName: 'Private fixture owner' };
   const docs = createTripDocuments(input), trip = store!.doc('trips/' + tripId), batch = store!.batch();
   batch.create(trip, docs.trip);
   for (const [path, value] of Object.entries({ ['memberships/' + ownerUid]: docs.membership, ['participants/' + participantId]: docs.participant,
@@ -23,7 +23,7 @@ async function fixture() {
     'signals/current': docs.signal, ['auditEvents/' + input.auditEventId]: docs.audit })) batch.create(trip.collection(path.split('/')[0]!).doc(path.split('/')[1]!), value);
   batch.create(store!.doc('users/' + ownerUid), createUserDocument({ uid: ownerUid, displayName: 'Fixture', email: 'private-fixture@example.test' }, now));
   batch.create(store!.doc('users/' + ownerUid + '/tripRefs/' + tripId), docs.tripRef);
-  batch.create(store!.doc('users/' + ownerUid + '/operations/' + operationKey), createOperationDocument({ method: 'POST', canonicalPath: '/api/v1/trips', body: { name: input.name, ownerName: input.ownerName } },
+  batch.create(store!.doc('users/' + ownerUid + '/operations/' + operationKey), createOperationDocument({ method: 'POST', canonicalPath: '/api/v1/trips', body: { name: input.name, sharingMode: 'per-expense', ownerName: input.ownerName } },
     { actorUid: ownerUid, tripId, resourceId: tripId, resourceType: 'trip', httpStatus: 200, responseSnapshot: { data: { id: tripId }, meta: {} }, committedAt: now }));
   await batch.commit();
   return { tripId, trip, ownerUid, participantId, job: store!.doc('maintenanceJobs/' + reconciliationJobId(tripId)) };

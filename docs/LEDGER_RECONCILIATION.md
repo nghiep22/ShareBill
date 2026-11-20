@@ -31,10 +31,10 @@ Kết quả đang quét chưa là kết luận toàn dự án. Checkpoint là ti
 
 Trong `/admin` → **Hệ thống**, phần bảo trì hiện “Đối soát sổ tiền”, trạng thái, số chuyến đã kiểm, số chuyến cần kiểm tra, tổng sai lệch và số lỗi quét. API chỉ trả năm bộ đếm đã kiểm schema; không trả checkpoint, lease owner, nội dung ledger hoặc diff tài liệu.
 
-`RECONCILE_ISSUES_FOUND` cần operator chạy checker chi tiết trong môi trường tin cậy để xác định sai lệch. `RECONCILE_SCAN_FAILED` cần kiểm credential, giới hạn, dữ liệu legacy và tần suất thay đổi. Worker chỉ ghi metadata job; không sửa số dư, khoản chi, settlement, quyền, audit hoặc signal. Repair cần backup/fence/diff/version và vẫn là công việc riêng của S19.
+`RECONCILE_ISSUES_FOUND` cần operator chạy checker chi tiết trong môi trường tin cậy để xác định sai lệch. `RECONCILE_SCAN_FAILED` cần kiểm credential, giới hạn, dữ liệu legacy và tần suất thay đổi. Worker chỉ ghi metadata job; không sửa số dư, khoản chi, settlement, quyền, audit hoặc signal. [Repair B19](PROJECTION_REPAIR.md) là CLI riêng có snapshot/fence/diff/version, hiện chỉ áp trên Emulator.
 
 ## Kiểm chứng và phần còn mở
 
 Emulator có bộ kiểm thử riêng trong named database để tách dữ liệu người phát triển. Đã kiểm dữ liệu thật của checker và fingerprint toàn cây chuyến/user trước-sau, projection hỏng, chạy trùng, crash/reclaim, lease hết hạn, retry có giới hạn, phục hồi lỗi tạm thời, cooldown, phân trang và trường hợp chuyến retry bị xóa. API admin có kiểm thử lọc dữ liệu; hành trình browser operator kiểm phần tổng hợp trong Hệ thống.
 
-CLI hiện chạy một lượt, chưa cấu hình scheduler cloud. Có thể đưa vào trusted runner định kỳ sau khi chốt identity, giới hạn lượt và theo dõi exit code; không thêm vòng lặp vô hạn hay tự repair. Lịch Auth/cleanup, cảnh báo có nơi nhận, backup, restore/RPO/RTO và repair còn mở. Môi trường tiếp tục giữ gói miễn phí hiện tại.
+CLI hiện chạy một lượt, chưa cấu hình scheduler cloud. Có thể đưa vào trusted runner định kỳ sau khi chốt identity, giới hạn lượt và theo dõi exit code; không thêm vòng lặp vô hạn hay tự repair. Lịch Auth/cleanup, cảnh báo có nơi nhận, backup, restore/RPO/RTO và repair cloud còn mở. Môi trường tiếp tục giữ gói miễn phí hiện tại.

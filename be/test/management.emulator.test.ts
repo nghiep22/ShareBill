@@ -26,7 +26,7 @@ describe.skipIf(!enabled)('S07 trip and participant management', () => {
         return app.inject({ method, url: path, payload, headers: { authorization: `Bearer ${token}`,
           'idempotency-key': key, ...(version ? { 'if-match': `"${version}"` } : {}) } });
       }
-      const created = await send('POST', '/api/v1/trips', { name: 'Đi chơi', ownerName: 'An' });
+      const created = await send('POST', '/api/v1/trips', { name: 'Đi chơi', sharingMode: 'per-expense', ownerName: 'An' });
       const { id: tripId, ownerParticipantId } = created.json().data;
       const trip = db().doc(`trips/${tripId}`);
       const guest = await send('POST', `/api/v1/trips/${tripId}/participants`, { displayName: 'Bình' });
@@ -124,7 +124,7 @@ describe.skipIf(!enabled)('S07 trip and participant management', () => {
         expect(response.statusCode, response.body).toBe(200);
         return response.json().data;
       }
-      const tripData = await post('/api/v1/trips', { name: 'Liên kết', ownerName: 'An' });
+      const tripData = await post('/api/v1/trips', { name: 'Liên kết', sharingMode: 'per-expense', ownerName: 'An' });
       const tripId = tripData.id as string, trip = db().doc(`trips/${tripId}`);
       const p1 = (await post(`/api/v1/trips/${tripId}/participants`, { displayName: 'Một' })).id as string;
       const p2 = (await post(`/api/v1/trips/${tripId}/participants`, { displayName: 'Hai' })).id as string;
@@ -142,7 +142,7 @@ describe.skipIf(!enabled)('S07 trip and participant management', () => {
         app.inject({ method: 'POST', url: `/api/v1/trips/${tripId}/memberships/${uid}/link`,
           payload: { participantId, reason: 'Gắn đúng người' },
           headers: { ...headers, 'idempotency-key': key, 'if-match': `"${version}"` } });
-      const otherTrip = await post('/api/v1/trips', { name: 'Chuyến khác', ownerName: 'An' });
+      const otherTrip = await post('/api/v1/trips', { name: 'Chuyến khác', sharingMode: 'per-expense', ownerName: 'An' });
       const crossTrip = await link(a.user.uid, otherTrip.ownerParticipantId, 1);
       expect(crossTrip.statusCode).toBe(409);
       const ownerUnlink = await link(owner.user.uid, null, 1);

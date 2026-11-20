@@ -171,7 +171,7 @@ function AuthenticatedWorkspace({ session, api, hash, onSignOut }: { session: Se
   const tripPath = selected && (isTripScreen(route) || (route === 'tro-giup' && id === 'chuyen')) ? '/trips/' + selected : undefined;
   const device = useMemo(() => trust && tripPath ? { uid, tripId: selected } : undefined, [trust, tripPath, uid, selected]);
   const wantsFinance = route === 'tong-quan' || route === 'so-du';
-  const overview = useApiRead<TripOverview>(api, tripPath && tripPath + '/overview', epoch);
+  const overview = useApiRead<TripOverview>(api, tripPath && tripPath + '/overview', epoch, undefined, true);
   const denied = overview.status === 404 || overview.status === 403 || overview.status === 401;
   const trips = useApiPage<TripDto>(api, route === 'chuyen-di' ? '/trips' : undefined, { status: archived ? 'archived' : 'active', limit: '20' }, epoch);
   const expenseList = useApiPage<ExpenseDto>(api, tripPath && (route === 'chi-tieu' || route === 'tong-quan') ? tripPath + '/expenses' : undefined,
@@ -179,9 +179,9 @@ function AuthenticatedWorkspace({ session, api, hash, onSignOut }: { session: Se
       { limit: '30', status: filters.status === 'all' ? undefined : filters.status === 'voided' ? 'void' : filters.status,
         category: filters.category, payer: filters.payer }, epoch);
   const detail = useApiRead<ExpenseDto>(api, tripPath && id && isExpenseDetail(route) ? tripPath + '/expenses/' + encodeURIComponent(id) : undefined, epoch);
-  const transfers = useApiRead<{ ledgerVersion: number; suggestions: TransferDto[] }>(api, tripPath && wantsFinance ? tripPath + '/settlement-suggestions' : undefined, epoch);
+  const transfers = useApiRead<{ ledgerVersion: number; suggestions: TransferDto[] }>(api, tripPath && wantsFinance ? tripPath + '/settlement-suggestions' : undefined, epoch + (overview.data?.trip.ledgerVersion ?? 0));
   const history = useApiPage<SettlementDto>(api, tripPath && route === 'quyet-toan' ? tripPath + '/settlements' : undefined, { status: historyFilter, limit: '30' }, epoch);
-  const members = useApiRead<Memberships>(api, tripPath && route === 'thanh-vien' ? tripPath + '/members' : undefined, epoch);
+  const members = useApiRead<Memberships>(api, tripPath && route === 'thanh-vien' ? tripPath + '/members' : undefined, epoch + (overview.data?.revision ?? 0));
   const itinerary = useApiRead<ItineraryDto>(api, tripPath && route === 'lich-trinh' ? tripPath + '/itinerary' : undefined, epoch);
   const historyActivity = useApiPage<ActivityDto>(api, tripPath && route === 'hoat-dong' ? tripPath + '/activity' : undefined, { limit: '30' }, epoch);
   const hasToken = route === 'tham-gia' && id && invitePattern.test(id);
