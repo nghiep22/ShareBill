@@ -307,12 +307,12 @@ describe.skipIf(!enabled)('Firebase emulator API flow', () => {
     const confirmedDoc = await store.doc(`trips/${tripId}/settlements/${settlementId}`).get();
     expect(settlementDocumentSchema.safeParse(confirmedDoc.data()).success).toBe(true);
     expect(confirmedDoc.data()).toMatchObject({ status: 'confirmed', version: 2,
-      basedOnLedgerVersion: 1, confirmedBy: user.uid, confirmationMode: 'owner_on_behalf' });
+      basedOnLedgerVersion: 1, confirmedBy: user.uid, confirmationMode: 'recipient' });
     expect(confirmedDoc.get('confirmedAt').toMillis()).toBe(confirmedDoc.get('updatedAt').toMillis());
     const confirmedList = await app.inject({ method: 'GET', url: settlementUrl,
       headers: { authorization } });
     expect(confirmedList.json().data.items[0]).toMatchObject({ id: settlementId,
-      status: 'confirmed', basedOnLedgerVersion: 1, confirmationMode: 'owner_on_behalf' });
+      status: 'confirmed', basedOnLedgerVersion: 1, confirmationMode: 'recipient' });
     expect(new Date(confirmedList.json().data.items[0].confirmedAt).getTime()).toBe(confirmedDoc.get('confirmedAt').toMillis());
     const confirmedTrip = await store.doc(`trips/${tripId}`).get();
     expect(confirmedTrip.data()).toMatchObject({ settlementCountAllTime: 1,
@@ -550,7 +550,7 @@ describe.skipIf(!enabled)('Firebase emulator API flow', () => {
     const confirmAudit = auditEvents.docs.find(doc => doc.get('action') === 'settlement.confirmed');
     expect(confirmAudit?.get('before')).toMatchObject({ id: settlementId, status: 'pending', version: 1 });
     expect(confirmAudit?.get('after')).toMatchObject({ id: settlementId, status: 'confirmed', version: 2,
-      confirmationMode: 'owner_on_behalf' });
+      confirmationMode: 'recipient' });
     const serializedAudit = JSON.stringify(auditEvents.docs.map(doc => doc.data()));
     expect(serializedAudit).not.toContain(email);
     expect(serializedAudit).not.toContain(idToken);

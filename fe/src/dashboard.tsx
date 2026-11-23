@@ -355,7 +355,7 @@ export function Settlements({ data, update, onMore, loading, remoteFilter, onFil
   const me = viewerOf(data);
   const owner = isOwner(data);
   const actor = data.remote?.actorUid ?? me;
-  const recipient = (item: Settlement) => item.to === me && (!data.remote || item.recordedBy !== actor);
+  const recipient = (item: Settlement) => item.to === me && (owner || !data.remote || item.recordedBy !== actor);
   const stale = selected?.status === 'confirmed' && selected.ledgerVersion !== data.remote?.ledgerVersion;
   const entries = data.settlements.filter(item => settlementStatus(item) === filter || (!onFilter && filter === 'cancelled' && settlementStatus(item) === 'void'));
   const labels = { pending: 'Chờ xác nhận', confirmed: 'Đã xác nhận', cancelled: 'Đã hủy', void: 'Đã hủy hiệu lực' };

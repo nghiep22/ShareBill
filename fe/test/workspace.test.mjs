@@ -401,15 +401,19 @@ test('money screens keep equal shares, remaining debt, partial payments and reve
     await amount.fill('10.000');
     await dialog.getByRole('button', { name: 'Ghi nhận', exact: true }).click();
     await heading(page, 'Lịch sử chuyển tiền');
-    await page.getByRole('button', { name: 'Xác nhận thay', exact: true }).waitFor();
+    await page.getByRole('button', { name: 'Xác nhận đã nhận tiền', exact: true }).waitFor();
+    assert.equal(await page.getByRole('button', { name: 'Xác nhận thay', exact: true }).count(), 0);
     const pending = (await call(root + '/settlements?status=pending', session)).items[0];
     assert.equal(pending.amountMinor, 10000);
   }
   await recordPartial(true);
   assert.equal((await overview()).balances.find(row => row.participantId === peers[0].id).netMinor, debt.netMinor);
-  await page.getByRole('button', { name: 'Xác nhận thay', exact: true }).click();
+  await page.getByRole('button', { name: 'Xác nhận đã nhận tiền', exact: true }).click();
+  await page.getByRole('dialog', { name: 'Xác nhận đã nhận tiền?', exact: true }).waitFor();
   await page.getByRole('dialog').getByRole('button', { name: 'Xác nhận', exact: true }).click();
   await page.getByRole('button', { name: 'Hủy hiệu lực', exact: true }).waitFor();
+  assert.equal((await call(root + '/settlements?status=confirmed', session)).items[0].confirmationMode, 'recipient');
+  await page.getByText('An xác nhận đã nhận', { exact: false }).waitFor();
   await page.goto(screen('so-du'));
   const afterPayment = await checkMember('Bình', peers[0].id);
   assert.equal(afterPayment.owedMinor, debt.owedMinor);

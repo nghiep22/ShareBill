@@ -90,6 +90,48 @@ describe.skipIf(!enabled)('S09 ledger editing and trip lifecycle', () => {
     expect((await checkDatabase(db(), { tripId: f.id, pageSize: 20 })).issues).toEqual([]);
   }
 
+  it('classifies an owner receiving their own manual entry as recipient and applies the payment once', async () => {
+    const f = await fixture();
+    await seedMoney(f);
+    const id = await pending(f, f.b, 120_000), ledgerVersion = (await f.trip.get()).get('ledgerVersion');
+    const before = await balances(f), key = randomUUID(), path = `${f.path}/settlements/${id}/confirm`;
+    const body = { basedOnLedgerVersion: ledgerVersion };
+    const confirmed = await send('POST', path, body, f.owner, 1, key);
+    expect(confirmed.statusCode, confirmed.body).toBe(200);
+    expect(confirmed.json().data.confirmationMode).toBe('recipient');
+    expect((await f.trip.collection('settlements').doc(id).get()).data()).toMatchObject({
+      createdBy: f.owner.user.uid, confirmedBy: f.owner.user.uid, confirmationMode: 'recipient', status: 'confirmed',
+    });
+    const after = await balances(f);
+    expect(after.find(row => row.participantId === f.b)!.sentMinor).toBe(before.find(row => row.participantId === f.b)!.sentMinor + 120_000);
+    expect(after.find(row => row.participantId === f.a)!.receivedMinor).toBe(before.find(row => row.participantId === f.a)!.receivedMinor + 120_000);
+    const replay = await send('POST', path, body, f.owner, 1, key);
+    expect(replay.headers['idempotency-replayed']).toBe('true');
+    expect(replay.json().data.confirmationMode).toBe('recipient');
+    expect((await send('POST', path, body, f.owner, 2)).json().error.code).toBe('INVALID_STATE_TRANSITION');
+    expect(await balances(f)).toEqual(after);
+    expect((await f.trip.get()).get('ledgerVersion')).toBe(ledgerVersion + 1);
+    const audits = await f.trip.collection('auditEvents').where('action', '==', 'settlement.confirmed').get();
+    expect(audits.docs).toHaveLength(1);
+    expect(audits.docs[0]!.get('after.confirmationMode')).toBe('recipient');
+    await clean(f);
+  }, 30_000);
+
+  it('keeps owner_on_behalf when the owner confirms a payment to a different recipient', async () => {
+    const f = await fixture(true);
+    await expense(f, equal(300_000, f.c, [f.a, f.b, f.c]));
+    const ledgerVersion = (await f.trip.get()).get('ledgerVersion');
+    const created = await send('POST', `${f.path}/settlements`, { fromParticipantId: f.b, toParticipantId: f.c,
+      amountMinor: 50_000, occurredOn: '2026-12-20', basedOnLedgerVersion: ledgerVersion }, f.owner);
+    expect(created.statusCode, created.body).toBe(200);
+    const path = `${f.path}/settlements/${created.json().data.id}/confirm`;
+    expect((await send('POST', path, { basedOnLedgerVersion: ledgerVersion }, f.binh!, 1)).statusCode).toBe(403);
+    const confirmed = await send('POST', path, { basedOnLedgerVersion: ledgerVersion }, f.owner, 1);
+    expect(confirmed.statusCode, confirmed.body).toBe(200);
+    expect(confirmed.json().data.confirmationMode).toBe('owner_on_behalf');
+    await clean(f);
+  }, 30_000);
+
   it('protects pending settlement identities when linking or unlinking and preserves the confirmation role', async () => {
     const f = await fixture(true), binh = f.binh!;
     await seedMoney(f);

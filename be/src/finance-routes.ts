@@ -146,7 +146,7 @@ export async function registerFinanceRoutes(app: FastifyInstance): Promise<void>
       if (settlement.get('version') !== expectedVersion) throw new ApiError(409, 'VERSION_CONFLICT', 'Lượt trả nợ đã thay đổi.');
       if (settlement.get('status') !== 'pending') throw new ApiError(409, 'INVALID_STATE_TRANSITION', 'Lượt trả nợ không còn chờ xác nhận.');
       const owner = member.get('role') === 'owner';
-      const recipient = member.get('participantId') === settlement.get('toParticipantId') && settlement.get('createdBy') !== uid;
+      const recipient = member.get('participantId') === settlement.get('toParticipantId') && (owner || settlement.get('createdBy') !== uid);
       if ((settlement.get('receiptIds') as string[] | undefined)?.length && !recipient) {
         throw new ApiError(403, 'FORBIDDEN', 'Chỉ người nhận được xác nhận đã nhận khoản chuyển có ảnh.');
       }
