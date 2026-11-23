@@ -8,6 +8,8 @@ Luồng nằm trong **Số dư & quyết toán** và **Lịch sử chuyển ti�
 4. Người nhận mở **Lịch sử chuyển tiền → Chờ xác nhận → Xem ảnh chuyển khoản**, kiểm tra tài khoản thực nhận rồi bấm **Xác nhận đã nhận tiền**. Công nợ, số đã chuyển và đã nhận cập nhật nguyên tử đúng một lần.
 5. Ảnh và giao dịch vẫn xem lại được sau khi xác nhận hoặc hủy. Người chuyển có thể hủy báo chuyển đang chờ nếu gửi nhầm.
 
+**Phân biệt công nợ và khoản chuyển:** số **Còn được nhận / Còn cần trả** trong lịch sử là tổng công nợ hiện tại, sau các giao dịch đã xác nhận. Số tiền trên một khoản chờ là số đã nhập lúc tạo khoản đó, không tự đổi theo công nợ mới. Hộp xác nhận hiện riêng **Số tiền xác nhận cho khoản này** và ngày ghi nhận. Trả một phần chỉ giảm đúng số đã ghi nhận; khoản nhập sai cần hủy và ghi nhận lại theo giao dịch thực tế.
+
 Trong **Thành viên & phân quyền**, thẻ **QR nhận tiền của bạn** nằm ngay dưới tiêu đề trang, trước phần Quyền trong chuyến. Trên môi trường Vercel, ảnh dùng kho Blob riêng tư trong gói Hobby; xem cấu hình và kiểm thử kho thật trong [RECEIPTS.md](RECEIPTS.md).
 
 Ảnh là bằng chứng do người dùng cung cấp. Ứng dụng không tự chuyển tiền hay kiểm chứng giao dịch với ngân hàng.

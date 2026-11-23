@@ -245,6 +245,7 @@ export function Balances({ data, update, loading, disabled, receiptActions }: { 
       <span className="tile-icon summary-icon"><Wallet size={21} aria-hidden /></span>
       <span className="summary-label">{noPersonalCost ? 'Bạn chưa có chi phí phải chịu' : hasPersonal ? netLabel(net) : 'Số dư của bạn'}</span>
       <strong>{hasPersonal ? <Amount value={Math.abs(net)} /> : me ? 'Chưa đủ dữ liệu' : 'Chưa liên kết'}</strong>
+      {hasPersonal && net !== 0 && <p className="balance-link-help">Đây là công nợ còn lại sau các khoản đã xác nhận. Khoản chuyển đang chờ xác nhận chưa được trừ vào số này.</p>}
       {noPersonalCost && <>
         <p className="balance-link-help">Bạn đã liên kết tài khoản, nhưng phần phải chịu trong các khoản chi đã lưu hiện là 0đ. Nếu bạn cần cùng chia tiền, chủ chuyến hoặc người tạo khoản chi cần mở khoản chi → Sửa → Chia cho ai? → chọn tên bạn → Lưu khoản chi.</p>
         <a className="text-button" href={tripHref(data, 'chi-tieu')}>Xem khoản chi để chia lại <ChevronRight size={15} aria-hidden /></a>
@@ -352,6 +353,7 @@ export function Settlements({ data, update, onMore, loading, remoteFilter, onFil
   const [selected, setSelected] = useState<{ item: Settlement; status: 'confirmed' | 'cancelled' | 'void'; ledgerVersion?: number } | null>(null);
   const [error, setError] = useState('');
   const totals = balances(data);
+  const finance = financialSnapshot(data);
   const me = viewerOf(data);
   const owner = isOwner(data);
   const actor = data.remote?.actorUid ?? me;
@@ -384,6 +386,11 @@ export function Settlements({ data, update, onMore, loading, remoteFilter, onFil
 
   return <>
     <PageTitle title="Lịch sử chuyển tiền" back={tripHref(data, 'so-du')} />
+    {finance.complete && Object.hasOwn(finance.net, me) && <section className="card field-card settlement-summary" aria-label="Công nợ còn lại của bạn">
+      <h2>{finance.net[me] > 0 ? 'Còn được nhận' : finance.net[me] < 0 ? 'Còn cần trả' : 'Đã cân bằng'}</h2>
+      <strong><Amount value={Math.abs(finance.net[me])} /></strong>
+      <p>Đây là tổng công nợ còn lại. Mỗi khoản bên dưới giữ số tiền đã ghi nhận; xác nhận chỉ cập nhật số tiền của khoản đó.</p>
+    </section>}
     <div className={'segmented compact-segments ' + (onFilter ? 'four-segments' : 'three-segments')} aria-label="Trạng thái chuyển tiền">
       {(onFilter ? ['pending', 'confirmed', 'cancelled', 'void'] as const : ['pending', 'confirmed', 'cancelled'] as const).map(status =>
         <button key={status} aria-pressed={filter === status} onClick={() => setFilter(status)}>{labels[status]}</button>)}
@@ -394,6 +401,7 @@ export function Settlements({ data, update, onMore, loading, remoteFilter, onFil
       const status = settlementStatus(item);
       return <div className="card transfer-card" key={item.id}>
         <div className="list-row"><TransferRow data={data} transfer={item} /></div>
+        {status === 'pending' && <p className="settlement-amount-note">Số tiền ghi nhận cho khoản chuyển này: <b><Amount value={item.amount} /></b></p>}
         <div className="settlement-meta">{item.date && <span>{dateLabel(item.date)}</span>}{item.recordedBy && <span>{nameOf(data, item.recordedBy)} ghi nhận</span>}
           {item.confirmedBy && <span>{nameOf(data, item.confirmedBy)} {item.confirmationMode === 'owner_on_behalf' ? 'xác nhận thay' : 'xác nhận đã nhận'}{item.confirmedAt && ' · ' + dateLabel(item.confirmedAt.slice(0, 10))}</span>}</div>
         {item.reason && <p className="settlement-meta">Lý do: {item.reason}</p>}
@@ -416,6 +424,12 @@ export function Settlements({ data, update, onMore, loading, remoteFilter, onFil
     </Dialog>}
     {selected && <Dialog title={selected.status === 'confirmed' && !recipient(selected.item) ? 'Xác nhận thay người nhận?' : actions[selected.status] + '?'} onClose={() => setSelected(null)}>
       <p>{nameOf(data, selected.item.from)} → {nameOf(data, selected.item.to)} · {money(selected.item.amount)}</p>
+      {selected.status === 'confirmed' && <section className="payment-amount" aria-label="Số tiền xác nhận của khoản chuyển">
+        <span>Số tiền xác nhận cho khoản này</span>
+        <strong><Amount value={selected.item.amount} /></strong>
+        {selected.item.date && <span>Khoản ghi nhận ngày {dateLabel(selected.item.date)}</span>}
+      </section>}
+      {selected.status === 'confirmed' && <p>Chỉ số tiền của khoản này được ghi nhận là đã nhận. Nếu số tiền ghi nhầm, hãy hủy khoản chờ rồi ghi nhận lại đúng số tiền thực chuyển.</p>}
       {selected.status === 'confirmed' && selected.item.receipts?.map(receipt => <PaymentImage key={receipt.id} receipt={receipt} actions={receiptActions} label={receipt.name} />)}
       <p>{selected.status === 'confirmed' ? recipient(selected.item)
         ? 'Hãy kiểm tra tiền thực tế đã nhận trước khi ghi sổ.'

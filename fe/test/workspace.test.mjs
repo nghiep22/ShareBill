@@ -405,11 +405,18 @@ test('money screens keep equal shares, remaining debt, partial payments and reve
     assert.equal(await page.getByRole('button', { name: 'Xác nhận thay', exact: true }).count(), 0);
     const pending = (await call(root + '/settlements?status=pending', session)).items[0];
     assert.equal(pending.amountMinor, 10000);
+    const pendingSnapshot = await overview();
+    await page.getByRole('region', { name: 'Công nợ còn lại của bạn', exact: true })
+      .getByText(format(pendingSnapshot.balances.find(row => row.participantId === trip.ownerParticipantId).netMinor), { exact: true }).waitFor();
+    await page.getByText('Số tiền ghi nhận cho khoản chuyển này:', { exact: false }).waitFor();
   }
   await recordPartial(true);
   assert.equal((await overview()).balances.find(row => row.participantId === peers[0].id).netMinor, debt.netMinor);
   await page.getByRole('button', { name: 'Xác nhận đã nhận tiền', exact: true }).click();
   await page.getByRole('dialog', { name: 'Xác nhận đã nhận tiền?', exact: true }).waitFor();
+  await page.getByRole('dialog').getByRole('region', { name: 'Số tiền xác nhận của khoản chuyển', exact: true })
+    .getByText('10.000đ', { exact: true }).waitFor();
+  assert.equal((await call(root + '/settlements?status=pending', session)).items[0].amountMinor, 10000);
   await page.getByRole('dialog').getByRole('button', { name: 'Xác nhận', exact: true }).click();
   await page.getByRole('button', { name: 'Hủy hiệu lực', exact: true }).waitFor();
   assert.equal((await call(root + '/settlements?status=confirmed', session)).items[0].confirmationMode, 'recipient');
