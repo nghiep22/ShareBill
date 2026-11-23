@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { createRequire } from 'node:module';
-import { writeFile } from 'node:fs/promises';
+import { readFile, writeFile } from 'node:fs/promises';
 import { after, before, test } from 'node:test';
 import { chromium, request } from 'playwright';
 import { runSmoke, smokeConfig } from '../../scripts/smoke.mjs';
@@ -68,7 +68,7 @@ function heading(page, name) {
 }
 
 // Stub only image transport; QR attachment, settlement creation, permissions and balances use the real API/Firestore emulator.
-async function paymentImageTransport(context, root, actor) {
+async function paymentImageTransport(context, root, actor, qrPayload) {
   assert.ok(['localhost', '127.0.0.1'].includes(new URL(apiOrigin).hostname));
   process.env.FIRESTORE_EMULATOR_HOST = '127.0.0.1:8080';
   const require = createRequire(new URL('../../be/package.json', import.meta.url));
@@ -77,8 +77,13 @@ async function paymentImageTransport(context, root, actor) {
   const sharp = require('sharp');
   fixtureApp ??= initializeApp({ projectId: 'demo-sharebill' }, 'browser-fixtures');
   const store = getFirestore(fixtureApp), tripId = root.split('/')[1];
-  const buffer = await sharp({ create: { width: 280, height: 280, channels: 3, background: '#e6f6f1' } }).png().toBuffer();
-  const imageUrl = 'data:image/png;base64,' + buffer.toString('base64'), intents = new Map();
+  const qr = createRequire(new URL('../package.json', import.meta.url))('qrcode');
+  // Also exercise decoding a QR inside a tall bank screenshot after JPEG normalization.
+  const buffer = qrPayload ? await sharp({ create: { width: 600, height: 1300, channels: 3, background: '#e6f6f1' } })
+    .composite([{ input: await qr.toBuffer(qrPayload, { width: 360, margin: 4 }), left: 120, top: 500 }]).jpeg({ quality: 82 }).toBuffer()
+    : await sharp({ create: { width: 280, height: 280, channels: 3, background: '#e6f6f1' } }).png().toBuffer();
+  const contentType = qrPayload ? 'image/jpeg' : 'image/png';
+  const imageUrl = 'data:' + contentType + ';base64,' + buffer.toString('base64'), intents = new Map();
   await context.route('**/' + root + '/receipts/upload-intents', async route => {
     const key = route.request().headers()['idempotency-key'];
     if (!intents.has(key)) intents.set(key, randomUUID());
@@ -90,16 +95,16 @@ async function paymentImageTransport(context, root, actor) {
   await context.route('**/' + root + '/receipts/*/finalize', async route => {
     const id = new URL(route.request().url()).pathname.split('/').at(-2), attempt = randomUUID(), now = Timestamp.now();
     await store.doc(root + '/receipts/' + id).set({ schemaVersion: 1, tripId, uploaderUid: actor.user.uid, status: 'ready',
-      declaredContentType: 'image/png', maxBytes: 5242880, expiresAt: Timestamp.fromMillis(Date.now() + 900000),
+      declaredContentType: contentType, maxBytes: 5242880, expiresAt: Timestamp.fromMillis(Date.now() + 900000),
       stagingPath: `receipt-staging/${tripId}/${actor.user.uid}/${id}/original`, stagingGeneration: '1',
       processedPath: `receipt-processed/${tripId}/${id}/${attempt}.jpg`, processedGeneration: '2',
-      bytes: buffer.length, width: 280, height: 280, attachedExpenseId: null, attachedSettlementId: null, attachedParticipantId: null,
+      bytes: buffer.length, width: qrPayload ? 600 : 280, height: qrPayload ? 1300 : 280, attachedExpenseId: null, attachedSettlementId: null, attachedParticipantId: null,
       processingLeaseUntil: null, processingAttemptId: attempt, processingOperationKey: randomUUID(), processingRequestHash: 'a'.repeat(64),
       processingBaseVersion: 1, version: 3, createdAt: now, updatedAt: now, discardedAt: null, cleanupAfter: null, storageDeletedAt: null });
     await route.fulfill({ json: { data: { id, version: 3 } } });
   });
   await context.route('**/' + root + '/receipts/*/view-url', route => route.fulfill({ json: { data: { url: imageUrl } } }));
-  return { name: 'chuyen-khoan.png', mimeType: 'image/png', buffer };
+  return { name: qrPayload ? 'chuyen-khoan.jpg' : 'chuyen-khoan.png', mimeType: contentType, buffer };
 }
 
 test('authentication has no demo entry point and PWA retires cached preview pages', async t => {
@@ -816,13 +821,35 @@ test('two accounts upload QR and transfer evidence, confirm repayment and archiv
   await context.addInitScript(session => {
     sessionStorage.setItem('sharebill-live-session-v1', JSON.stringify(session));
   }, { ...member, expiresAt: Date.now() + member.expiresIn * 1000 });
-  const proofImage = await paymentImageTransport(context, root, member);
+  const qrPayload = '00020101021238590010A0000007270129000697044101156607040600001290208QRIBFTTA5204999953037045405100005802VN62180814SHAREBILL TEST630403F2';
+  const proofImage = await paymentImageTransport(context, root, member, qrPayload);
   const memberPage = await context.newPage();
   await memberPage.goto(screen('so-du'));
   await heading(memberPage, 'Số dư & quyết toán');
   await memberPage.getByRole('button', { name: 'Chuyển khoản', exact: true }).click();
   let transferDialog = memberPage.getByRole('dialog');
   await transferDialog.getByAltText('QR nhận tiền của An', { exact: true }).waitFor();
+  const downloadQr = transferDialog.getByRole('link', { name: 'Tải QR có sẵn số tiền', exact: true });
+  await downloadQr.waitFor();
+  assert.equal(await downloadQr.getAttribute('download'), 'sharebill-120000.png');
+  const [downloaded] = await Promise.all([memberPage.waitForEvent('download'), downloadQr.click()]);
+  const requireImages = createRequire(new URL('../package.json', import.meta.url));
+  const sharp = createRequire(new URL('../../be/package.json', import.meta.url))('sharp');
+  const decodedImage = await sharp(await readFile(await downloaded.path())).ensureAlpha().raw().toBuffer({ resolveWithObject: true });
+  const decodedQr = requireImages('jsqr')(new Uint8ClampedArray(decodedImage.data), decodedImage.info.width, decodedImage.info.height);
+  assert.ok(decodedQr?.data.includes('00069704410115660704060000129'), 'Saved QR keeps the bank and account');
+  assert.ok(decodedQr.data.includes('5406120000'), 'Saved QR contains the exact amount due');
+  assert.ok(!decodedQr.data.includes('540510000'), 'Saved QR replaces the old QR amount');
+  // A fresh view that cannot decode the source must show the original without claiming an embedded amount.
+  await context.route('**/' + root + '/receipts/*/view-url', route => route.fulfill({ json: { data: { url: 'data:image/png;base64,invalid' } } }));
+  await transferDialog.getByRole('button', { name: 'Đóng', exact: true }).click();
+  await memberPage.getByRole('button', { name: 'Chuyển khoản', exact: true }).click();
+  await transferDialog.getByText('Chưa tạo được QR có sẵn số tiền từ ảnh này.', { exact: false }).waitFor();
+  assert.equal(await transferDialog.getByRole('link', { name: 'Tải QR có sẵn số tiền', exact: true }).count(), 0);
+  await context.unroute('**/' + root + '/receipts/*/view-url');
+  await paymentImageTransport(context, root, member, qrPayload);
+  await transferDialog.getByRole('button', { name: 'Thử tạo QR lại', exact: true }).click();
+  await downloadQr.waitFor();
   const dueSummary = transferDialog.getByRole('region', { name: 'Số tiền cần chuyển cho người nhận', exact: true });
   await dueSummary.getByText('120.000đ', { exact: true }).waitFor();
   assert.equal(await transferDialog.getByLabel('Số tiền đã chuyển (VND)', { exact: true }).inputValue(), '120.000');

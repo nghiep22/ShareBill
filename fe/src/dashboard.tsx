@@ -12,6 +12,7 @@ import {
 import { Amount, Avatar, CategoryIcon, Dialog, Empty, PageTitle } from './ui';
 import type { ReceiptActions, UpdateTrip } from './trip-command';
 import { PaymentImage, PaymentImagePicker, PaymentQrCard } from './payments';
+import { TransferQr } from './transfer-qr';
 import { tripHref } from './workspace-route';
 import { financialSnapshot, transferLimit } from './finance-view';
 import { maximumMoney, parsePositiveMoney } from './money-input';
@@ -321,7 +322,7 @@ export function Balances({ data, update, loading, disabled, receiptActions }: { 
         </section>}
         {ownPayment && transfer && <section className="field-card">
           <h3>QR nhận tiền của {nameOf(data, transfer.to)}</h3>
-          {memberFor(data, transfer.to)?.paymentQrReceiptId ? <PaymentImage receipt={{ id: memberFor(data, transfer.to)!.paymentQrReceiptId!, name: 'QR người nhận' }} actions={receiptActions} label={'QR nhận tiền của ' + nameOf(data, transfer.to)} />
+          {memberFor(data, transfer.to)?.paymentQrReceiptId ? <TransferQr receipt={{ id: memberFor(data, transfer.to)!.paymentQrReceiptId!, name: 'QR người nhận' }} actions={receiptActions} amount={transfer.amount} label={'QR nhận tiền của ' + nameOf(data, transfer.to)} />
             : <p>Người nhận chưa thêm QR. Liên hệ {nameOf(data, transfer.to)} để lấy thông tin chuyển khoản.</p>}
           <p>Kiểm tra đúng người nhận và số tiền trong ứng dụng ngân hàng trước khi chuyển.</p>
         </section>}
