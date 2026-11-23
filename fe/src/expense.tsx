@@ -11,6 +11,7 @@ import type { ReceiptActions, UpdateTrip } from './trip-command';
 import { tripHref } from './workspace-route';
 import { maximumMoney as maximum, parseMoney } from './money-input';
 import { clearExpenseDraft, getExpenseDraft, saveExpenseDraft, type DeviceScope, type ExpenseDraft } from './private-device';
+import { PaymentImage } from './payments';
 
 const receiptTypes = ['image/jpeg', 'image/png', 'image/webp'];
 
@@ -60,6 +61,7 @@ export function ExpenseForm({ data, expense: latest, update, receiptActions, dis
     Object.fromEntries(Object.entries(expense?.shares ?? {}).map(([id, share]) => [id, String(share)])),
   );
   const [receipts, setReceipts] = useState(expense?.receipts ?? []);
+  const [image, setImage] = useState<Receipt | null>(null);
   const [reading, setReading] = useState(false);
   const [receiptError, setReceiptError] = useState('');
   const [progress, setProgress] = useState('');
@@ -142,11 +144,12 @@ export function ExpenseForm({ data, expense: latest, update, receiptActions, dis
   }
 
   async function addImages(files: File[]) {
-    if (!files.length) return;
+    if (!files.length || reading || disabled) return;
     setReceiptError('');
+    if (data.remote && !receiptActions) { setReceiptError('Cần kết nối mạng để tải ảnh hóa đơn.'); return; }
     if (receipts.length + files.length > 3) { setReceiptError('Chọn tối đa 3 ảnh cho mỗi khoản chi.'); return; }
-    if (files.some(file => !receiptTypes.includes(file.type) || file.size > 5 * 1024 * 1024)) {
-      setReceiptError('Chọn ảnh JPG, PNG hoặc WebP có dung lượng tối đa 5 MB mỗi ảnh.');
+    if (files.some(file => !receiptTypes.includes(file.type) || file.size === 0 || file.size > 5 * 1024 * 1024)) {
+      setReceiptError('Chọn ảnh JPG, PNG hoặc WebP có dung lượng tối đa 5 MiB mỗi ảnh.');
       return;
     }
     setReading(true);
@@ -284,6 +287,26 @@ export function ExpenseForm({ data, expense: latest, update, receiptActions, dis
         {invalid.includes('amount') && <p className="error" role="alert">Nhập số nguyên, ví dụ 150.000.</p>}
         <label>Tên khoản chi<input name="title" placeholder="Ví dụ: Ăn tối ở Đà Lạt" value={fields.title} onChange={event => setFields({ ...fields, title: event.target.value })} maxLength={120} required /></label>
       </div>
+      <section className="card field-card" aria-label="Ảnh hóa đơn của khoản chi">
+        <h2>Ảnh hóa đơn <span className="optional">(tùy chọn)</span></h2>
+        <p>{data.remote ? 'Sau khi lưu khoản chi, tất cả thành viên trong nhóm có thể xem ảnh hóa đơn.' : 'Ảnh được lưu trên thiết bị.'}</p>
+        <p>Tối đa 3 ảnh JPG, PNG hoặc WebP, mỗi ảnh tối đa 5 MiB.</p>
+        <input type="file" accept={receiptTypes.join(',')} multiple hidden disabled={reading || disabled} ref={filePicker} onChange={attach} aria-label="Tệp ảnh hóa đơn" />
+        <input type="file" accept={receiptTypes.join(',')} capture="environment" hidden disabled={reading || disabled} ref={cameraPicker} onChange={attach} aria-label="Máy ảnh hóa đơn" />
+        {receipts.length > 0 && <div className="receipt-grid">{receipts.map(receipt => <div key={receipt.id} className="receipt-item">
+          <PaymentImage receipt={receipt} actions={receiptActions} label={receipt.name} onOpen={() => setImage(receipt)} />
+          <button type="button" className="icon-button receipt-remove" disabled={reading || disabled} aria-label={'Bỏ ảnh ' + receipt.name} onClick={() => void removeReceipt(receipt)}><X size={18} aria-hidden /></button>
+        </div>)}</div>}
+        {receipts.length < 3 && (!data.remote || receiptActions) && <div className="button-pair">
+          <button type="button" className="secondary-button" disabled={reading || disabled} onClick={() => filePicker.current?.click()}><ImagePlus size={18} aria-hidden /> Tải ảnh hóa đơn</button>
+          <button type="button" className="secondary-button" disabled={reading || disabled} onClick={() => cameraPicker.current?.click()}><Camera size={18} aria-hidden /> Chụp ảnh</button>
+        </div>}
+        {data.remote && !receiptActions && <p role="status">Cần kết nối mạng để tải ảnh hóa đơn.</p>}
+        {reading && <p role="status">{progress}</p>}
+        {receiptError && <p className="error" role="alert">{receiptError}</p>}
+        {receiptError && receiptActions && retryFile.current.length > 0 &&
+          <button type="button" className="secondary-button" disabled={reading || disabled} onClick={() => void addImages(retryFile.current)}>Thử tải ảnh lại</button>}
+      </section>
       <fieldset className="card field-card">
         <legend>Ai đã trả tiền?</legend>
         <div className="payer-options">
@@ -332,7 +355,7 @@ export function ExpenseForm({ data, expense: latest, update, receiptActions, dis
           Đã chia {money(assigned)} / {money(total)}. {difference > 0 ? 'Còn thiếu ' + money(difference) : difference < 0 ? 'Vượt ' + money(-difference) : 'Tổng phần chia đã khớp.'}
         </p>}
       </fieldset>}
-      <details className="card optional-fields" open={!data.remote || Boolean(expense?.receipts?.length)}>
+      <details className="card optional-fields" open={!data.remote}>
         <summary>Thêm thông tin</summary>
         <div className="field-card">
         <div className="field-pair">
@@ -341,28 +364,11 @@ export function ExpenseForm({ data, expense: latest, update, receiptActions, dis
         </div>
         <label><span>Ghi chú <span className="optional">(tùy chọn)</span></span><textarea name="note" value={fields.note} onChange={event => setFields({ ...fields, note: event.target.value })} maxLength={1000} rows={2} /></label>
         </div>
-        <div className="field-card">
-        <h2>Ảnh hóa đơn</h2>
-        <p>Tối đa 3 ảnh JPG, PNG hoặc WebP.{!data.remote && ' Ảnh được lưu trên thiết bị.'}</p>
-        <input type="file" accept={receiptTypes.join(',')} multiple hidden ref={filePicker} onChange={attach} aria-label="Tệp ảnh hóa đơn" />
-        <input type="file" accept={receiptTypes.join(',')} capture="environment" hidden ref={cameraPicker} onChange={attach} aria-label="Máy ảnh hóa đơn" />
-        {receipts.length > 0 && <div className="receipt-grid">{receipts.map(receipt => <div key={receipt.id} className="receipt-thumb">
-          {receipt.src ? <img src={receipt.src} alt={receipt.name} /> : <span>{receipt.name}</span>}
-          <button type="button" className="icon-button" disabled={reading} aria-label={'Bỏ ảnh ' + receipt.name} onClick={() => void removeReceipt(receipt)}><X size={18} aria-hidden /></button>
-        </div>)}</div>}
-        {receipts.length < 3 && (!data.remote || receiptActions) && <div className="button-pair">
-          <button type="button" className="secondary-button" disabled={reading} onClick={() => filePicker.current?.click()}><ImagePlus size={18} aria-hidden /> Chọn ảnh</button>
-          <button type="button" className="secondary-button" disabled={reading} onClick={() => cameraPicker.current?.click()}><Camera size={18} aria-hidden /> Chụp ảnh</button>
-        </div>}
-        {reading && <p role="status">{progress}</p>}
-        {receiptError && <p className="error" role="alert">{receiptError}</p>}
-        {receiptError && receiptActions && retryFile.current.length > 0 &&
-          <button type="button" className="secondary-button" disabled={reading} onClick={() => void addImages(retryFile.current)}>Thử tải ảnh lại</button>}
-        </div>
       </details>
       {error && <p className="inline-note error" role="alert">{error}</p>}
       <div className="form-action"><button className="primary-button" disabled={reading || disabled || conflict}><Check size={19} aria-hidden /> Lưu khoản chi{total > 0 && ' · ' + money(total)}</button></div>
     </form>
+    {image && <Dialog title="Ảnh hóa đơn" onClose={() => setImage(null)}><PaymentImage receipt={image} actions={receiptActions} label={image.name} /></Dialog>}
     {outsideDate && <Dialog title="Ngày chi nằm ngoài ngày của chuyến" onClose={() => setOutsideDate(undefined)}>
       <p>Khoản chi ngày {dateLabel(outsideDate.date)} sẽ được ghi vào chuyến {data.trip.name}.</p>
       <div className="button-pair">
@@ -377,20 +383,6 @@ export function ExpenseDetail({ data, expense, update, receiptActions }: { data:
   const [voiding, setVoiding] = useState(false);
   const [image, setImage] = useState<Receipt | null>(null);
   const [error, setError] = useState('');
-  const [imageError, setImageError] = useState('');
-  const [imageLoading, setImageLoading] = useState(false);
-  async function openImage(receipt: Receipt) {
-    setImageError('');
-    setImageLoading(true);
-    try {
-      const src = receipt.src ?? await receiptActions?.view(receipt.id);
-      if (src) setImage({ ...receipt, src });
-    } catch (cause) {
-      setImageError(cause instanceof Error ? cause.message : 'Chưa mở được ảnh.');
-    } finally {
-      setImageLoading(false);
-    }
-  }
   function voidExpense(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const reason = String(new FormData(event.currentTarget).get('reason')).trim();
@@ -426,11 +418,10 @@ export function ExpenseDetail({ data, expense, update, receiptActions }: { data:
       <a className="text-button" href={tripHref(data, 'so-du')}>Xem số tiền còn cần trả / được nhận</a>
       </>}
     </section>
-    {Boolean(expense.receipts?.length) && <section className="card field-card">
+    {Boolean(expense.receipts?.length) && <section className="card field-card" aria-label="Ảnh hóa đơn của khoản chi">
       <h2>Ảnh hóa đơn</h2>
-      <div className="receipt-grid">{expense.receipts?.map(receipt => <button className="receipt-thumb" key={receipt.id} disabled={imageLoading} onClick={() => void openImage(receipt)} aria-label={'Xem ảnh ' + receipt.name}>{receipt.src ? <img src={receipt.src} alt={receipt.name} /> : receipt.name}</button>)}</div>
-      {imageLoading && <p role="status">Đang mở ảnh…</p>}
-      {imageError && <p className="error" role="alert">{imageError}</p>}
+      {data.remote && <p>Tất cả thành viên trong nhóm có thể xem ảnh hóa đơn của khoản chi này. Bấm vào ảnh để phóng to.</p>}
+      <div className="receipt-grid">{expense.receipts?.map(receipt => <PaymentImage key={receipt.id} receipt={receipt} actions={receiptActions} label={receipt.name} onOpen={() => setImage(receipt)} />)}</div>
     </section>}
     {canEditExpense(data, expense) && <div className="button-pair">
       <a className="secondary-button" href={tripHref(data, 'sua-khoan-chi', expense.id)}><Pencil size={17} aria-hidden /> Sửa khoản chi</a>
@@ -444,6 +435,6 @@ export function ExpenseDetail({ data, expense, update, receiptActions }: { data:
         <div className="button-pair"><button type="button" className="secondary-button" onClick={() => setVoiding(false)}>Quay lại</button><button className="danger-button">Xác nhận hủy</button></div>
       </form>
     </Dialog>}
-    {image && <Dialog title="Ảnh hóa đơn" onClose={() => setImage(null)}><img className="receipt-full" src={image.src} alt={image.name} referrerPolicy="no-referrer" onError={() => { setImage(null); setImageError('Không tải được ảnh. Mở lại để lấy liên kết mới.'); }} /></Dialog>}
+    {image && <Dialog title="Ảnh hóa đơn" onClose={() => setImage(null)}><PaymentImage receipt={image} actions={receiptActions} label={image.name} /></Dialog>}
   </div>;
 }

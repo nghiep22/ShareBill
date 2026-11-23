@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from 'react';
 import { canWrite, memberFor, viewerOf, type Demo, type Receipt } from './model';
 import type { ReceiptActions, UpdateTrip } from './trip-command';
 
-export function PaymentImage({ receipt, actions, label }: { receipt: Receipt; actions?: ReceiptActions; label: string }) {
+export function PaymentImage({ receipt, actions, label, onOpen }: { receipt: Receipt; actions?: ReceiptActions; label: string; onOpen?: () => void }) {
   const [image, setImage] = useState<{ src?: string; error?: string }>({});
   const [attempt, retry] = useState(0);
   useEffect(() => {
@@ -18,8 +18,10 @@ export function PaymentImage({ receipt, actions, label }: { receipt: Receipt; ac
     return () => { current = false; };
   }, [receipt.id, receipt.src, actions, attempt]);
   return <div className="payment-image">
-    {image.src && <><img src={image.src} alt={label} referrerPolicy="no-referrer" onError={() => setImage({ error: 'Ảnh đã hết hạn hoặc chưa tải được. Bấm thử lại để mở ảnh mới.' })} />
-      <a className="text-button" href={image.src} target="_blank" rel="noopener noreferrer" referrerPolicy="no-referrer">Mở ảnh để lưu hoặc phóng to</a></>}
+    {image.src && <>{onOpen ? <button type="button" className="receipt-thumb" aria-label={'Xem ảnh ' + label} onClick={onOpen}>
+      <img src={image.src} alt={label} referrerPolicy="no-referrer" onError={() => setImage({ error: 'Ảnh đã hết hạn hoặc chưa tải được. Bấm thử lại để mở ảnh mới.' })} />
+    </button> : <><img src={image.src} alt={label} referrerPolicy="no-referrer" onError={() => setImage({ error: 'Ảnh đã hết hạn hoặc chưa tải được. Bấm thử lại để mở ảnh mới.' })} />
+      <a className="text-button" href={image.src} target="_blank" rel="noopener noreferrer" referrerPolicy="no-referrer">Mở ảnh để lưu hoặc phóng to</a></>}</>}
     {!image.src && !image.error && <p role="status">Đang tải {label.toLocaleLowerCase('vi')}…</p>}
     {image.error && <><p className="error" role="alert">{image.error}</p><button type="button" className="secondary-button" onClick={() => retry(value => value + 1)}>Thử mở ảnh lại</button></>}
   </div>;

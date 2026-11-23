@@ -787,6 +787,64 @@ test('incomplete financial snapshots never show a zero debt or enable archive', 
   assert.equal(await page.getByText('NaNđ', { exact: false }).count(), 0);
 });
 
+test('expense invoices are visible on create and shared with members outside the expense split', async t => {
+  const { page, context: ownerContext, session, trip, screen, expenses } = await fixture(t);
+  const root = 'trips/' + trip.id;
+  const uploaded = { ...await paymentImageTransport(ownerContext, root, session), name: 'hoa-don-an-trua.png' };
+  const member = await call('auth/register', null, { method: 'POST', body: {
+    email: randomUUID() + '@example.test', password: 'BrowserFixture-123!', displayName: 'Thành viên xem hóa đơn',
+  } });
+  const invitation = await call(root + '/invites', session, { method: 'POST', body: {} });
+  await call('invites/accept', member, { method: 'POST', body: { token: invitation.token } });
+  await page.goto(screen('them-khoan-chi'));
+  await heading(page, 'Thêm khoản chi');
+  const invoices = page.getByRole('region', { name: 'Ảnh hóa đơn của khoản chi', exact: true });
+  assert.equal(await invoices.getByRole('button', { name: 'Tải ảnh hóa đơn', exact: true }).isVisible(), true);
+  assert.equal(await page.locator('details.optional-fields').evaluate(element => element.open), false);
+  await page.getByLabel('Tên khoản chi').fill('Ăn trưa có hóa đơn');
+  await page.getByLabel('Số tiền đã trả').fill('360000');
+  await invoices.getByLabel('Tệp ảnh hóa đơn', { exact: true }).setInputFiles(uploaded);
+  await invoices.getByAltText(uploaded.name, { exact: true }).waitFor();
+  await invoices.getByRole('button', { name: 'Xem ảnh ' + uploaded.name, exact: true }).click();
+  await page.getByRole('dialog').getByAltText(uploaded.name, { exact: true }).waitFor();
+  await page.getByRole('dialog').getByRole('button', { name: 'Đóng', exact: true }).click();
+  await page.getByRole('button', { name: /Lưu khoản chi/ }).click();
+  await heading(page, 'Ăn trưa có hóa đơn');
+  const expenseId = page.url().split('/').at(-1);
+  const saved = await call(expenses + '/' + expenseId, session);
+  assert.equal(saved.receiptIds.length, 1);
+  assert.deepEqual(saved.shares.map(row => row.participantId), [trip.ownerParticipantId]);
+  await page.reload();
+  await invoices.getByAltText('Hóa đơn 1', { exact: true }).waitFor();
+  await page.getByRole('link', { name: 'Sửa khoản chi', exact: true }).click();
+  await heading(page, 'Sửa khoản chi');
+  await invoices.getByAltText('Hóa đơn 1', { exact: true }).waitFor();
+  if (process.env.SHAREBILL_INVOICE_FORM_SCREENSHOT) await page.screenshot({ path: process.env.SHAREBILL_INVOICE_FORM_SCREENSHOT, fullPage: true });
+
+  const context = await browser.newContext({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true });
+  t.after(() => context.close());
+  await context.addInitScript(session => {
+    sessionStorage.setItem('sharebill-live-session-v1', JSON.stringify(session));
+  }, { ...member, expiresAt: Date.now() + member.expiresIn * 1000 });
+  await paymentImageTransport(context, root, member);
+  const memberPage = await context.newPage();
+  await memberPage.goto(screen('khoan-chi/' + expenseId));
+  await heading(memberPage, 'Ăn trưa có hóa đơn');
+  const shared = memberPage.getByRole('region', { name: 'Ảnh hóa đơn của khoản chi', exact: true });
+  await shared.getByRole('button', { name: 'Xem ảnh Hóa đơn 1', exact: true }).click();
+  const viewer = memberPage.getByRole('dialog', { name: 'Ảnh hóa đơn', exact: true });
+  const image = viewer.getByAltText('Hóa đơn 1', { exact: true });
+  await image.evaluate(element => element.decode());
+  assert.equal(await image.evaluate(element => element.naturalWidth > 0), true);
+  assert.equal(await viewer.getByRole('link', { name: 'Mở ảnh để lưu hoặc phóng to', exact: true }).isVisible(), true);
+  assert.equal(await memberPage.getByRole('link', { name: 'Sửa khoản chi', exact: true }).count(), 0);
+  assert.equal(await memberPage.evaluate(() => document.documentElement.scrollWidth > innerWidth), false);
+  await viewer.getByRole('button', { name: 'Đóng', exact: true }).click();
+  if (process.env.SHAREBILL_INVOICE_DETAIL_SCREENSHOT) await memberPage.screenshot({ path: process.env.SHAREBILL_INVOICE_DETAIL_SCREENSHOT, fullPage: true });
+  await memberPage.reload();
+  await shared.getByAltText('Hóa đơn 1', { exact: true }).waitFor();
+});
+
 test('two accounts upload QR and transfer evidence, confirm repayment and archive a balanced trip', async t => {
   const { page, context: ownerContext, session, trip, screen } = await fixture(t);
   const root = 'trips/' + trip.id;
