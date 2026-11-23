@@ -1,0 +1,23 @@
+{
+  "webCommit": "273fff65424f0d93f6f126e3eb814c2badfb4374",
+  "webDeployment": "dpl_ABR48TwVhWqz3XFon4X4XC1SffZ4",
+  "webUrl": "https://sharebill-nghiep22.vercel.app",
+  "changes": [
+    "Dialogs keep their heading and close control visible while the body scrolls; background page scrolling is locked.",
+    "Repayment, receipt review, confirmation and QR sharing keep the relevant amount and participants above the scrolling content.",
+    "Receipt review and settlement confirmation actions use the fixed dialog footer and retain the existing submit handlers and guards.",
+    "Compact image previews, single-line uploaded filenames, grouped share controls and expandable guidance reduce scrolling. Downloaded QR images retain their full resolution."
+  ],
+  "checks": {
+    "productionWebBuildAndTypecheck": true,
+    "browserFlowsPassed": 5,
+    "partialPaymentsAndReversals": true,
+    "sharedExpenseInvoices": true,
+    "bankQrAmountAndNativeShareDownloadFallback": true,
+    "twoAccountProofUploadAndRecipientConfirmation": true,
+    "onePendingTransferAcrossRefreshAndTabs": true,
+    "mobilePaymentAndSharingScreenshotsReviewed": true,
+    "canonicalReleaseCommitAndPublishedAssets": true
+  },
+  "scope": "Presentation changes only. The existing backend, balance calculations, pending transfer rules, authorization and idempotency remain unchanged. Browser flows used isolated local emulator accounts; no live financial records were modified."
+}
