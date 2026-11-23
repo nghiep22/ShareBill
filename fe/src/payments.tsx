@@ -78,7 +78,6 @@ export function PaymentQrCard({ data, update, actions, disabled }: { data: Demo;
   const writable = canWrite(data) && member.uid === data.remote.actorUid && actions;
   return <section className="card field-card" aria-label="QR nhận tiền của bạn">
     <h2>QR nhận tiền của bạn</h2>
-    <p>Tải QR từ ứng dụng ngân hàng để các thành viên trong nhóm chuyển tiền cho bạn.</p>
     {member.paymentQrReceiptId && !editing && <PaymentImage receipt={{ id: member.paymentQrReceiptId, name: 'QR nhận tiền' }} actions={actions} label="QR nhận tiền của bạn" />}
     {!member.paymentQrReceiptId && !editing && <p>Bạn chưa thêm QR nhận tiền.</p>}
     {writable && !editing && <button className="secondary-button" disabled={disabled} onClick={() => setEditing(true)}>{member.paymentQrReceiptId ? 'Đổi QR nhận tiền' : 'Thêm QR nhận tiền'}</button>}

@@ -249,13 +249,11 @@ export function Balances({ data, update, loading, disabled, receiptActions }: { 
       <span className="tile-icon summary-icon"><Wallet size={21} aria-hidden /></span>
       <span className="summary-label">{noPersonalCost ? 'Bạn chưa có chi phí phải chịu' : hasPersonal ? netLabel(net) : 'Số dư của bạn'}</span>
       <strong>{hasPersonal ? <Amount value={Math.abs(net)} /> : me ? 'Chưa đủ dữ liệu' : 'Chưa liên kết'}</strong>
-      {hasPersonal && net !== 0 && <p className="balance-link-help">Đây là công nợ còn lại sau các khoản đã xác nhận. Khoản chuyển đang chờ xác nhận chưa được trừ vào số này.</p>}
       {noPersonalCost && <>
-        <p className="balance-link-help">Bạn đã liên kết tài khoản, nhưng phần phải chịu trong các khoản chi đã lưu hiện là 0đ. Nếu bạn cần cùng chia tiền, chủ chuyến hoặc người tạo khoản chi cần mở khoản chi → Sửa → Chia cho ai? → chọn tên bạn → Lưu khoản chi.</p>
         <a className="text-button" href={tripHref(data, 'chi-tieu')}>Xem khoản chi để chia lại <ChevronRight size={15} aria-hidden /></a>
       </>}
       {!me && <>
-        <p className="balance-link-help">Tài khoản của bạn chưa gắn với người chia tiền. Nhờ chủ chuyến vào Thành viên → Tài khoản truy cập để liên kết đúng tên của bạn. Bạn vẫn xem được số tiền của cả nhóm bên dưới.</p>
+        <p className="balance-link-help">Tài khoản chưa liên kết với người chia tiền.</p>
         <a className="text-button" href={tripHref(data, 'thanh-vien', 'tai-khoan')}>Xem tài khoản trong chuyến <ChevronRight size={15} aria-hidden /></a>
       </>}
       {pending > 0 && <a className="text-button" href={tripHref(data, 'quyet-toan')}>{pending} khoản đang chờ xác nhận <ChevronRight size={15} aria-hidden /></a>}
@@ -263,7 +261,6 @@ export function Balances({ data, update, loading, disabled, receiptActions }: { 
     {groupEqual && complete && <section className="card field-card" aria-label="Cách chia đều của nhóm">
       <h2>Tổng chi chia đều cho {group.length} thành viên</h2>
       <p><Amount value={data.remote!.total} /> ÷ {group.length} người. Mỗi người chịu <strong><Amount value={Number(BigInt(data.remote!.total) / BigInt(group.length))} />{data.remote!.total % group.length > 0 && <> – <Amount value={Number(BigInt(data.remote!.total) / BigInt(group.length)) + 1} /></>}</strong>.</p>
-      <p>Số cần trả / được nhận đã trừ tiền mỗi người ứng và các khoản chuyển được xác nhận. {data.trip.closed ? 'Phần chia được giữ theo lúc chốt; mở lại chuyến sẽ chia lại cho các tài khoản còn trong nhóm.' : 'Người mới vào nhóm được tính cả tổng chi trước đó.'}</p>
     </section>}
     <section aria-label="Số tiền cần chuyển">
       <div className="section-heading"><h2>Số tiền cần chuyển</h2>
@@ -273,13 +270,12 @@ export function Balances({ data, update, loading, disabled, receiptActions }: { 
       {loading && <p role="status">Đang tải gợi ý chuyển tiền…</p>}
       {!loading && !transfers.length && <div className="card field-card transfer-empty">
         <h3>{allSettled && !withoutCosts.size ? <CircleCheck size={23} aria-hidden /> : <Wallet size={23} aria-hidden />}{emptyTransferTitle}</h3>
-        {allSettled && !singleParticipant && withoutCosts.size > 0 && <p><b>Chưa có chi phí phải chịu:</b> {withoutCostNames}. Thêm người hoặc liên kết tài khoản không tự thay đổi phần chia của khoản chi cũ.</p>}
+        {allSettled && !singleParticipant && withoutCosts.size > 0 && <p><b>Chưa có chi phí phải chịu:</b> {withoutCostNames}.</p>}
         {singleParticipant ? <>
           <p>Hiện chuyến chỉ có 1 người chia tiền là <b>{nameOf(data, (groupEqual ? group : data.members)[0].id)}</b>. Toàn bộ <Amount value={data.remote!.total} /> được tính cho người này nên số cần chuyển là <Amount value={0} />.</p>
-          <p>{groupEqual ? 'Mời bạn vào nhóm để tổng chi tự chia đều ngay khi họ tham gia.' : <>Để chia tiền cho nhóm, {isOwner(data) ? 'thêm những người cùng chia' : 'nhờ chủ chuyến thêm những người cùng chia'}, rồi mở từng khoản chi cũ → Sửa → Chia cho ai? → chọn đủ người → Lưu khoản chi.</>}</p>
         </> : allSettled && data.remote!.total > 0 ?
-          <p>{groupEqual ? 'Tổng chi đã được chia đều và mọi người không còn số tiền cần chuyển.' : 'Hiện số cần chuyển bằng 0 theo phần chia đã lưu. Nếu bạn vừa thêm người chia tiền, khoản chi cũ vẫn giữ phần chia đã lưu. Mở từng khoản chi → Sửa → Chia cho ai? để chọn thêm người khi cần.'}</p> :
-          <p>{!complete ? 'Tải lại dữ liệu để kiểm tra số tiền cần chuyển.' : pending ? 'Kiểm tra các khoản đang chờ trong Lịch sử chuyển tiền.' : allSettled ? 'Chuyến chưa có khoản chi. Thêm khoản chi và chọn những người cùng chia để tính số tiền cần chuyển.' : 'Tải lại gợi ý hoặc kiểm tra số dư của từng thành viên bên dưới.'}</p>}
+          <p>Không còn khoản cần chuyển theo phần chia đã lưu.</p> :
+          <p>{!complete ? 'Chưa đủ dữ liệu số dư.' : pending ? 'Có khoản chuyển đang chờ xác nhận.' : allSettled ? 'Chuyến chưa có khoản chi.' : 'Chưa có gợi ý chuyển tiền.'}</p>}
         {complete && !data.trip.closed && <div className="money-actions">
           {singleParticipant && isOwner(data) && canWrite(data) && <a className="primary-button compact" href={tripHref(data, groupEqual ? 'loi-moi' : 'thanh-vien', groupEqual ? undefined : 'them-nguoi')}>{groupEqual ? 'Mời bạn vào nhóm' : 'Thêm người chia tiền'}</a>}
           {data.remote!.total > 0 && <a className="secondary-button compact" href={tripHref(data, 'chi-tieu')}>{groupEqual ? 'Xem khoản chi' : 'Xem và sửa khoản chi'}</a>}
@@ -287,9 +283,7 @@ export function Balances({ data, update, loading, disabled, receiptActions }: { 
           {allSettled && !singleParticipant && isOwner(data) && <a className="secondary-button compact" href={tripHref(data, 'cai-dat')}>Chốt chuyến đi</a>}
         </div>}
       </div>}
-      {pending > 0 && <p className="inline-note">Các khoản đang chờ vẫn nằm ngoài số tiền đã xác nhận. Kiểm tra lịch sử trước khi ghi thêm khoản chuyển.</p>}
       {complete && transfers.length > 0 && <ShareRepaymentQrs data={data} actions={receiptActions} disabled={disabled || loading} />}
-      {!loading && transfers.length > 0 && <details className="inline-note payment-help money-explainer"><summary>Cách chuyển trả và xác nhận</summary><p>Mở QR người nhận, chuyển tiền bằng ứng dụng ngân hàng rồi tải ảnh chuyển khoản và bấm “Gửi báo đã chuyển khoản”. Người nhận kiểm tra ảnh và tiền thực nhận, sau đó xác nhận để cập nhật công nợ.</p></details>}
       <div className="transfer-grid">{!loading && complete && transfers.map(suggestion => <div className="card transfer-card" key={suggestion.from + '-' + suggestion.to}>
         <div className="list-row"><TransferRow data={data} transfer={suggestion} /></div>
         {canWrite(data) && (isOwner(data) || suggestion.from === me) && (isPending(suggestion)
@@ -299,7 +293,6 @@ export function Balances({ data, update, loading, disabled, receiptActions }: { 
     </section>
     <section>
       <div className="section-heading"><h2>Số tiền của từng thành viên</h2><span className="tag">{visibleMembers.length} người</span></div>
-      <p className="inline-note money-explainer">{groupEqual ? data.trip.closed ? 'Phải chịu là phần tổng chi đã chia đều lúc chốt chuyến.' : 'Phải chịu = tổng chi của nhóm chia đều cho số tài khoản đang trong nhóm.' : 'Phải chịu là tổng phần được chia từ các khoản chi.'} Cần trả / được nhận đã trừ tiền ứng và các khoản chuyển được xác nhận.</p>
       <div className="card rows">{visibleMembers.map(member => {
         const total = totals[member.id];
         const row = finance.lines[member.id];
@@ -323,11 +316,10 @@ export function Balances({ data, update, loading, disabled, receiptActions }: { 
     </section>} footer={alreadyRecorded
       ? <a className="primary-button" href={pendingHref}>Xem và xử lý khoản đang chờ</a>
       : <>
-        {ownPayment && !proof && <p role="status">Thêm ảnh chuyển khoản để gửi báo đã chuyển.</p>}
+        {ownPayment && !proof && <p role="status">Thiếu ảnh chuyển khoản.</p>}
         {uploading && <p role="status">Đang xử lý ảnh, vui lòng chờ…</p>}
         <button type="submit" form={formId} className="primary-button" disabled={disabled || uploading || stale || !transfer || !complete || !transfersReady || Boolean(ownPayment && !proof)}>{ownPayment ? 'Gửi báo đã chuyển khoản' : 'Ghi nhận'}</button>
       </>}>
-      <p className="payment-caption">Số dư cập nhật sau khi người nhận xác nhận.</p>
       <form id={formId} className="field-card dialog-fields" onSubmit={save}>
         {!selected.transfer && <div className="field-pair">
           <label>Người chuyển<select aria-label="Người chuyển" value={from} disabled={uploading || Boolean(proof)} onChange={event => setFrom(event.target.value)}>{debtors.map(member => <option value={member.id} key={member.id}>{nameOf(data, member.id)}</option>)}</select></label>
@@ -337,18 +329,16 @@ export function Balances({ data, update, loading, disabled, receiptActions }: { 
           <h3>Đã có khoản chuyển đang chờ xác nhận</h3>
           <p>Khoản chuyển này đã được ghi nhận và đang chờ xác nhận.</p>
           <ul>{matchingPending.map((item, index) => <li key={index}>Số tiền đã ghi nhận: <b><Amount value={item.amount} /></b></li>)}</ul>
-          <p>Mở khoản đang chờ để kiểm tra. Người nhận xác nhận sau khi nhận tiền; nếu nhập sai, người ghi nhận hoặc chủ chuyến cần hủy khoản cũ trước khi gửi lại.</p>
         </section> : <>
         {ownPayment && transfer && <section className="field-card payment-qr-section">
           <h3>QR nhận tiền của {nameOf(data, transfer.to)}</h3>
           {memberFor(data, transfer.to)?.paymentQrReceiptId ? <TransferQr receipt={{ id: memberFor(data, transfer.to)!.paymentQrReceiptId!, name: 'QR người nhận' }} actions={receiptActions} amount={transfer.amount} label={'QR nhận tiền của ' + nameOf(data, transfer.to)} />
-            : <p>Người nhận chưa thêm QR. Liên hệ {nameOf(data, transfer.to)} để lấy thông tin chuyển khoản.</p>}
-          <p>Kiểm tra đúng người nhận và số tiền trong ứng dụng ngân hàng trước khi chuyển.</p>
+            : <p>Người nhận chưa thêm QR.</p>}
         </section>}
         {transfer && <label>Số tiền đã chuyển (VND)<input key={transfer.from + '/' + transfer.to} inputMode="numeric" name="amount" defaultValue={new Intl.NumberFormat('vi-VN').format(transfer.amount)} onChange={() => setError('')} required /></label>}
         {ownPayment && receiptActions && <PaymentImagePicker receipt={proof} onChange={setProof} actions={receiptActions} label="Ảnh chuyển khoản" busy={uploading} onBusy={setUploading} disabled={disabled} />}
         {ownPayment && !receiptActions && <p role="status">Cần kết nối mạng để tải ảnh chuyển khoản.</p>}
-        {data.remote && !ownPayment && <p>Bạn đang ghi nhận thay người chuyển. Người chuyển cần tự gửi giao dịch nếu muốn đính kèm ảnh chuyển khoản.</p>}
+        {data.remote && !ownPayment && <p>Đang ghi nhận thay người chuyển.</p>}
         </>}
         {stale && <p className="error" role="alert">Số dư đã thay đổi. Đóng hộp thoại rồi kiểm tra khoản chuyển mới.</p>}
         {error && <p className="error" role="alert">{error}</p>}
@@ -407,7 +397,6 @@ export function Settlements({ data, update, onMore, loading, remoteFilter, onFil
     {finance.complete && Object.hasOwn(finance.net, me) && <section className="card field-card settlement-summary" aria-label="Công nợ còn lại của bạn">
       <h2>{finance.net[me] > 0 ? 'Còn được nhận' : finance.net[me] < 0 ? 'Còn cần trả' : 'Đã cân bằng'}</h2>
       <strong><Amount value={Math.abs(finance.net[me])} /></strong>
-      <p>Đây là tổng công nợ còn lại. Mỗi khoản bên dưới giữ số tiền đã ghi nhận; xác nhận chỉ cập nhật số tiền của khoản đó.</p>
     </section>}
     <div className={'segmented compact-segments ' + (onFilter ? 'four-segments' : 'three-segments')} aria-label="Trạng thái chuyển tiền">
       {(onFilter ? ['pending', 'confirmed', 'cancelled', 'void'] as const : ['pending', 'confirmed', 'cancelled'] as const).map(status =>
@@ -446,12 +435,9 @@ export function Settlements({ data, update, onMore, loading, remoteFilter, onFil
         <span>{nameOf(data, selected.item.from)} → {nameOf(data, selected.item.to)}</span>
         {selected.item.date && <span>Khoản ghi nhận ngày {dateLabel(selected.item.date)}</span>}
       </section>} footer={<div className="button-pair"><button type="button" className="secondary-button" onClick={() => setSelected(null)}>Quay lại</button><button type="submit" form={formId} disabled={disabled || Boolean(stale) || !financialSnapshot(data).complete} className={selected.status === 'confirmed' ? 'primary-button' : 'danger-button'}>Xác nhận</button></div>}>
-      {selected.status === 'confirmed' && <p>Chỉ số tiền của khoản này được ghi nhận là đã nhận. Nếu số tiền ghi nhầm, hãy hủy khoản chờ rồi ghi nhận lại đúng số tiền thực chuyển.</p>}
       {selected.status === 'confirmed' && selected.item.receipts?.map(receipt => <PaymentImage key={receipt.id} receipt={receipt} actions={receiptActions} label={receipt.name} />)}
-      <p>{selected.status === 'confirmed' ? recipient(selected.item)
-        ? 'Hãy kiểm tra tiền thực tế đã nhận trước khi ghi sổ.'
-        : 'Bạn đang ghi sổ thay người nhận. Hãy xác minh người nhận đã nhận khoản tiền này.'
-        : selected.status === 'void' ? 'Số dư sẽ được tính lại sau khi hủy hiệu lực.' : 'Khoản chuyển chờ xác nhận sẽ được hủy và vẫn xuất hiện trong lịch sử.'}</p>
+      {selected.status === 'confirmed' ? !recipient(selected.item) && <p>Đang xác nhận thay người nhận.</p>
+        : <p>{selected.status === 'void' ? 'Số dư sẽ được tính lại sau khi hủy hiệu lực.' : 'Khoản chuyển sẽ được hủy và giữ trong lịch sử.'}</p>}
       <form id={formId} className="field-card dialog-fields" onSubmit={save}>
         {selected.status === 'void' && <label>Lý do<input name="reason" maxLength={300} required /></label>}
         {(error || stale) && <p className="error" role="alert">{stale ? 'Số dư đã thay đổi. Đóng hộp thoại và kiểm tra lại.' : error}</p>}

@@ -464,7 +464,7 @@ test('money screens keep equal shares, remaining debt, partial payments and reve
   dialog = page.getByRole('dialog');
   await dialog.getByLabel('Lý do hủy').fill('Không còn dùng khoản chi thử nghiệm');
   await dialog.getByRole('button', { name: 'Xác nhận hủy', exact: true }).click();
-  await page.getByText(/Khoản chi đã hủy. Các phần chia/).waitFor();
+  await page.getByText('Đã hủy', { exact: true }).waitFor();
   await page.goto(screen('so-du'));
   assert.equal((await checkMember('Bình', peers[0].id)).netMinor, 0);
   assert.equal((await checkMember('An', trip.ownerParticipantId)).paidMinor, 0);
@@ -498,7 +498,7 @@ test('single-person and unlinked balances guide users to add people, resplit old
   await memberPage.goto(screen('so-du'));
   await memberPage.getByText('Chưa liên kết', { exact: true }).waitFor();
   await memberPage.getByText(/Hiện chuyến chỉ có 1 người chia tiền/).waitFor();
-  await memberPage.getByText(/nhờ chủ chuyến thêm những người cùng chia/).waitFor();
+  await memberPage.getByText('Tài khoản chưa liên kết với người chia tiền.', { exact: true }).waitFor();
   assert.equal(await memberPage.getByRole('button', { name: 'Ghi nhận đã chuyển', exact: true }).count(), 0);
   assert.equal(await memberPage.getByRole('link', { name: 'Thêm người chia tiền', exact: true }).count(), 0);
   await memberPage.getByRole('link', { name: 'Xem tài khoản trong chuyến', exact: true }).click();
@@ -518,14 +518,13 @@ test('single-person and unlinked balances guide users to add people, resplit old
   const participant = (await call(root + '/overview', session)).participants.find(row => row.displayName === 'Bình');
   assert.equal((await call(expenses + '/' + expense.id, session)).shares.length, 1);
   await page.goto(screen('so-du'));
-  await transferSection.getByText(/Nếu bạn vừa thêm người chia tiền/).waitFor();
+  await transferSection.getByRole('heading', { name: 'Chưa có khoản cần chuyển theo phần chia đã lưu', exact: true }).waitFor();
   assert.equal(await page.getByRole('button', { name: 'Ghi nhận đã chuyển', exact: true }).count(), 0);
   await page.getByRole('link', { name: 'Xem và sửa khoản chi', exact: true }).click();
   await page.getByRole('link').filter({ hasText: 'Tiền chuyến đi chưa chia' }).click();
   await page.getByRole('link', { name: 'Sửa khoản chi', exact: true }).click();
   await heading(page, 'Sửa khoản chi');
   assert.equal(await page.getByLabel('Phần chia dự kiến của Bình', { exact: true }).getByRole('checkbox').isChecked(), false);
-  await page.getByText(/Khoản chi này giữ danh sách người được chia/).waitFor();
   await page.getByRole('button', { name: 'Chọn tất cả', exact: true }).click();
   await page.getByRole('button', { name: /Lưu khoản chi/ }).click();
   await heading(page, 'Tiền chuyến đi chưa chia');
@@ -723,7 +722,7 @@ test('group expense edits preserve financial history after a payer leaves and re
   await call(root + '/archive', session, { method: 'POST', version: balanced.trip.version, body: {} });
   await page.goto(screen('thanh-vien'));
   await page.reload();
-  await page.getByText(/Chuyến đã chốt giữ nguyên phần chia lúc chốt/).waitFor();
+  await page.getByText('Thành viên · Giữ phần chia lúc chốt', { exact: true }).waitFor();
   await page.getByRole('button', { name: 'Quản lý tài khoản Bình', exact: true }).click();
   await page.getByRole('button', { name: 'Gỡ quyền truy cập', exact: true }).click();
   dialog = page.getByRole('dialog');
@@ -733,7 +732,6 @@ test('group expense edits preserve financial history after a payer leaves and re
   await page.getByText('Đã gỡ quyền · Giữ phần chia lúc chốt', { exact: true }).waitFor();
   assert.deepEqual((await call(root + '/overview', session)).balances, balanced.balances);
   await page.goto(screen('so-du'));
-  await page.getByText('Phần chia được giữ theo lúc chốt', { exact: false }).waitFor();
   await page.getByRole('heading', { name: 'Tổng chi chia đều cho 2 thành viên', exact: true }).waitFor();
 });
 

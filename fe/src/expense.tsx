@@ -290,7 +290,6 @@ export function ExpenseForm({ data, expense: latest, update, receiptActions, dis
       </div>
       <section className="card field-card" aria-label="Ảnh hóa đơn của khoản chi">
         <h2>Ảnh hóa đơn <span className="optional">(tùy chọn)</span></h2>
-        <p>{data.remote ? 'Sau khi lưu khoản chi, tất cả thành viên trong nhóm có thể xem ảnh hóa đơn.' : 'Ảnh được lưu trên thiết bị.'}</p>
         <p>Tối đa 3 ảnh JPG, PNG hoặc WebP, mỗi ảnh tối đa 5 MiB.</p>
         <input type="file" accept={receiptTypes.join(',')} multiple hidden disabled={reading || disabled} ref={filePicker} onChange={attach} aria-label="Tệp ảnh hóa đơn" />
         <input type="file" accept={receiptTypes.join(',')} capture="environment" hidden disabled={reading || disabled} ref={cameraPicker} onChange={attach} aria-label="Máy ảnh hóa đơn" />
@@ -319,11 +318,9 @@ export function ExpenseForm({ data, expense: latest, update, receiptActions, dis
       </fieldset>
       {groupEqual ? <section className="card field-card" aria-label="Chia đều tự động">
         <h2>Chia đều cho cả nhóm</h2>
-        <p>Khoản này được cộng vào tổng chi, rồi chia đều cho {active.length} tài khoản đang trong nhóm. Ai vào nhóm cũng tự được tính, kể cả các khoản chi trước đó.</p>
         <a className="text-button" href={tripHref(data, 'so-du')}>Xem số tiền của từng người</a>
       </section> : <fieldset className="card field-card">
         <legend>Chia cho ai?</legend>
-        {expense && active.some(member => !(member.id in expense.shares)) && <p className="inline-note">Khoản chi này giữ danh sách người được chia đã lưu trước đó. Để chia thêm người, tích tên bên dưới hoặc bấm Chọn tất cả, kiểm tra phần phải chịu rồi lưu.</p>}
         <div className="split-heading"><span>{ids.length} người được chia</span>
           <button type="button" className="text-button" onClick={() => setSelected(active.every(member => selected.includes(member.id)) ? selected.filter(id => !active.some(member => member.id === id)) : [...new Set([...selected, ...active.map(member => member.id)])])}>
             {active.every(member => selected.includes(member.id)) ? 'Bỏ chọn tất cả' : 'Chọn tất cả'}
@@ -408,11 +405,9 @@ export function ExpenseDetail({ data, expense, update, receiptActions }: { data:
     <section>
       {data.remote?.sharingMode === 'group-equal' ? <>
         <div className="section-heading"><h2>Chi chung của nhóm</h2><span className="tag">Tự chia đều</span></div>
-        <p className="inline-note money-explainer">{expense.voided ? 'Khoản này đã hủy và không còn tính vào tổng chi.' : nameOf(data, expense.payer) + ' đã ứng khoản này. ' + (data.trip.closed ? 'Tổng chi đã được chia đều cho ' + sharingMembers(data).length + ' tài khoản tại lúc chốt chuyến.' : 'Tổng chi của cả chuyến được tự động chia đều cho ' + sharingMembers(data).length + ' tài khoản đang trong nhóm, kể cả người vừa tham gia.')}</p>
         <a className="text-button" href={tripHref(data, 'so-du')}>Xem số tiền còn cần trả / được nhận</a>
       </> : <>
       <div className="section-heading"><h2>Mỗi người phải chịu</h2><span className="tag">{expense.mode === 'equal' ? 'Chia đều' : 'Theo số tiền'}</span></div>
-      <p className="inline-note money-explainer">{expense.voided ? 'Khoản chi đã hủy. Các phần chia dưới đây chỉ để xem lại, không còn tính vào số dư.' : nameOf(data, expense.payer) + ' đã ứng toàn bộ. Đây là phần chi của từng người, chưa phải khoản chuyển tiền đã xác nhận.'}</p>
       <div className="card rows">{data.members.filter(member => member.id in expense.shares).map(member =>
         <div key={member.id} className="list-row" aria-label={'Phần phải chịu của ' + nameOf(data, member.id)}><Avatar member={member} /><span className="row-text"><strong>{nameOf(data, member.id)}{member.id === viewerOf(data) && ' (bạn)'}</strong><span>{member.id === expense.payer ? 'Người đã ứng tiền' : 'Phần được chia'}</span></span>
           <strong className="row-end"><Amount value={expense.shares[member.id]} /></strong></div>
@@ -422,7 +417,6 @@ export function ExpenseDetail({ data, expense, update, receiptActions }: { data:
     </section>
     {Boolean(expense.receipts?.length) && <section className="card field-card" aria-label="Ảnh hóa đơn của khoản chi">
       <h2>Ảnh hóa đơn</h2>
-      {data.remote && <p>Tất cả thành viên trong nhóm có thể xem ảnh hóa đơn của khoản chi này. Bấm vào ảnh để phóng to.</p>}
       <div className="receipt-grid">{expense.receipts?.map(receipt => <PaymentImage key={receipt.id} receipt={receipt} actions={receiptActions} label={receipt.name} onOpen={() => setImage(receipt)} />)}</div>
     </section>}
     {canEditExpense(data, expense) && <div className="button-pair">

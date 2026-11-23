@@ -27,21 +27,19 @@ export function ShareRepaymentQrs({ data, actions, context, disabled }: { data: 
       <button type="button" className="secondary-button" onClick={() => setOpen(false)}>Xong</button>
     </div>}>
       {context && <p className="payment-caption">{context}</p>}
-      {!chosen && <p>Chọn người cần trả. QR dùng số còn nợ hiện tại, đã trừ tiền ứng và các khoản đã xác nhận.</p>}
-      {!ready ? <p role="status">Đang cập nhật số tiền cần chuyển. Chờ đồng bộ hoặc mở lại sau khi làm mới dữ liệu.</p> : chosen ? <>
+      {!ready ? <p role="status">Đang cập nhật số tiền cần chuyển…</p> : chosen ? <>
         {receiver?.paymentQrReceiptId ? <TransferQr key={chosen.from + '/' + chosen.to} receipt={{ id: receiver.paymentQrReceiptId, name: 'QR người nhận' }} actions={actions}
           amount={chosen.amount} label={'QR ' + nameOf(data, chosen.from) + ' chuyển cho ' + nameOf(data, chosen.to)}
           shareInfo={{ group: data.trip.name, from: nameOf(data, chosen.from), to: nameOf(data, chosen.to), context,
             url: new URL(tripHref(data, 'so-du'), window.location.origin + '/').href }} />
-          : <p role="status">{nameOf(data, chosen.to)} chưa thêm QR nhận tiền. Người nhận cần vào Thành viên → QR nhận tiền của bạn để tải QR ngân hàng.</p>}
+          : <p role="status">{nameOf(data, chosen.to)} chưa thêm QR nhận tiền.</p>}
       </> : transfers.length ? <div className="share-recipient-list">{transfers.map(item => <section className="field-card share-recipient" key={item.from + '/' + item.to} aria-label={'Khoản cần trả của ' + nameOf(data, item.from)}>
         <strong>{nameOf(data, item.from)} → {nameOf(data, item.to)}</strong><Amount value={item.amount} />
         {blocked(item.from, item.to) ? <>
-          <p>Cặp này có khoản đang chờ xác nhận. Xử lý khoản cũ trước khi chia sẻ QR yêu cầu chuyển thêm.</p>
+          <p>Đang chờ xác nhận.</p>
           <a className="text-button" href={tripHref(data, 'quyet-toan') + '?status=pending'}>Xem khoản đang chờ</a>
         </> : <button type="button" className="secondary-button" onClick={() => setSelected(item.from + '/' + item.to)}>Tạo QR cho {nameOf(data, item.from)}</button>}
       </section>)}</div> : <p>Nhóm hiện không còn khoản cần chuyển để tạo QR.</p>}
-      <details className="payment-help"><summary>Cách tính tiền và gửi QR</summary><p>QR dùng số còn nợ hiện tại của cả nhóm, đã trừ tiền ứng và các khoản đã xác nhận. Chia sẻ QR chưa ghi nhận đã chuyển tiền. Người chuyển vẫn cần gửi bill sau khi chuyển.</p></details>
     </Dialog>}
   </>;
 }

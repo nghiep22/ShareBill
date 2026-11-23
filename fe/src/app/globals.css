@@ -329,7 +329,6 @@ input[type="radio"], input[type="checkbox"] { min-height: 0; width: 16px; height
 .balance-breakdown dd { margin: 0; font-weight: 700; }
 .balance-breakdown .amount { white-space: normal; overflow-wrap: anywhere; }
 .balance-member + .balance-member { border-top: 1px solid var(--line); }
-.money-explainer { margin-bottom: 12px; }
 .split-caption { display: block; color: var(--muted); font-size: 11px; font-weight: 500; }
 .split-row > strong { text-align: right; }
 .member-money { display: grid; justify-items: end; gap: 2px; }
@@ -363,9 +362,6 @@ input[type="radio"], input[type="checkbox"] { min-height: 0; width: 16px; height
 .payment-picker .payment-file-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .payment-picker .payment-image img { max-height: 180px; }
 .dialog-fields > .payment-picker, .dialog-fields > .payment-qr-section { padding: 0; }
-.payment-help { min-width: 0; color: var(--muted); font-size: 13px; }
-.payment-help > summary { padding-block: 6px; cursor: pointer; font-weight: 600; }
-.payment-help[open] > p { margin-top: 6px; }
 .payment-caption { color: var(--muted); font-size: 13px; overflow-wrap: anywhere; }
 .payment-pending { padding: 14px; border-radius: 12px; background: var(--mint); }
 .payment-pending ul { padding-left: 20px; }

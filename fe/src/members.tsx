@@ -69,7 +69,6 @@ export function Members({ data, update, accounts, view, receiptActions, disabled
       <button aria-pressed={filter === 'all'} onClick={() => setFilter('all')}>Người chia tiền</button>
       <button aria-pressed={filter === 'linked'} onClick={() => setFilter('linked')}>Tài khoản truy cập</button>
     </div>}
-    {!groupEqual && filter === 'all' && <p className="inline-note money-explainer">Người chia tiền là những người được chọn trong khoản chi, không cần có tài khoản. Thêm người mới giữ nguyên phần chia của khoản chi cũ; vào Chi tiêu → mở khoản chi → Sửa → Chia cho ai? để chọn thêm người.</p>}
     {data.remote && (groupEqual || filter === 'linked') ? accounts : <div className="card rows">
       {!members.length && <Empty>Chưa có tài khoản truy cập.</Empty>}
       {members.map(member => {

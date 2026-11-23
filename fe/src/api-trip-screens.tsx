@@ -126,10 +126,6 @@ export function MemberAccounts({ data, accounts, tripId, api, run }: {
   }
 
   return <>
-    <p className="inline-note money-explainer">{data.remote?.sharingMode === 'group-equal' ? data.trip.closed
-      ? 'Chuyến đã chốt giữ nguyên phần chia lúc chốt. Gỡ quyền truy cập không đổi tiền; khi mở lại, tổng chi sẽ được chia lại cho các tài khoản còn trong nhóm.'
-      : 'Mỗi tài khoản đang trong nhóm là một người chia tiền. Tổng chi tự chia đều, kể cả các khoản trước khi người đó tham gia. Chỉ cần gửi lời mời và vào nhóm, không cần liên kết hay chọn lại khoản chi.'
-      : 'Tài khoản truy cập cho phép đăng nhập vào chuyến. Chủ chuyến bấm nút quản lý cạnh tài khoản → Liên kết người chia tiền → chọn đúng tên. Liên kết chỉ xác định số dư của tài khoản; không chia lại khoản chi cũ.'}</p>
     <div className="card rows">
       {!accounts.length && <Empty>Chưa có tài khoản trong chuyến.</Empty>}
       {accounts.map(account => <div className="list-row member-row" key={account.uid}>

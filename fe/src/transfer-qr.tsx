@@ -54,7 +54,7 @@ export function TransferQr({ receipt, actions, amount, label, shareInfo }: { rec
   // Never show a previous recipient's QR while the current image/amount is loading.
   const active = result?.source === source && result.amount === amount && result.shareKey === shareKey ? result : undefined;
   if (active?.failed) return <div className="field-card">
-    <p role="status">Chưa tạo được QR có sẵn số tiền từ ảnh này. Bạn có thể dùng QR gốc bên dưới và nhập đúng số tiền cần chuyển trong ứng dụng ngân hàng.</p>
+    <p role="status">Chưa tạo được QR có sẵn số tiền từ ảnh này. QR gốc chưa kèm số tiền cần chuyển.</p>
     <PaymentImage receipt={receipt} actions={actions} label={label} />
     <button type="button" className="text-button" onClick={() => retry(value => value + 1)}>Thử tạo QR lại</button>
   </div>;
@@ -62,7 +62,6 @@ export function TransferQr({ receipt, actions, amount, label, shareInfo }: { rec
     {!active?.src ? <p role="status">Đang tạo QR có sẵn số tiền…</p> : <>
       <img src={active.shared?.src ?? active.src} alt={label} width={active.shared ? 900 : 512} height={active.shared ? 1400 : 512} />
       {active.shared ? <QrShareActions key={source + amount + shareKey} prepared={active.shared} /> : <a className="primary-button compact" href={active.src} download={'sharebill-' + amount + '.png'}>Tải QR có sẵn số tiền</a>}
-      <details className="payment-help"><summary>Cách quét QR trong ngân hàng</summary><p>QR đã kèm tài khoản người nhận và {new Intl.NumberFormat('vi-VN').format(amount)}đ. Tải ảnh, mở ứng dụng ngân hàng → Quét QR → Chọn ảnh từ thư viện.</p></details>
     </>}
   </div>;
 }

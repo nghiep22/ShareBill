@@ -67,22 +67,21 @@ export function QrShareActions({ prepared }: { prepared: PreparedQrShare }) {
     if (locked.current) return;
     const data: ShareData = { files: [prepared.file], title: 'ShareBill · QR chuyển tiền', text: prepared.text };
     if (!navigator.share || !navigator.canShare?.({ files: data.files })) {
-      setMessage('Thiết bị chưa hỗ trợ chia sẻ ảnh trực tiếp. Bấm Tải ảnh gửi Zalo rồi chọn ảnh trong nhóm Zalo.'); return;
+      setMessage('Thiết bị chưa hỗ trợ chia sẻ ảnh trực tiếp.'); return;
     }
     locked.current = true; setBusy(true); setMessage('');
-    try { await navigator.share(data); setMessage('Đã mở chia sẻ ảnh. Kiểm tra nhóm nhận trong Zalo.'); }
+    try { await navigator.share(data); setMessage('Đã mở chia sẻ ảnh.'); }
     catch (cause) {
-      if (!(cause instanceof DOMException && cause.name === 'AbortError')) setMessage('Chưa chia sẻ được ảnh. Bạn có thể tải ảnh rồi gửi vào nhóm Zalo.');
+      if (!(cause instanceof DOMException && cause.name === 'AbortError')) setMessage('Chưa chia sẻ được ảnh.');
     } finally { locked.current = false; setBusy(false); }
   }
   return <div className="qr-share-actions">
     <button type="button" className="primary-button" disabled={busy} onClick={() => void share()}>Chia sẻ ảnh</button>
     <a className="secondary-button" href={prepared.src} download={prepared.file.name}>Tải ảnh gửi Zalo</a>
     <button type="button" className="text-button" onClick={async () => {
-      try { await navigator.clipboard.writeText(prepared.text); setMessage('Đã sao chép nội dung. Dán vào nhóm Zalo cùng ảnh QR.'); }
-      catch { setManualCopy(true); setMessage('Chọn và sao chép nội dung bên dưới để gửi cùng ảnh QR.'); }
+      try { await navigator.clipboard.writeText(prepared.text); setMessage('Đã sao chép nội dung.'); }
+      catch { setManualCopy(true); setMessage('Không thể sao chép tự động.'); }
     }}>Sao chép nội dung gửi nhóm</button>
-    <details className="payment-help"><summary>Gửi vào nhóm Zalo thế nào?</summary><p>Chọn Zalo và nhóm cần gửi trong bảng chia sẻ. Nếu không thấy Zalo, tải ảnh rồi đính kèm trong nhóm.</p></details>
     {message && <p role="status">{message}</p>}
     {manualCopy && <label>Nội dung gửi nhóm Zalo<textarea readOnly value={prepared.text} rows={6} /></label>}
   </div>;
