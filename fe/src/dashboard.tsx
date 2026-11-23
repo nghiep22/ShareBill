@@ -4,7 +4,7 @@ import {
   ArrowDownLeft, ArrowDownUp, ArrowRight, ArrowUpRight, CalendarDays, ChevronRight,
   CircleCheck, History, MapPin, Plus, ReceiptText, Search, Settings2, UserPlus, Wallet,
 } from 'lucide-react';
-import { useState, type FormEvent } from 'react';
+import { useId, useState, type FormEvent } from 'react';
 import {
   activeExpenses, balances, canWrite, categories, dateLabel, dateRange, isOwner, memberFor, money, nameOf, netLabel,
   newId, record, settlementStatus, sharingMembers, suggestions, today, viewerOf, type Demo, type Expense, type Receipt, type Settlement, type Transfer,
@@ -178,6 +178,7 @@ export function Expenses({ data, filters, onFilter, onMore, loading }: {
 }
 
 export function Balances({ data, update, loading, disabled, receiptActions }: { data: Demo; update: UpdateTrip; loading?: boolean; disabled?: boolean; receiptActions?: ReceiptActions }) {
+  const formId = useId();
   const [proof, setProof] = useState<Receipt>();
   const [uploading, setUploading] = useState(false);
   const [selected, setSelected] = useState<{ transfer?: Transfer; ledgerVersion?: number }>();
@@ -215,7 +216,9 @@ export function Balances({ data, update, loading, disabled, receiptActions }: { 
   const cap = transferLimit(totals[from] ?? 0, totals[to] ?? 0);
   const transfer = selected?.transfer ?? (cap > 0 ? { from, to, amount: cap } : undefined);
   const ownPayment = Boolean(data.remote && transfer?.from === me);
-  const alreadyRecorded = Boolean(transfer && isPending(transfer));
+  const matchingPending = transfer ? pendingTransfers.filter(item => item.from === transfer.from && item.to === transfer.to) : [];
+  const alreadyRecorded = matchingPending.length > 0;
+  const pendingHref = tripHref(data, 'quyet-toan') + '?status=pending';
   const stale = selected?.ledgerVersion !== undefined && selected.ledgerVersion !== data.remote?.ledgerVersion;
 
   function open(transfer?: Transfer) {
@@ -284,10 +287,12 @@ export function Balances({ data, update, loading, disabled, receiptActions }: { 
         </div>}
       </div>}
       {pending > 0 && <p className="inline-note">Các khoản đang chờ vẫn nằm ngoài số tiền đã xác nhận. Kiểm tra lịch sử trước khi ghi thêm khoản chuyển.</p>}
-      {!loading && transfers.length > 0 && <p className="inline-note money-explainer">Mở QR người nhận, chuyển tiền bằng ứng dụng ngân hàng rồi tải ảnh chuyển khoản và bấm “Tôi đã chuyển khoản”. Người nhận kiểm tra ảnh và tiền thực nhận, sau đó xác nhận để cập nhật công nợ.</p>}
+      {!loading && transfers.length > 0 && <p className="inline-note money-explainer">Mở QR người nhận, chuyển tiền bằng ứng dụng ngân hàng rồi tải ảnh chuyển khoản và bấm “Gửi báo đã chuyển khoản”. Người nhận kiểm tra ảnh và tiền thực nhận, sau đó xác nhận để cập nhật công nợ.</p>}
       <div className="transfer-grid">{!loading && complete && transfers.map(suggestion => <div className="card transfer-card" key={suggestion.from + '-' + suggestion.to}>
         <div className="list-row"><TransferRow data={data} transfer={suggestion} /></div>
-        {canWrite(data) && (isOwner(data) || suggestion.from === me) && <button className="soft-button transfer-button" disabled={disabled || isPending(suggestion)} onClick={() => open(suggestion)}><ArrowDownUp size={16} aria-hidden /> {isPending(suggestion) ? 'Đã ghi nhận · Chờ xác nhận' : data.remote ? suggestion.from === me ? 'Chuyển khoản' : 'Ghi nhận thay' : 'Ghi nhận đã chuyển'}</button>}
+        {canWrite(data) && (isOwner(data) || suggestion.from === me) && (isPending(suggestion)
+          ? <a className="soft-button transfer-button" href={pendingHref}><History size={16} aria-hidden /> Xem khoản đang chờ</a>
+          : <button className="soft-button transfer-button" disabled={disabled} onClick={() => open(suggestion)}><ArrowDownUp size={16} aria-hidden /> {data.remote ? suggestion.from === me ? 'Chuyển khoản' : 'Ghi nhận thay' : 'Ghi nhận đã chuyển'}</button>)}
       </div>)}</div>
     </section>
     <section>
@@ -309,9 +314,15 @@ export function Balances({ data, update, loading, disabled, receiptActions }: { 
       })}</div>
     </section>
     <PaymentQrCard data={data} update={update} actions={receiptActions} disabled={disabled} />
-    {selected && <Dialog title={ownPayment ? 'Chuyển khoản trả thành viên' : 'Ghi nhận đã chuyển tiền'} onClose={() => { if (!uploading) setSelected(undefined); }}>
+    {selected && <Dialog title={ownPayment ? 'Chuyển khoản trả thành viên' : 'Ghi nhận đã chuyển tiền'} onClose={() => { if (!uploading) setSelected(undefined); }} footer={alreadyRecorded
+      ? <a className="primary-button" href={pendingHref}>Xem và xử lý khoản đang chờ</a>
+      : <>
+        {ownPayment && !proof && <p role="status">Thêm ảnh chuyển khoản để gửi báo đã chuyển.</p>}
+        {uploading && <p role="status">Đang xử lý ảnh, vui lòng chờ…</p>}
+        <button type="submit" form={formId} className="primary-button" disabled={disabled || uploading || stale || !transfer || !complete || !transfersReady || Boolean(ownPayment && !proof)}>{ownPayment ? 'Gửi báo đã chuyển khoản' : 'Ghi nhận'}</button>
+      </>}>
       <p>{selected.transfer && nameOf(data, selected.transfer.from) + ' → ' + nameOf(data, selected.transfer.to) + '. '}Số dư cập nhật sau khi khoản chuyển được xác nhận.</p>
-      <form className="field-card dialog-fields" onSubmit={save}>
+      <form id={formId} className="field-card dialog-fields" onSubmit={save}>
         {!selected.transfer && <div className="field-pair">
           <label>Người chuyển<select aria-label="Người chuyển" value={from} disabled={uploading || Boolean(proof)} onChange={event => setFrom(event.target.value)}>{debtors.map(member => <option value={member.id} key={member.id}>{nameOf(data, member.id)}</option>)}</select></label>
           <label>Người nhận<select aria-label="Người nhận" value={to} disabled={uploading || Boolean(proof)} onChange={event => setTo(event.target.value)}>{creditors.map(member => <option value={member.id} key={member.id}>{nameOf(data, member.id)}</option>)}</select></label>
@@ -321,6 +332,12 @@ export function Balances({ data, update, loading, disabled, receiptActions }: { 
           <strong><Amount value={transfer.amount} /></strong>
           <span>{nameOf(data, transfer.from)} → {nameOf(data, transfer.to)}</span>
         </section>}
+        {alreadyRecorded ? <section className="field-card payment-pending" aria-label="Khoản chuyển đang chờ xác nhận">
+          <h3>Đã có khoản chuyển đang chờ xác nhận</h3>
+          <p>Khoản chuyển này đã được ghi nhận và đang chờ xác nhận.</p>
+          <ul>{matchingPending.map((item, index) => <li key={index}>Số tiền đã ghi nhận: <b><Amount value={item.amount} /></b></li>)}</ul>
+          <p>Mở khoản đang chờ để kiểm tra. Người nhận xác nhận sau khi nhận tiền; nếu nhập sai, người ghi nhận hoặc chủ chuyến cần hủy khoản cũ trước khi gửi lại.</p>
+        </section> : <>
         {ownPayment && transfer && <section className="field-card">
           <h3>QR nhận tiền của {nameOf(data, transfer.to)}</h3>
           {memberFor(data, transfer.to)?.paymentQrReceiptId ? <TransferQr receipt={{ id: memberFor(data, transfer.to)!.paymentQrReceiptId!, name: 'QR người nhận' }} actions={receiptActions} amount={transfer.amount} label={'QR nhận tiền của ' + nameOf(data, transfer.to)} />
@@ -331,10 +348,9 @@ export function Balances({ data, update, loading, disabled, receiptActions }: { 
         {ownPayment && receiptActions && <PaymentImagePicker receipt={proof} onChange={setProof} actions={receiptActions} label="Ảnh chuyển khoản" busy={uploading} onBusy={setUploading} disabled={disabled} />}
         {ownPayment && !receiptActions && <p role="status">Cần kết nối mạng để tải ảnh chuyển khoản.</p>}
         {data.remote && !ownPayment && <p>Bạn đang ghi nhận thay người chuyển. Người chuyển cần tự gửi giao dịch nếu muốn đính kèm ảnh chuyển khoản.</p>}
-        {alreadyRecorded && <p role="status">Khoản chuyển này đã được ghi nhận và đang chờ xác nhận. <a className="text-button" href={tripHref(data, 'quyet-toan')}>Xem lịch sử chuyển tiền</a></p>}
+        </>}
         {stale && <p className="error" role="alert">Số dư đã thay đổi. Đóng hộp thoại rồi kiểm tra khoản chuyển mới.</p>}
         {error && <p className="error" role="alert">{error}</p>}
-        <button className="primary-button" disabled={disabled || uploading || stale || !transfer || !complete || alreadyRecorded || !transfersReady || Boolean(ownPayment && !proof)}>{alreadyRecorded ? 'Đã ghi nhận · Chờ xác nhận' : ownPayment ? 'Tôi đã chuyển khoản' : 'Ghi nhận'}</button>
       </form>
     </Dialog>}
   </>;

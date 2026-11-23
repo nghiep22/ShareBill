@@ -42,7 +42,7 @@ export function CategorySelect({ value, onChange, remote }: { value: Category; o
 
 export const MutationFeedback = createContext<{ busy: boolean; offline?: boolean; error: string; recovery?: { label: string; href: string } }>({ busy: false, error: '' });
 
-export function Dialog({ title, onClose, children }: { title: string; onClose: () => void; children: ReactNode }) {
+export function Dialog({ title, onClose, children, footer }: { title: string; onClose: () => void; children: ReactNode; footer?: ReactNode }) {
   const ref = useRef<HTMLDialogElement>(null);
   const label = useId();
   const feedback = useContext(MutationFeedback);
@@ -51,7 +51,7 @@ export function Dialog({ title, onClose, children }: { title: string; onClose: (
     dialog?.showModal();
     return () => dialog?.close();
   }, []);
-  return <dialog ref={ref} aria-labelledby={label} onCancel={event => { event.preventDefault(); if (!feedback.busy) onClose(); }}>
+  return <dialog ref={ref} className={footer ? 'dialog-with-footer' : undefined} aria-labelledby={label} onCancel={event => { event.preventDefault(); if (!feedback.busy) onClose(); }}>
     <div className="dialog-header"><h2 id={label}>{title}</h2>
       <button type="button" className="icon-button" autoFocus disabled={feedback.busy} aria-label="Đóng" onClick={onClose}><X size={21} aria-hidden /></button>
     </div>
@@ -60,5 +60,6 @@ export function Dialog({ title, onClose, children }: { title: string; onClose: (
     {feedback.error && <p className="inline-note error" role="alert">{feedback.error}</p>}
     {feedback.recovery && <a className="secondary-button" href={feedback.recovery.href}>{feedback.recovery.label}</a>}
     <div className="dialog-content" inert={feedback.busy || feedback.offline || undefined}>{children}</div>
+    {footer && <div className="dialog-footer" inert={feedback.busy || feedback.offline || undefined}>{footer}</div>}
   </dialog>;
 }

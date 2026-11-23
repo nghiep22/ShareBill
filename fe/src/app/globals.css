@@ -349,6 +349,10 @@ input[type="radio"], input[type="checkbox"] { min-height: 0; width: 16px; height
 .payment-image .text-button { white-space: normal; text-align: left; }
 .transfer-qr img { width: 280px; height: auto; border-radius: 0; }
 .payment-picker input[type="file"] { width: 100%; max-width: 100%; font-size: 13px; }
+.payment-picker p { min-width: 0; overflow-wrap: anywhere; }
+.payment-picker .payment-image img { max-height: 180px; }
+.payment-pending { padding: 14px; border-radius: 12px; background: var(--mint); }
+.payment-pending ul { padding-left: 20px; }
 .payment-proof-button { margin: 4px 12px 12px; }
 .payment-amount { display: grid; gap: 6px; padding: 16px; border-radius: 12px; background: var(--mint); color: var(--teal-dark); }
 .payment-amount strong { font-size: 28px; line-height: 1.2; overflow-wrap: anywhere; }
@@ -398,6 +402,12 @@ dialog::backdrop { background: rgb(15 23 42 / 44%); backdrop-filter: blur(2px); 
 .dialog-header button { border: 0; background: var(--canvas); }
 .dialog-fields { padding: 0; }
 .dialog-content { display: grid; gap: 12px; }
+.dialog-with-footer[open] { display: flex; flex-direction: column; overflow: hidden; }
+.dialog-with-footer > .dialog-header, .dialog-with-footer > .dialog-footer { flex-shrink: 0; }
+.dialog-with-footer > .dialog-content { min-height: 0; overflow-y: auto; overflow-x: hidden; padding-right: 4px; }
+.dialog-footer { display: grid; gap: 8px; padding-top: 12px; border-top: 1px solid var(--line); }
+.dialog-footer > .primary-button { width: 100%; }
+.dialog-footer p { color: var(--muted); font-size: 14px; overflow-wrap: anywhere; }
 .workspace-public { display: block; }
 .workspace-public .app-header { padding-inline: max(16px, (100% - 1050px) / 2); }
 .workspace-public .main { padding-bottom: 32px; }
