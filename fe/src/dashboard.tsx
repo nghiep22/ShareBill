@@ -289,7 +289,7 @@ export function Balances({ data, update, loading, disabled, receiptActions }: { 
       </div>}
       {pending > 0 && <p className="inline-note">Các khoản đang chờ vẫn nằm ngoài số tiền đã xác nhận. Kiểm tra lịch sử trước khi ghi thêm khoản chuyển.</p>}
       {complete && transfers.length > 0 && <ShareRepaymentQrs data={data} actions={receiptActions} disabled={disabled || loading} />}
-      {!loading && transfers.length > 0 && <p className="inline-note money-explainer">Mở QR người nhận, chuyển tiền bằng ứng dụng ngân hàng rồi tải ảnh chuyển khoản và bấm “Gửi báo đã chuyển khoản”. Người nhận kiểm tra ảnh và tiền thực nhận, sau đó xác nhận để cập nhật công nợ.</p>}
+      {!loading && transfers.length > 0 && <details className="inline-note payment-help money-explainer"><summary>Cách chuyển trả và xác nhận</summary><p>Mở QR người nhận, chuyển tiền bằng ứng dụng ngân hàng rồi tải ảnh chuyển khoản và bấm “Gửi báo đã chuyển khoản”. Người nhận kiểm tra ảnh và tiền thực nhận, sau đó xác nhận để cập nhật công nợ.</p></details>}
       <div className="transfer-grid">{!loading && complete && transfers.map(suggestion => <div className="card transfer-card" key={suggestion.from + '-' + suggestion.to}>
         <div className="list-row"><TransferRow data={data} transfer={suggestion} /></div>
         {canWrite(data) && (isOwner(data) || suggestion.from === me) && (isPending(suggestion)
@@ -316,31 +316,30 @@ export function Balances({ data, update, loading, disabled, receiptActions }: { 
       })}</div>
     </section>
     <PaymentQrCard data={data} update={update} actions={receiptActions} disabled={disabled} />
-    {selected && <Dialog title={ownPayment ? 'Chuyển khoản trả thành viên' : 'Ghi nhận đã chuyển tiền'} onClose={() => { if (!uploading) setSelected(undefined); }} footer={alreadyRecorded
+    {selected && <Dialog title={ownPayment ? 'Chuyển khoản trả thành viên' : 'Ghi nhận đã chuyển tiền'} onClose={() => { if (!uploading) setSelected(undefined); }} summary={transfer && <section className="payment-amount" aria-label="Số tiền cần chuyển cho người nhận">
+      <span>Số tiền cần chuyển</span>
+      <strong><Amount value={transfer.amount} /></strong>
+      <span>{nameOf(data, transfer.from)} → {nameOf(data, transfer.to)}</span>
+    </section>} footer={alreadyRecorded
       ? <a className="primary-button" href={pendingHref}>Xem và xử lý khoản đang chờ</a>
       : <>
         {ownPayment && !proof && <p role="status">Thêm ảnh chuyển khoản để gửi báo đã chuyển.</p>}
         {uploading && <p role="status">Đang xử lý ảnh, vui lòng chờ…</p>}
         <button type="submit" form={formId} className="primary-button" disabled={disabled || uploading || stale || !transfer || !complete || !transfersReady || Boolean(ownPayment && !proof)}>{ownPayment ? 'Gửi báo đã chuyển khoản' : 'Ghi nhận'}</button>
       </>}>
-      <p>{selected.transfer && nameOf(data, selected.transfer.from) + ' → ' + nameOf(data, selected.transfer.to) + '. '}Số dư cập nhật sau khi khoản chuyển được xác nhận.</p>
+      <p className="payment-caption">Số dư cập nhật sau khi người nhận xác nhận.</p>
       <form id={formId} className="field-card dialog-fields" onSubmit={save}>
         {!selected.transfer && <div className="field-pair">
           <label>Người chuyển<select aria-label="Người chuyển" value={from} disabled={uploading || Boolean(proof)} onChange={event => setFrom(event.target.value)}>{debtors.map(member => <option value={member.id} key={member.id}>{nameOf(data, member.id)}</option>)}</select></label>
           <label>Người nhận<select aria-label="Người nhận" value={to} disabled={uploading || Boolean(proof)} onChange={event => setTo(event.target.value)}>{creditors.map(member => <option value={member.id} key={member.id}>{nameOf(data, member.id)}</option>)}</select></label>
         </div>}
-        {transfer && <section className="payment-amount" aria-label="Số tiền cần chuyển cho người nhận">
-          <span>Số tiền cần chuyển</span>
-          <strong><Amount value={transfer.amount} /></strong>
-          <span>{nameOf(data, transfer.from)} → {nameOf(data, transfer.to)}</span>
-        </section>}
         {alreadyRecorded ? <section className="field-card payment-pending" aria-label="Khoản chuyển đang chờ xác nhận">
           <h3>Đã có khoản chuyển đang chờ xác nhận</h3>
           <p>Khoản chuyển này đã được ghi nhận và đang chờ xác nhận.</p>
           <ul>{matchingPending.map((item, index) => <li key={index}>Số tiền đã ghi nhận: <b><Amount value={item.amount} /></b></li>)}</ul>
           <p>Mở khoản đang chờ để kiểm tra. Người nhận xác nhận sau khi nhận tiền; nếu nhập sai, người ghi nhận hoặc chủ chuyến cần hủy khoản cũ trước khi gửi lại.</p>
         </section> : <>
-        {ownPayment && transfer && <section className="field-card">
+        {ownPayment && transfer && <section className="field-card payment-qr-section">
           <h3>QR nhận tiền của {nameOf(data, transfer.to)}</h3>
           {memberFor(data, transfer.to)?.paymentQrReceiptId ? <TransferQr receipt={{ id: memberFor(data, transfer.to)!.paymentQrReceiptId!, name: 'QR người nhận' }} actions={receiptActions} amount={transfer.amount} label={'QR nhận tiền của ' + nameOf(data, transfer.to)} />
             : <p>Người nhận chưa thêm QR. Liên hệ {nameOf(data, transfer.to)} để lấy thông tin chuyển khoản.</p>}
@@ -364,6 +363,7 @@ export function Settlements({ data, update, onMore, loading, remoteFilter, onFil
   data: Demo; update: UpdateTrip; onMore?: () => void; loading?: boolean; remoteFilter?: SettlementFilter; onFilter?: (status: SettlementFilter) => void; disabled?: boolean;
   receiptActions?: ReceiptActions;
 }) {
+  const formId = useId();
   const [viewing, setViewing] = useState<Settlement>();
   const [localFilter, setLocalFilter] = useState<SettlementFilter>('pending');
   const filter = remoteFilter ?? localFilter;
@@ -435,28 +435,26 @@ export function Settlements({ data, update, onMore, loading, remoteFilter, onFil
       </div>;
     })}</div>
     {onMore && <button className="secondary-button" disabled={loading} onClick={onMore}>Tải thêm giao dịch</button>}
-    {viewing && <Dialog title="Ảnh chuyển khoản" onClose={() => setViewing(undefined)}>
-      <p>{nameOf(data, viewing.from)} → {nameOf(data, viewing.to)} · {money(viewing.amount)}</p>
+    {viewing && <Dialog title="Ảnh chuyển khoản" onClose={() => setViewing(undefined)} summary={<section className="payment-amount">
+      <span>Số tiền đã ghi nhận</span><strong><Amount value={viewing.amount} /></strong><span>{nameOf(data, viewing.from)} → {nameOf(data, viewing.to)}</span>
+    </section>} footer={canWrite(data) && recipient(viewing) && settlementStatus(viewing) === 'pending' && <button className="primary-button" disabled={disabled} onClick={() => { setViewing(undefined); open(viewing, 'confirmed'); }}>Xác nhận đã nhận tiền</button>}>
       {viewing.receipts?.map(receipt => <PaymentImage key={receipt.id} receipt={receipt} actions={receiptActions} label={receipt.name} />)}
-      {canWrite(data) && recipient(viewing) && settlementStatus(viewing) === 'pending' && <button className="primary-button" disabled={disabled} onClick={() => { setViewing(undefined); open(viewing, 'confirmed'); }}>Xác nhận đã nhận tiền</button>}
     </Dialog>}
-    {selected && <Dialog title={selected.status === 'confirmed' && !recipient(selected.item) ? 'Xác nhận thay người nhận?' : actions[selected.status] + '?'} onClose={() => setSelected(null)}>
-      <p>{nameOf(data, selected.item.from)} → {nameOf(data, selected.item.to)} · {money(selected.item.amount)}</p>
-      {selected.status === 'confirmed' && <section className="payment-amount" aria-label="Số tiền xác nhận của khoản chuyển">
-        <span>Số tiền xác nhận cho khoản này</span>
+    {selected && <Dialog title={selected.status === 'confirmed' && !recipient(selected.item) ? 'Xác nhận thay người nhận?' : actions[selected.status] + '?'} onClose={() => setSelected(null)} summary={<section className="payment-amount" aria-label="Số tiền xác nhận của khoản chuyển">
+        <span>{selected.status === 'confirmed' ? 'Số tiền xác nhận cho khoản này' : 'Số tiền của khoản chuyển'}</span>
         <strong><Amount value={selected.item.amount} /></strong>
+        <span>{nameOf(data, selected.item.from)} → {nameOf(data, selected.item.to)}</span>
         {selected.item.date && <span>Khoản ghi nhận ngày {dateLabel(selected.item.date)}</span>}
-      </section>}
+      </section>} footer={<div className="button-pair"><button type="button" className="secondary-button" onClick={() => setSelected(null)}>Quay lại</button><button type="submit" form={formId} disabled={disabled || Boolean(stale) || !financialSnapshot(data).complete} className={selected.status === 'confirmed' ? 'primary-button' : 'danger-button'}>Xác nhận</button></div>}>
       {selected.status === 'confirmed' && <p>Chỉ số tiền của khoản này được ghi nhận là đã nhận. Nếu số tiền ghi nhầm, hãy hủy khoản chờ rồi ghi nhận lại đúng số tiền thực chuyển.</p>}
       {selected.status === 'confirmed' && selected.item.receipts?.map(receipt => <PaymentImage key={receipt.id} receipt={receipt} actions={receiptActions} label={receipt.name} />)}
       <p>{selected.status === 'confirmed' ? recipient(selected.item)
         ? 'Hãy kiểm tra tiền thực tế đã nhận trước khi ghi sổ.'
         : 'Bạn đang ghi sổ thay người nhận. Hãy xác minh người nhận đã nhận khoản tiền này.'
         : selected.status === 'void' ? 'Số dư sẽ được tính lại sau khi hủy hiệu lực.' : 'Khoản chuyển chờ xác nhận sẽ được hủy và vẫn xuất hiện trong lịch sử.'}</p>
-      <form className="field-card dialog-fields" onSubmit={save}>
+      <form id={formId} className="field-card dialog-fields" onSubmit={save}>
         {selected.status === 'void' && <label>Lý do<input name="reason" maxLength={300} required /></label>}
         {(error || stale) && <p className="error" role="alert">{stale ? 'Số dư đã thay đổi. Đóng hộp thoại và kiểm tra lại.' : error}</p>}
-        <div className="button-pair"><button type="button" className="secondary-button" onClick={() => setSelected(null)}>Quay lại</button><button disabled={disabled || Boolean(stale) || !financialSnapshot(data).complete} className={selected.status === 'confirmed' ? 'primary-button' : 'danger-button'}>Xác nhận</button></div>
       </form>
     </Dialog>}
   </>;

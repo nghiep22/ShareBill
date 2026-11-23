@@ -42,7 +42,7 @@ export function CategorySelect({ value, onChange, remote }: { value: Category; o
 
 export const MutationFeedback = createContext<{ busy: boolean; offline?: boolean; error: string; recovery?: { label: string; href: string } }>({ busy: false, error: '' });
 
-export function Dialog({ title, onClose, children, footer }: { title: string; onClose: () => void; children: ReactNode; footer?: ReactNode }) {
+export function Dialog({ title, onClose, children, summary, footer }: { title: string; onClose: () => void; children: ReactNode; summary?: ReactNode; footer?: ReactNode }) {
   const ref = useRef<HTMLDialogElement>(null);
   const label = useId();
   const feedback = useContext(MutationFeedback);
@@ -55,6 +55,7 @@ export function Dialog({ title, onClose, children, footer }: { title: string; on
     <div className="dialog-header"><h2 id={label}>{title}</h2>
       <button type="button" className="icon-button" autoFocus disabled={feedback.busy} aria-label="Đóng" onClick={onClose}><X size={21} aria-hidden /></button>
     </div>
+    {summary && <div className="dialog-summary">{summary}</div>}
     {feedback.busy && <p role="status">Đang lưu…</p>}
     {feedback.offline && !feedback.busy && <p role="status">Cần kết nối mạng để gửi thao tác. Bạn có thể đóng cửa sổ này.</p>}
     {feedback.error && <p className="inline-note error" role="alert">{feedback.error}</p>}

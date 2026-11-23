@@ -348,14 +348,25 @@ input[type="radio"], input[type="checkbox"] { min-height: 0; width: 16px; height
 .payment-image img { display: block; width: auto; max-width: 100%; max-height: 440px; object-fit: contain; border: 1px solid var(--line); border-radius: 12px; background: #fff; }
 .payment-image .text-button { white-space: normal; text-align: left; }
 .transfer-qr img { width: 280px; height: auto; border-radius: 0; }
+.dialog-content .transfer-qr img { width: min(240px, 100%); max-height: 30dvh; }
+.dialog-content .transfer-qr-share img { width: auto; max-height: min(280px, 34dvh); justify-self: center; }
 .qr-share-actions, .share-recipient-list { display: grid; gap: 12px; width: 100%; min-width: 0; }
+.qr-share-actions { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+.qr-share-actions > :nth-child(n+3) { grid-column: 1 / -1; }
+.qr-share-actions > .primary-button, .qr-share-actions > .secondary-button { padding-inline: 10px; }
 .qr-share-actions p, .share-recipient p, .share-chosen { overflow-wrap: anywhere; }
 .qr-share-actions textarea { width: 100%; }
 .share-recipient { border: 1px solid var(--line); border-radius: 12px; }
-.share-recipient > .amount, .share-chosen > .amount { font-size: 22px; font-weight: 750; color: var(--teal-dark); }
+.share-recipient > .amount { font-size: 22px; font-weight: 750; color: var(--teal-dark); }
 .payment-picker input[type="file"] { width: 100%; max-width: 100%; font-size: 13px; }
 .payment-picker p { min-width: 0; overflow-wrap: anywhere; }
+.payment-picker .payment-file-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .payment-picker .payment-image img { max-height: 180px; }
+.dialog-fields > .payment-picker, .dialog-fields > .payment-qr-section { padding: 0; }
+.payment-help { min-width: 0; color: var(--muted); font-size: 13px; }
+.payment-help > summary { padding-block: 6px; cursor: pointer; font-weight: 600; }
+.payment-help[open] > p { margin-top: 6px; }
+.payment-caption { color: var(--muted); font-size: 13px; overflow-wrap: anywhere; }
 .payment-pending { padding: 14px; border-radius: 12px; background: var(--mint); }
 .payment-pending ul { padding-left: 20px; }
 .payment-proof-button { margin: 4px 12px 12px; }
@@ -399,17 +410,20 @@ input[type="radio"], input[type="checkbox"] { min-height: 0; width: 16px; height
 .inline-form { display: flex; gap: 8px; }
 .inline-form button { flex: none; }
 .member-actions { display: grid; gap: 8px; }
-dialog { width: min(490px, calc(100% - 28px)); max-height: calc(100dvh - 32px); overflow: auto; padding: 18px; border: 1px solid var(--line); border-radius: 18px; color: var(--ink); background: var(--paper); box-shadow: 0 16px 56px rgb(15 23 42 / 20%); }
-dialog[open] { display: grid; gap: 13px; }
+body:has(dialog[open]) { overflow: hidden; }
+dialog { width: min(490px, calc(100% - 28px)); max-height: calc(100dvh - 32px); overflow: hidden; padding: 18px; border: 1px solid var(--line); border-radius: 18px; color: var(--ink); background: var(--paper); box-shadow: 0 16px 56px rgb(15 23 42 / 20%); }
+dialog[open] { display: flex; flex-direction: column; gap: 12px; }
+dialog[open] > :not(.dialog-content) { flex-shrink: 0; }
 dialog::backdrop { background: rgb(15 23 42 / 44%); backdrop-filter: blur(2px); }
 .dialog-header { display: flex; align-items: center; justify-content: space-between; gap: 7px; }
-.dialog-header h2 { font-size: 20px; letter-spacing: -.025em; }
-.dialog-header button { border: 0; background: var(--canvas); }
+.dialog-header h2 { min-width: 0; font-size: 20px; letter-spacing: -.025em; overflow-wrap: anywhere; }
+.dialog-header button { flex-shrink: 0; border: 0; background: var(--canvas); }
+.dialog-summary { min-width: 0; }
+.dialog-summary .payment-amount { gap: 3px; padding: 12px 14px; }
+.dialog-summary .payment-amount > span { font-size: 13px; overflow-wrap: anywhere; }
+.dialog-summary .payment-amount strong { font-size: 26px; }
 .dialog-fields { padding: 0; }
-.dialog-content { display: grid; gap: 12px; }
-.dialog-with-footer[open] { display: flex; flex-direction: column; overflow: hidden; }
-.dialog-with-footer > .dialog-header, .dialog-with-footer > .dialog-footer { flex-shrink: 0; }
-.dialog-with-footer > .dialog-content { min-height: 0; overflow-y: auto; overflow-x: hidden; padding-right: 4px; }
+.dialog-content { display: grid; align-content: start; gap: 12px; min-height: 0; min-width: 0; overflow-y: auto; overflow-x: hidden; overscroll-behavior: contain; scrollbar-width: thin; padding-right: 4px; }
 .dialog-footer { display: grid; gap: 8px; padding-top: 12px; border-top: 1px solid var(--line); }
 .dialog-footer > .primary-button { width: 100%; }
 .dialog-footer p { color: var(--muted); font-size: 14px; overflow-wrap: anywhere; }

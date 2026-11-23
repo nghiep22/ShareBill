@@ -53,7 +53,7 @@ export function PaymentImagePicker({ receipt, onChange, actions, label, busy, on
       const selected = event.target.files?.[0]; event.target.value = ''; if (selected) void upload(selected);
     }} /></label>
     {!receipt && <button type="button" className="secondary-button" disabled={disabled || busy} onClick={() => picker.current?.click()}>Chọn ảnh</button>}
-    {receipt && <p>Đã tải: {receipt.name}</p>}
+    {receipt && <p className="payment-file-name" title={receipt.name}>Đã tải: {receipt.name}</p>}
     <small>JPG, PNG hoặc WebP, tối đa 5 MiB.</small>
     {busy && <p role="status">{progress}</p>}
     {error && <p className="error" role="alert">{error}</p>}

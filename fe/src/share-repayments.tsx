@@ -20,15 +20,15 @@ export function ShareRepaymentQrs({ data, actions, context, disabled }: { data: 
   const receiver = chosen && memberFor(data, chosen.to);
   return <>
     <button type="button" className="secondary-button compact" disabled={disabled} onClick={() => { setSelected(''); setOpen(true); }}>Chia sẻ QR qua Zalo</button>
-    {open && <Dialog title="QR trả tiền cho từng người" onClose={() => setOpen(false)} footer={<div className="button-pair">
+    {open && <Dialog title="QR trả tiền cho từng người" onClose={() => setOpen(false)} summary={chosen && <section className="payment-amount share-chosen">
+      <span>Số tiền còn cần chuyển</span><strong><Amount value={chosen.amount} /></strong><span>{nameOf(data, chosen.from)} → {nameOf(data, chosen.to)}</span>
+    </section>} footer={<div className="button-pair">
       {chosen && <button type="button" className="secondary-button" onClick={() => setSelected('')}>Chọn người khác</button>}
       <button type="button" className="secondary-button" onClick={() => setOpen(false)}>Xong</button>
     </div>}>
-      <p>QR dùng số còn nợ hiện tại của cả nhóm, đã trừ tiền ứng và các khoản đã xác nhận.</p>
-      {context && <p>{context}</p>}
-      <p>Chia sẻ QR chưa ghi nhận đã chuyển tiền. Người chuyển vẫn cần gửi bill sau khi chuyển.</p>
+      {context && <p className="payment-caption">{context}</p>}
+      {!chosen && <p>Chọn người cần trả. QR dùng số còn nợ hiện tại, đã trừ tiền ứng và các khoản đã xác nhận.</p>}
       {!ready ? <p role="status">Đang cập nhật số tiền cần chuyển. Chờ đồng bộ hoặc mở lại sau khi làm mới dữ liệu.</p> : chosen ? <>
-        <div className="field-card share-chosen"><strong>{nameOf(data, chosen.from)} → {nameOf(data, chosen.to)}</strong><Amount value={chosen.amount} /></div>
         {receiver?.paymentQrReceiptId ? <TransferQr key={chosen.from + '/' + chosen.to} receipt={{ id: receiver.paymentQrReceiptId, name: 'QR người nhận' }} actions={actions}
           amount={chosen.amount} label={'QR ' + nameOf(data, chosen.from) + ' chuyển cho ' + nameOf(data, chosen.to)}
           shareInfo={{ group: data.trip.name, from: nameOf(data, chosen.from), to: nameOf(data, chosen.to), context,
@@ -41,6 +41,7 @@ export function ShareRepaymentQrs({ data, actions, context, disabled }: { data: 
           <a className="text-button" href={tripHref(data, 'quyet-toan') + '?status=pending'}>Xem khoản đang chờ</a>
         </> : <button type="button" className="secondary-button" onClick={() => setSelected(item.from + '/' + item.to)}>Tạo QR cho {nameOf(data, item.from)}</button>}
       </section>)}</div> : <p>Nhóm hiện không còn khoản cần chuyển để tạo QR.</p>}
+      <details className="payment-help"><summary>Cách tính tiền và gửi QR</summary><p>QR dùng số còn nợ hiện tại của cả nhóm, đã trừ tiền ứng và các khoản đã xác nhận. Chia sẻ QR chưa ghi nhận đã chuyển tiền. Người chuyển vẫn cần gửi bill sau khi chuyển.</p></details>
     </Dialog>}
   </>;
 }

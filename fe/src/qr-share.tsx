@@ -82,7 +82,7 @@ export function QrShareActions({ prepared }: { prepared: PreparedQrShare }) {
       try { await navigator.clipboard.writeText(prepared.text); setMessage('Đã sao chép nội dung. Dán vào nhóm Zalo cùng ảnh QR.'); }
       catch { setManualCopy(true); setMessage('Chọn và sao chép nội dung bên dưới để gửi cùng ảnh QR.'); }
     }}>Sao chép nội dung gửi nhóm</button>
-    <p>Chọn Zalo và nhóm cần gửi trong bảng chia sẻ. Nếu không thấy Zalo, tải ảnh rồi đính kèm trong nhóm.</p>
+    <details className="payment-help"><summary>Gửi vào nhóm Zalo thế nào?</summary><p>Chọn Zalo và nhóm cần gửi trong bảng chia sẻ. Nếu không thấy Zalo, tải ảnh rồi đính kèm trong nhóm.</p></details>
     {message && <p role="status">{message}</p>}
     {manualCopy && <label>Nội dung gửi nhóm Zalo<textarea readOnly value={prepared.text} rows={6} /></label>}
   </div>;
