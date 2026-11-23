@@ -14,6 +14,14 @@ Trong **Thành viên & phân quyền**, thẻ **QR nhận tiền của bạn** n
 
 Ảnh là bằng chứng do người dùng cung cấp. Ứng dụng không tự chuyển tiền hay kiểm chứng giao dịch với ngân hàng.
 
+## Chia sẻ QR qua Zalo
+
+Trong **Số dư** hoặc **Chi tiết khoản chi**, bấm **Chia sẻ QR qua Zalo**, chọn **Tạo QR cho [tên người trả]**. Mỗi ảnh có một VietQR ngân hàng với số còn nợ hiện tại, đã trừ tiền ứng và các khoản chuyển được xác nhận; không lấy nguyên phần chia của riêng bill. Cặp người trả/người nhận và số tiền theo gợi ý quyết toán của máy chủ ở cùng revision với số dư. Cặp có khoản pending cần xử lý khoản cũ trước khi tạo QR yêu cầu chuyển thêm.
+
+Ảnh PNG ghi tên nhóm, người chuyển, người nhận, số tiền, thời điểm tạo và tên bill nếu mở từ chi tiết khoản chi. Người dùng có thể **Chia sẻ ảnh** qua bảng chia sẻ của thiết bị rồi chọn Zalo/nhóm nhận, hoặc **Tải ảnh gửi Zalo** và **Sao chép nội dung gửi nhóm**. Thiết bị không hỗ trợ chia sẻ file vẫn tải được PNG. Nội dung sao chép chỉ có liên kết nhóm cần đăng nhập, không có token hay URL xem ảnh ký tạm thời.
+
+QR được đọc, kiểm CRC và tạo ảnh ngay trong trình duyệt từ QR người nhận đã lưu; không dùng API tạo QR bên ngoài hoặc công khai kho Blob. Chia sẻ ảnh không tạo/xác nhận settlement. Khi số dư thay đổi, QR mới dùng số mới; ảnh đã gửi là ảnh chụp số dư tại thời điểm tạo, cần đối chiếu số dư trước khi chuyển.
+
 ## Hợp đồng API và dữ liệu
 
 - Dùng quy trình ảnh riêng tư hiện có: `upload-intents → upload → finalize`. JPG/PNG/WebP, tối đa 5 MiB; backend kiểm ảnh thực, xử lý và loại bỏ metadata. Không lưu URL ký sẵn trong dữ liệu nghiệp vụ.

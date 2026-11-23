@@ -168,10 +168,10 @@ function AuthenticatedWorkspace({ session, api, hash, onSignOut }: { session: Se
   const filters = expenseFilters(query);
   const historyStatus = query.get('status');
   const historyFilter: SettlementFilter = historyStatus === 'confirmed' || historyStatus === 'cancelled' || historyStatus === 'void' ? historyStatus : 'pending';
-  const canRefresh = ['chuyen-di', 'tong-quan', 'chi-tieu', 'so-du', 'quyet-toan', 'hoat-dong', 'lich-trinh', 'tro-giup'].includes(route);
+  const canRefresh = ['chuyen-di', 'tong-quan', 'chi-tieu', 'khoan-chi', 'so-du', 'quyet-toan', 'hoat-dong', 'lich-trinh', 'tro-giup'].includes(route);
   const tripPath = selected && (isTripScreen(route) || (route === 'tro-giup' && id === 'chuyen')) ? '/trips/' + selected : undefined;
   const device = useMemo(() => trust && tripPath ? { uid, tripId: selected } : undefined, [trust, tripPath, uid, selected]);
-  const wantsFinance = route === 'tong-quan' || route === 'so-du';
+  const wantsFinance = route === 'tong-quan' || route === 'so-du' || route === 'khoan-chi';
   const overview = useApiRead<TripOverview>(api, tripPath && tripPath + '/overview', epoch, undefined, true);
   const denied = overview.status === 404 || overview.status === 403 || overview.status === 401;
   const trips = useApiPage<TripDto>(api, route === 'chuyen-di' ? '/trips' : undefined, { status: archived ? 'archived' : 'active', limit: '20' }, epoch);

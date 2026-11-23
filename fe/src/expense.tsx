@@ -12,6 +12,7 @@ import { tripHref } from './workspace-route';
 import { maximumMoney as maximum, parseMoney } from './money-input';
 import { clearExpenseDraft, getExpenseDraft, saveExpenseDraft, type DeviceScope, type ExpenseDraft } from './private-device';
 import { PaymentImage } from './payments';
+import { ShareRepaymentQrs } from './share-repayments';
 
 const receiptTypes = ['image/jpeg', 'image/png', 'image/webp'];
 
@@ -403,6 +404,7 @@ export function ExpenseDetail({ data, expense, update, receiptActions }: { data:
       {expense.voidReason && <p>Lý do hủy: {expense.voidReason}</p>}
       <p>{expense.createdBy && 'Được tạo bởi ' + nameOf(data, expense.createdBy)}{expense.editedBy && ' · Sửa lần cuối bởi ' + nameOf(data, expense.editedBy)}</p>
     </section>
+    {!expense.voided && <ShareRepaymentQrs data={data} actions={receiptActions} context={'Bill: ' + expense.title} />}
     <section>
       {data.remote?.sharingMode === 'group-equal' ? <>
         <div className="section-heading"><h2>Chi chung của nhóm</h2><span className="tag">Tự chia đều</span></div>

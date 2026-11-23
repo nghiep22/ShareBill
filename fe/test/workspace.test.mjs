@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import { createRequire } from 'node:module';
 import { readFile, writeFile } from 'node:fs/promises';
 import { after, before, test } from 'node:test';
@@ -854,6 +854,91 @@ test('expense invoices are visible on create and shared with members outside the
   if (process.env.SHAREBILL_INVOICE_DETAIL_SCREENSHOT) await memberPage.screenshot({ path: process.env.SHAREBILL_INVOICE_DETAIL_SCREENSHOT, fullPage: true });
   await memberPage.reload();
   await shared.getByAltText('Hóa đơn 1', { exact: true }).waitFor();
+});
+
+test('shares named bank QR images using remaining debt with native sharing and Zalo download fallback', { timeout: 90000 }, async t => {
+  const { page, context, session, trip, screen } = await fixture(t);
+  const root = 'trips/' + trip.id;
+  const binh = await call(root + '/participants', session, { method: 'POST', body: { displayName: 'Bình' } });
+  const chi = await call(root + '/participants', session, { method: 'POST', body: { displayName: 'Chi' } });
+  const ids = [trip.ownerParticipantId, binh.id, chi.id];
+  const bill = await call(root + '/expenses', session, { method: 'POST', body: { title: 'Ăn tối chia nhóm', amountMinor: 450000,
+    payerParticipantId: trip.ownerParticipantId, occurredOn: '2026-11-23', category: 'food', splitMethod: 'equal', split: { participantIds: ids } } });
+  await call(root + '/expenses', session, { method: 'POST', body: { title: 'Bình ứng tiền xe', amountMinor: 60000,
+    payerParticipantId: binh.id, occurredOn: '2026-11-23', category: 'transport', splitMethod: 'equal', split: { participantIds: ids } } });
+  let overview = await call(root + '/overview', session);
+  const paid = await call(root + '/settlements', session, { method: 'POST', body: { fromParticipantId: binh.id,
+    toParticipantId: trip.ownerParticipantId, amountMinor: 10000, occurredOn: '2026-11-23', basedOnLedgerVersion: overview.trip.ledgerVersion } });
+  await call(root + '/settlements/' + paid.id + '/confirm', session, { method: 'POST', version: 1, body: { basedOnLedgerVersion: overview.trip.ledgerVersion } });
+  overview = await call(root + '/overview', session);
+  const pending = await call(root + '/settlements', session, { method: 'POST', body: { fromParticipantId: chi.id,
+    toParticipantId: trip.ownerParticipantId, amountMinor: 40000, occurredOn: '2026-11-23', basedOnLedgerVersion: overview.trip.ledgerVersion } });
+  const qrPayload = '00020101021238590010A0000007270129000697044101156607040600001290208QRIBFTTA5204999953037045405100005802VN62180814SHAREBILL TEST630403F2';
+  const qrImage = await paymentImageTransport(context, root, session, qrPayload);
+  await page.goto(screen('thanh-vien'));
+  await page.getByRole('button', { name: 'Thêm QR nhận tiền', exact: true }).click();
+  await page.getByLabel('Ảnh QR nhận tiền', { exact: true }).setInputFiles(qrImage);
+  await page.getByRole('button', { name: 'Lưu QR nhận tiền', exact: true }).click();
+  await page.getByRole('button', { name: 'Đổi QR nhận tiền', exact: true }).waitFor();
+  await context.addInitScript(() => {
+    window.__shareCalls = 0; window.__canShareImages = true;
+    Object.defineProperty(navigator, 'canShare', { configurable: true, value: () => window.__canShareImages });
+    Object.defineProperty(navigator, 'share', { configurable: true, value: async data => {
+      window.__shareCalls++;
+      const file = data.files[0], hash = await crypto.subtle.digest('SHA-256', await file.arrayBuffer());
+      window.__sharedQr = { text: data.text, name: file.name, type: file.type,
+        hash: Array.from(new Uint8Array(hash)).map(value => value.toString(16).padStart(2, '0')).join('') };
+    } });
+    Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText: async text => { window.__copiedQrText = text; } } });
+  });
+  await page.reload(); // Hash navigation alone does not install the new document's share mocks.
+  assert.equal(await page.evaluate(() => window.__canShareImages), true);
+  await page.setViewportSize({ width: 390, height: 844 });
+  const writes = [];
+  page.on('request', request => { if (request.method() === 'POST' && /\/settlements(?:\/|$)/.test(new URL(request.url()).pathname)) writes.push(request.url()); });
+  await page.goto(screen('khoan-chi/' + bill.id));
+  await heading(page, 'Ăn tối chia nhóm');
+  await page.getByRole('button', { name: 'Chia sẻ QR qua Zalo', exact: true }).click();
+  let dialog = page.getByRole('dialog', { name: 'QR trả tiền cho từng người', exact: true });
+  const waiting = dialog.getByRole('region', { name: 'Khoản cần trả của Chi', exact: true });
+  await waiting.getByRole('link', { name: 'Xem khoản đang chờ', exact: true }).waitFor();
+  assert.equal(await waiting.getByRole('button', { name: 'Tạo QR cho Chi', exact: true }).count(), 0);
+  await dialog.getByRole('button', { name: 'Tạo QR cho Bình', exact: true }).click();
+  const download = dialog.getByRole('link', { name: 'Tải ảnh gửi Zalo', exact: true });
+  await download.waitFor();
+  assert.match(await download.getAttribute('download'), /Binh-100000\.png$/);
+  const [file] = await Promise.all([page.waitForEvent('download'), download.click()]);
+  const bytes = await readFile(await file.path());
+  const sharp = createRequire(new URL('../../be/package.json', import.meta.url))('sharp');
+  const pixels = await sharp(bytes).ensureAlpha().raw().toBuffer({ resolveWithObject: true });
+  const jsQR = createRequire(new URL('../package.json', import.meta.url))('jsqr');
+  const decoded = jsQR(new Uint8ClampedArray(pixels.data), pixels.info.width, pixels.info.height);
+  assert.equal(pixels.info.width, 900); assert.equal(pixels.info.height, 1400);
+  assert.ok(decoded?.data.includes('00069704410115660704060000129'));
+  assert.ok(decoded.data.includes('5406100000'), 'Uses 100000 remaining after Bình paid/advanced, rather than the original 150000 bill share');
+  await dialog.getByRole('button', { name: 'Chia sẻ ảnh', exact: true }).click();
+  await dialog.getByText('Đã mở chia sẻ ảnh.', { exact: false }).waitFor();
+  const shared = await page.evaluate(() => window.__sharedQr);
+  assert.equal(shared.type, 'image/png');
+  assert.equal(shared.hash, createHash('sha256').update(bytes).digest('hex'));
+  assert.match(shared.text, /Bình chuyển 100\.000đ cho An/);
+  assert.match(shared.text, /Bill: Ăn tối chia nhóm/);
+  assert.ok(!/token=|signature=|Bearer /.test(shared.text));
+  await dialog.getByRole('button', { name: 'Sao chép nội dung gửi nhóm', exact: true }).click();
+  assert.equal(await page.evaluate(() => window.__copiedQrText), shared.text);
+  await page.evaluate(() => { window.__canShareImages = false; });
+  await dialog.getByRole('button', { name: 'Chia sẻ ảnh', exact: true }).click();
+  await dialog.getByText('Thiết bị chưa hỗ trợ chia sẻ ảnh trực tiếp.', { exact: false }).waitFor();
+  assert.equal(await page.evaluate(() => window.__shareCalls), 1);
+  assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth), false);
+  assert.equal(writes.length, 0, 'Sharing does not create or confirm settlements');
+  assert.equal((await call(root + '/settlements?status=pending', session)).items[0].id, pending.id);
+  if (process.env.SHAREBILL_SHARED_QR_IMAGE) await writeFile(process.env.SHAREBILL_SHARED_QR_IMAGE, bytes);
+  if (process.env.SHAREBILL_QR_SHARE_SCREENSHOT) await page.screenshot({ path: process.env.SHAREBILL_QR_SHARE_SCREENSHOT });
+  await dialog.getByRole('button', { name: 'Đóng', exact: true }).click();
+  await page.goto(screen('so-du'));
+  await page.getByRole('button', { name: 'Chia sẻ QR qua Zalo', exact: true }).click();
+  await page.getByRole('dialog').getByRole('button', { name: 'Tạo QR cho Bình', exact: true }).waitFor();
 });
 
 test('two accounts upload QR and transfer evidence, confirm repayment and archive a balanced trip', async t => {

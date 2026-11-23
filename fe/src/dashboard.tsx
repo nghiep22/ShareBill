@@ -13,6 +13,7 @@ import { Amount, Avatar, CategoryIcon, Dialog, Empty, PageTitle } from './ui';
 import type { ReceiptActions, UpdateTrip } from './trip-command';
 import { PaymentImage, PaymentImagePicker, PaymentQrCard } from './payments';
 import { TransferQr } from './transfer-qr';
+import { ShareRepaymentQrs } from './share-repayments';
 import { tripHref } from './workspace-route';
 import { financialSnapshot, transferLimit } from './finance-view';
 import { maximumMoney, parsePositiveMoney } from './money-input';
@@ -287,6 +288,7 @@ export function Balances({ data, update, loading, disabled, receiptActions }: { 
         </div>}
       </div>}
       {pending > 0 && <p className="inline-note">Các khoản đang chờ vẫn nằm ngoài số tiền đã xác nhận. Kiểm tra lịch sử trước khi ghi thêm khoản chuyển.</p>}
+      {complete && transfers.length > 0 && <ShareRepaymentQrs data={data} actions={receiptActions} disabled={disabled || loading} />}
       {!loading && transfers.length > 0 && <p className="inline-note money-explainer">Mở QR người nhận, chuyển tiền bằng ứng dụng ngân hàng rồi tải ảnh chuyển khoản và bấm “Gửi báo đã chuyển khoản”. Người nhận kiểm tra ảnh và tiền thực nhận, sau đó xác nhận để cập nhật công nợ.</p>}
       <div className="transfer-grid">{!loading && complete && transfers.map(suggestion => <div className="card transfer-card" key={suggestion.from + '-' + suggestion.to}>
         <div className="list-row"><TransferRow data={data} transfer={suggestion} /></div>
