@@ -378,6 +378,11 @@ test('money screens keep equal shares, remaining debt, partial payments and reve
     await dialog.getByLabel('Người chuyển', { exact: true }).selectOption(peers[0].id);
     await dialog.getByLabel('Người nhận', { exact: true }).selectOption(trip.ownerParticipantId);
     const amount = dialog.getByLabel('Số tiền đã chuyển (VND)', { exact: true });
+    const current = await overview(), fromBalance = current.balances.find(row => row.participantId === peers[0].id), toBalance = current.balances.find(row => row.participantId === trip.ownerParticipantId);
+    const due = Math.min(-fromBalance.netMinor, toBalance.netMinor);
+    await dialog.getByRole('region', { name: 'Số tiền cần chuyển cho người nhận', exact: true }).getByText(format(due), { exact: true }).waitFor();
+    assert.equal(await amount.inputValue(), new Intl.NumberFormat('vi-VN').format(due));
+    assert.equal(await dialog.getByText(/^Tối đa /).count(), 0);
     if (checkInvalid) {
       await amount.fill('1e3');
       await dialog.getByRole('button', { name: 'Ghi nhận', exact: true }).click();
@@ -818,6 +823,10 @@ test('two accounts upload QR and transfer evidence, confirm repayment and archiv
   await memberPage.getByRole('button', { name: 'Chuyển khoản', exact: true }).click();
   let transferDialog = memberPage.getByRole('dialog');
   await transferDialog.getByAltText('QR nhận tiền của An', { exact: true }).waitFor();
+  const dueSummary = transferDialog.getByRole('region', { name: 'Số tiền cần chuyển cho người nhận', exact: true });
+  await dueSummary.getByText('120.000đ', { exact: true }).waitFor();
+  assert.equal(await transferDialog.getByLabel('Số tiền đã chuyển (VND)', { exact: true }).inputValue(), '120.000');
+  assert.ok((await dueSummary.boundingBox()).y < (await transferDialog.getByAltText('QR nhận tiền của An', { exact: true }).boundingBox()).y);
   assert.equal(await transferDialog.getByRole('button', { name: 'Tôi đã chuyển khoản', exact: true }).isDisabled(), true);
   await transferDialog.getByLabel('Ảnh chuyển khoản', { exact: true }).setInputFiles(proofImage);
   await transferDialog.getByAltText('Ảnh chuyển khoản', { exact: true }).waitFor();

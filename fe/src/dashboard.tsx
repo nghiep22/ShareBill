@@ -314,14 +314,18 @@ export function Balances({ data, update, loading, disabled, receiptActions }: { 
           <label>Người chuyển<select aria-label="Người chuyển" value={from} disabled={uploading || Boolean(proof)} onChange={event => setFrom(event.target.value)}>{debtors.map(member => <option value={member.id} key={member.id}>{nameOf(data, member.id)}</option>)}</select></label>
           <label>Người nhận<select aria-label="Người nhận" value={to} disabled={uploading || Boolean(proof)} onChange={event => setTo(event.target.value)}>{creditors.map(member => <option value={member.id} key={member.id}>{nameOf(data, member.id)}</option>)}</select></label>
         </div>}
+        {transfer && <section className="payment-amount" aria-label="Số tiền cần chuyển cho người nhận">
+          <span>Số tiền cần chuyển</span>
+          <strong><Amount value={transfer.amount} /></strong>
+          <span>{nameOf(data, transfer.from)} → {nameOf(data, transfer.to)}</span>
+        </section>}
         {ownPayment && transfer && <section className="field-card">
           <h3>QR nhận tiền của {nameOf(data, transfer.to)}</h3>
           {memberFor(data, transfer.to)?.paymentQrReceiptId ? <PaymentImage receipt={{ id: memberFor(data, transfer.to)!.paymentQrReceiptId!, name: 'QR người nhận' }} actions={receiptActions} label={'QR nhận tiền của ' + nameOf(data, transfer.to)} />
             : <p>Người nhận chưa thêm QR. Liên hệ {nameOf(data, transfer.to)} để lấy thông tin chuyển khoản.</p>}
           <p>Kiểm tra đúng người nhận và số tiền trong ứng dụng ngân hàng trước khi chuyển.</p>
         </section>}
-        {transfer && <label>Số tiền đã chuyển (VND)<input key={transfer.from + '/' + transfer.to} inputMode="numeric" name="amount" placeholder="Ví dụ: 10.000" defaultValue={selected.transfer?.amount} onChange={() => setError('')} required /></label>}
-        {transfer && <p>Tối đa {money(transfer.amount)}</p>}
+        {transfer && <label>Số tiền đã chuyển (VND)<input key={transfer.from + '/' + transfer.to} inputMode="numeric" name="amount" defaultValue={new Intl.NumberFormat('vi-VN').format(transfer.amount)} onChange={() => setError('')} required /></label>}
         {ownPayment && receiptActions && <PaymentImagePicker receipt={proof} onChange={setProof} actions={receiptActions} label="Ảnh chuyển khoản" busy={uploading} onBusy={setUploading} disabled={disabled} />}
         {ownPayment && !receiptActions && <p role="status">Cần kết nối mạng để tải ảnh chuyển khoản.</p>}
         {data.remote && !ownPayment && <p>Bạn đang ghi nhận thay người chuyển. Người chuyển cần tự gửi giao dịch nếu muốn đính kèm ảnh chuyển khoản.</p>}

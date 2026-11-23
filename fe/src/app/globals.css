@@ -347,6 +347,9 @@ input[type="radio"], input[type="checkbox"] { min-height: 0; width: 16px; height
 .payment-image .text-button { white-space: normal; text-align: left; }
 .payment-picker input[type="file"] { width: 100%; max-width: 100%; font-size: 13px; }
 .payment-proof-button { margin: 4px 12px 12px; }
+.payment-amount { display: grid; gap: 6px; padding: 16px; border-radius: 12px; background: var(--mint); color: var(--teal-dark); }
+.payment-amount strong { font-size: 28px; line-height: 1.2; overflow-wrap: anywhere; }
+.payment-amount > span:last-child { font-size: 13px; }
 .empty-stack { display: grid; justify-items: center; padding: 24px 12px; }
 .empty-stack > svg { color: var(--teal); }
 .empty-stack .empty { padding: 8px 0; }
