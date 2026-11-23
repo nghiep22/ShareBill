@@ -378,7 +378,7 @@ test('money screens keep equal shares, remaining debt, partial payments and reve
   await checkMember('An', trip.ownerParticipantId);
   await checkMember('Chi', peers[1].id);
   async function recordPartial(checkInvalid = false) {
-    await page.getByRole('button', { name: 'Ghi khoản chuyển khác', exact: true }).click();
+    await page.getByRole('button', { name: 'Chuyển trả', exact: true }).click();
     const dialog = page.getByRole('dialog');
     await dialog.getByLabel('Người chuyển', { exact: true }).selectOption(peers[0].id);
     await dialog.getByLabel('Người nhận', { exact: true }).selectOption(trip.ownerParticipantId);
@@ -776,7 +776,7 @@ test('incomplete financial snapshots never show a zero debt or enable archive', 
   await page.goto(screen('so-du'));
   await page.getByText(/Chưa đủ dữ liệu số dư để kết luận/).waitFor();
   assert.equal(await page.getByText('Mọi người đã cân bằng.', { exact: true }).count(), 0);
-  assert.equal(await page.getByRole('button', { name: 'Ghi khoản chuyển khác', exact: true }).count(), 0);
+  assert.equal(await page.getByRole('button', { name: 'Chuyển trả', exact: true }).count(), 0);
   await page.goto(screen('tong-quan'));
   await page.getByText('Chưa đủ dữ liệu', { exact: true }).first().waitFor();
   assert.equal(await page.getByText('Các thành viên đã cân bằng.', { exact: true }).count(), 0);
@@ -881,7 +881,7 @@ test('two accounts upload QR and transfer evidence, confirm repayment and archiv
   await page.goto(screen('so-du'));
   await page.getByRole('button', { name: 'Đã ghi nhận · Chờ xác nhận', exact: true }).waitFor();
   assert.equal(await page.getByRole('button', { name: 'Đã ghi nhận · Chờ xác nhận', exact: true }).isDisabled(), true);
-  await page.getByRole('button', { name: 'Ghi khoản chuyển khác', exact: true }).click();
+  await page.getByRole('button', { name: 'Chuyển trả', exact: true }).click();
   const duplicateDialog = page.getByRole('dialog');
   await duplicateDialog.getByText('Khoản chuyển này đã được ghi nhận và đang chờ xác nhận.', { exact: false }).waitFor();
   assert.equal(await duplicateDialog.getByRole('button', { name: 'Đã ghi nhận · Chờ xác nhận', exact: true }).isDisabled(), true);

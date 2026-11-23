@@ -3,7 +3,7 @@
 Luồng nằm trong **Số dư & quyết toán** và **Lịch sử chuyển tiền**. QR nhận tiền cũng có thể cập nhật từ **Thành viên & phân quyền**.
 
 1. Mỗi tài khoản đã liên kết thành viên tải ảnh QR ngân hàng của mình lên, xem lại rồi bấm **Lưu QR nhận tiền**. QR được quản lý riêng trong từng nhóm; chỉ chính tài khoản đó được sửa.
-2. Người cần trả bấm **Chuyển khoản** ở gợi ý của mình. Hộp thoại hiện **Số tiền cần chuyển** và tên hai người ngay trước QR, điền sẵn số tiền vào ô ghi nhận, kể cả khi chọn **Ghi khoản chuyển khác**. Xem QR người nhận, kiểm tra tài khoản và thực hiện chuyển bằng ứng dụng ngân hàng. Nếu chưa có QR, liên hệ người nhận để lấy thông tin.
+2. Người cần trả bấm **Chuyển khoản** ở gợi ý của mình. Hộp thoại hiện **Số tiền cần chuyển** và tên hai người ngay trước QR, điền sẵn số tiền vào ô ghi nhận, kể cả khi chọn **Chuyển trả**. Xem QR người nhận, kiểm tra tài khoản và thực hiện chuyển bằng ứng dụng ngân hàng. Nếu chưa có QR, liên hệ người nhận để lấy thông tin.
 3. Chọn số tiền đã chuyển, tải ảnh giao dịch thành công và bấm **Tôi đã chuyển khoản**. Ứng dụng lưu giao dịch ở trạng thái **Chờ xác nhận**, chưa giảm công nợ.
 4. Người nhận mở **Lịch sử chuyển tiền → Chờ xác nhận → Xem ảnh chuyển khoản**, kiểm tra tài khoản thực nhận rồi bấm **Xác nhận đã nhận tiền**. Công nợ, số đã chuyển và đã nhận cập nhật nguyên tử đúng một lần.
 5. Ảnh và giao dịch vẫn xem lại được sau khi xác nhận hoặc hủy. Người chuyển có thể hủy báo chuyển đang chờ nếu gửi nhầm.

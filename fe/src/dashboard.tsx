@@ -263,7 +263,7 @@ export function Balances({ data, update, loading, disabled, receiptActions }: { 
     <section aria-label="Số tiền cần chuyển">
       <div className="section-heading"><h2>Số tiền cần chuyển</h2>
         {complete && canWrite(data) && debtors.length > 0 && creditors.length > 0 &&
-          <button className="secondary-button compact" disabled={disabled || !transfersReady} onClick={() => open()}>Ghi khoản chuyển khác</button>}
+          <button className="secondary-button compact" disabled={disabled || !transfersReady} onClick={() => open()}>Chuyển trả</button>}
       </div>
       {loading && <p role="status">Đang tải gợi ý chuyển tiền…</p>}
       {!loading && !transfers.length && <div className="card field-card transfer-empty">
