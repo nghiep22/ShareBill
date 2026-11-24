@@ -12,9 +12,15 @@ import type { ItineraryChange, UpdateTrip } from './trip-command';
 import { tripHref } from './workspace-route';
 import { financialSnapshot } from './finance-view';
 
-export function Itinerary({ data, update, loading }: { data: Demo; update: UpdateTrip; loading?: boolean }) {
-  const first = data.trip.start || data.plans[0]?.day || today(data.trip.timezone);
-  const [day, setDay] = useState(first);
+export function Itinerary({ data, update, loading, disabled, saving, readError, selectedDay, onDayChange }: {
+  data: Demo; update: UpdateTrip; loading?: boolean; disabled?: boolean; saving?: boolean;
+  readError?: string;
+  selectedDay?: string; onDayChange?: (day: string) => void;
+}) {
+  const first = data.trip.start || data.plans.map(plan => plan.day).sort()[0] || today(data.trip.timezone);
+  const [localDay, setLocalDay] = useState<string>();
+  const day = selectedDay ?? localDay ?? first;
+  const selectDay = onDayChange ?? setLocalDay;
   const [editing, setEditing] = useState<(Partial<Plan> & { ideaId?: string; version?: number }) | null>(null);
   const [remove, setRemove] = useState<(Plan & { version?: number }) | null>(null);
   const [memberView, setMemberView] = useState(false);
@@ -23,9 +29,12 @@ export function Itinerary({ data, update, loading }: { data: Demo; update: Updat
   const ownerView = isOwner(data) && !memberView;
   const writable = canWrite(data) && (!data.remote || data.remote.itineraryVersion !== undefined);
   const managing = ownerView && writable;
+  const locked = Boolean(disabled || loading);
   const version = data.remote?.itineraryVersion;
   const itineraryChanged = Boolean(editing && editing.version !== undefined && editing.version !== version);
   const serverActivity = editing?.id ? data.plans.find(plan => plan.id === editing.id) : undefined;
+  const removalChanged = Boolean(remove && remove.version !== undefined && remove.version !== version);
+  const currentRemoval = remove ? data.plans.find(plan => plan.id === remove.id) : undefined;
   const days = new Set([first, day, ...data.plans.map(plan => plan.day)]);
   const cursor = new Date(first + 'T00:00:00Z');
   for (let index = 0; index < 14 && cursor.toISOString().slice(0, 10) <= data.trip.end; index++) {
@@ -36,7 +45,7 @@ export function Itinerary({ data, update, loading }: { data: Demo; update: Updat
 
   function save(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (!editing || !managing || itineraryChanged) return;
+    if (!editing || !managing || locked || itineraryChanged) return;
     const fields = new FormData(event.currentTarget);
     const title = String(fields.get('title')).trim();
     if (!title) { setError('Nhập tên hoạt động.'); return; }
@@ -48,11 +57,12 @@ export function Itinerary({ data, update, loading }: { data: Demo; update: Updat
     update(record({ ...data, plans: editing.id ? data.plans.map(item => item.id === plan.id ? plan : item) : [...data.plans, plan],
       ideas: editing.ideaId ? (data.ideas ?? []).map(idea => idea.id === editing.ideaId ? { ...idea, scheduled: true } : idea) : data.ideas },
       editing.id ? 'Sửa lịch trình' : 'Thêm hoạt động vào lịch trình', title, '#lich-trinh'),
-      { type: 'itinerary', change, version: editing.version }, () => { setDay(plan.day); setEditing(null); });
+      { type: 'itinerary', change, version: editing.version }, () => { selectDay(plan.day); setEditing(null); });
   }
 
   function suggest(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (!writable || locked) return;
     const form = event.currentTarget;
     const title = String(new FormData(form).get('title')).trim();
     if (!title) { setNotice('Nhập điểm đến hoặc hoạt động đề xuất.'); return; }
@@ -66,7 +76,7 @@ export function Itinerary({ data, update, loading }: { data: Demo; update: Updat
 
   return <>
     <PageTitle title="Lịch trình chuyến đi" description={data.trip.name} back={tripHref(data, 'tong-quan')}>
-      {managing && <button className="primary-button compact" onClick={() => { setError(''); setEditing({ version }); }}><Plus size={18} aria-hidden /> Thêm hoạt động</button>}
+      {managing && <button className="primary-button compact" disabled={locked} onClick={() => { setError(''); setEditing({ version }); }}><Plus size={18} aria-hidden /> Thêm hoạt động</button>}
     </PageTitle>
     {isOwner(data) && !data.remote && <div className="segmented compact-segments" aria-label="Góc nhìn lịch trình">
       <button aria-pressed={!memberView} onClick={() => { setMemberView(false); setNotice(''); }}>Chủ chuyến</button>
@@ -74,9 +84,11 @@ export function Itinerary({ data, update, loading }: { data: Demo; update: Updat
     </div>}
     {!ownerView && <p className="inline-note"><Users size={18} aria-hidden /> {data.ownerId || !data.remote ? nameOf(data, ownerOf(data)) : 'Chủ chuyến'} quản lý lịch trình.{writable && ' Thành viên có thể đề xuất điểm đến.'}</p>}
     {loading && <p className="inline-note" role="status">Đang cập nhật lịch trình…</p>}
+    <label className="itinerary-day-picker">Ngày xem lịch trình
+      <input type="date" data-pwa-view-control disabled={saving} value={day} onChange={event => { if (event.target.value) selectDay(event.target.value); }} />
+    </label>
     <div className="filters itinerary-days" aria-label="Ngày trong lịch trình">
-      {[...days].sort().map(date => <button className="pill" key={date} aria-pressed={date === day} onClick={() => setDay(date)}><CalendarDays size={15} aria-hidden /> {dateLabel(date)}</button>)}
-      {data.trip.end && days.size >= 14 && <input className="itinerary-date" type="date" aria-label="Chọn ngày khác" value={day} min={data.trip.start} max={data.trip.end} onChange={event => { if (event.target.value) setDay(event.target.value); }} />}
+      {[...days].sort().map(date => <button className="pill" key={date} disabled={saving} aria-pressed={date === day} onClick={() => selectDay(date)}><CalendarDays size={15} aria-hidden /> {dateLabel(date)}</button>)}
     </div>
     <section>
       <div className="section-heading"><h2>Lộ trình ngày {dateLabel(day)}</h2><span className="tag">{plans.length} hoạt động</span></div>
@@ -85,8 +97,8 @@ export function Itinerary({ data, update, loading }: { data: Demo; update: Updat
           <time dateTime={plan.time}>{plan.time}</time><span className="timeline-dot" />
           <div className="card timeline-card">
             <div><h3>{plan.title}</h3>{plan.place && <p><MapPin size={15} aria-hidden /> {plan.place}</p>}{plan.note && <p>{plan.note}</p>}</div>
-            {managing && <div className="row-controls"><button className="icon-button" aria-label={'Sửa ' + plan.title} onClick={() => { setError(''); setEditing({ ...plan, version }); }}><Pencil size={17} aria-hidden /></button>
-              <button className="icon-button" aria-label={'Xóa ' + plan.title} onClick={() => setRemove({ ...plan, version })}><Trash2 size={17} aria-hidden /></button></div>}
+            {managing && <div className="row-controls"><button className="icon-button" disabled={locked} aria-label={'Sửa ' + plan.title} onClick={() => { setError(''); setEditing({ ...plan, version }); }}><Pencil size={17} aria-hidden /></button>
+              <button className="icon-button" disabled={locked} aria-label={'Xóa ' + plan.title} onClick={() => setRemove({ ...plan, version })}><Trash2 size={17} aria-hidden /></button></div>}
           </div>
         </article>)}
         {!plans.length && <div className="card"><Empty>Chưa có hoạt động cho ngày này.</Empty></div>}
@@ -95,37 +107,47 @@ export function Itinerary({ data, update, loading }: { data: Demo; update: Updat
     <section className="card field-card">
       <h2>Đề xuất điểm đến</h2>
       {!ownerView && writable && (!memberView || data.members.some(member => member.id !== ownerOf(data) && !member.inactive && member.linked)) &&
-        <form className="inline-form" onSubmit={suggest}><input name="title" aria-label="Điểm đến đề xuất" placeholder="Bạn muốn ghé đâu?" maxLength={100} required /><button className="primary-button"><Send size={16} aria-hidden /> Gửi đề xuất</button></form>}
+        <form className="inline-form" onSubmit={suggest}><input name="title" aria-label="Điểm đến đề xuất" placeholder="Bạn muốn ghé đâu?" maxLength={100} required disabled={locked} /><button className="primary-button" disabled={locked}><Send size={16} aria-hidden /> Gửi đề xuất</button></form>}
       {notice && <p role="status">{notice}</p>}
       {!(data.ideas ?? []).length && <p>Chưa có đề xuất.</p>}
       {(data.ideas ?? []).map(idea => <div className="idea-row" key={idea.id}>
         <div><strong>{idea.title}</strong><p>{idea.author ?? nameOf(data, idea.by)}{idea.declined ? ' · Đã từ chối' : idea.scheduled ? ' · Đã lên lịch' : ' · Đang chờ duyệt'}</p></div>
-        {managing && !idea.declined && !idea.scheduled && <button className="text-button" onClick={() => update(record({
+        {managing && !idea.declined && !idea.scheduled && <button className="text-button" disabled={locked} onClick={() => update(record({
           ...data, ideas: (data.ideas ?? []).map(entry => entry.id === idea.id ? { ...entry, declined: true } : entry),
         }, 'Từ chối đề xuất', idea.title, '#lich-trinh'), { type: 'itinerary', change: { action: 'decline-suggestion', id: idea.id } })}>Từ chối</button>}
-        {managing && !idea.declined && !idea.scheduled && <button className="soft-button" onClick={() => { setError(''); setEditing({ ideaId: idea.id, title: idea.title, note: 'Đề xuất của ' + (idea.author ?? nameOf(data, idea.by)), version }); }}>Lên lịch</button>}
+        {managing && !idea.declined && !idea.scheduled && <button className="soft-button" disabled={locked} onClick={() => { setError(''); setEditing({ ideaId: idea.id, title: idea.title, note: 'Đề xuất của ' + (idea.author ?? nameOf(data, idea.by)), version }); }}>Lên lịch</button>}
       </div>)}
     </section>
     {editing && <Dialog title={editing.id ? 'Sửa hoạt động' : 'Thêm hoạt động'} onClose={() => setEditing(null)}>
+      {readError && <p className="inline-note error" role="alert">{readError}</p>}
       <form className="field-card dialog-fields" onSubmit={save}>
         {itineraryChanged && <section className="inline-note" aria-label="Xung đột lịch trình">
           <p>Lịch trình đã thay đổi. Kiểm tra dữ liệu mới trước khi áp lại phần đang nhập.</p>
           {serverActivity && <p>{serverActivity.title} · {dateLabel(serverActivity.day)} · {serverActivity.time} · {serverActivity.place}</p>}
           {editing.id && !serverActivity ? <p>Hoạt động đã được gỡ khỏi lịch trình.</p>
-            : <button className="secondary-button" type="button" onClick={() => setEditing({ ...editing, version })}>Áp bản nhập lên lịch mới</button>}
+            : <button className="secondary-button" type="button" disabled={locked || !managing} onClick={() => setEditing({ ...editing, version })}>Áp bản nhập lên lịch mới</button>}
         </section>}
-        <label>Hoạt động<input name="title" maxLength={100} defaultValue={editing.title} required /></label>
-        <div className="field-pair"><label>Ngày<input name="day" type="date" defaultValue={editing.day ?? day} required /></label>
-          <label>Giờ<input name="time" type="time" defaultValue={editing.time} required /></label></div>
-        <label>Địa điểm<input name="place" maxLength={150} defaultValue={editing.place} /></label>
-        <label>Ghi chú<textarea name="note" rows={2} maxLength={500} defaultValue={editing.note} /></label>
+        <label>Hoạt động<input name="title" maxLength={100} defaultValue={editing.title} required disabled={locked} /></label>
+        <div className="field-pair"><label>Ngày<input name="day" type="date" defaultValue={editing.day ?? day} required disabled={locked} /></label>
+          <label>Giờ<input name="time" type="time" defaultValue={editing.time} required disabled={locked} /></label></div>
+        <label>Địa điểm<input name="place" maxLength={150} defaultValue={editing.place} disabled={locked} /></label>
+        <label>Ghi chú<textarea name="note" rows={2} maxLength={500} defaultValue={editing.note} disabled={locked} /></label>
         {error && <p className="error" role="alert">{error}</p>}
-        <button className="primary-button" disabled={itineraryChanged}>Lưu hoạt động</button>
+        <button className="primary-button" disabled={locked || !managing || itineraryChanged}>Lưu hoạt động</button>
       </form>
     </Dialog>}
     {remove && <Dialog title="Xóa hoạt động?" onClose={() => setRemove(null)}>
+      {readError && <p className="inline-note error" role="alert">{readError}</p>}
       <p>{remove.title} sẽ được gỡ khỏi lịch trình ngày {dateLabel(remove.day)}.</p>
-      <button className="danger-button" onClick={() => {
+      {removalChanged && <section className="inline-note" aria-label="Thay đổi trước khi xóa">
+        {currentRemoval ? <>
+          <p>Lịch trình vừa thay đổi. Kiểm tra hoạt động mới nhất trước khi xóa.</p>
+          <p>{currentRemoval.title} · {dateLabel(currentRemoval.day)} · {currentRemoval.time}</p>
+          <button className="secondary-button" disabled={locked || !managing} onClick={() => setRemove({ ...currentRemoval, version })}>Kiểm tra hoạt động mới nhất</button>
+        </> : <p>Hoạt động này đã được gỡ khỏi lịch trình.</p>}
+      </section>}
+      <button className="danger-button" disabled={locked || !managing || removalChanged || !currentRemoval} onClick={() => {
+        if (locked || !managing || removalChanged || !currentRemoval) return;
         update(record({
           ...data, plans: data.plans.filter(item => item.id !== remove.id),
           ideas: data.ideas?.map(idea => idea.id === remove.suggestionId ? { ...idea, scheduled: false } : idea),

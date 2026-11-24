@@ -28,7 +28,8 @@ export function watchPwaUpdates() {
   };
   const changed = (event: Event) => {
     const field = event.target;
-    if (field instanceof Element && field.matches('input, textarea, select, [contenteditable="true"]')) dirtyFields.add(field);
+    if (field instanceof Element && !field.closest('[data-pwa-view-control]') &&
+      field.matches('input, textarea, select, [contenteditable="true"]')) dirtyFields.add(field);
   };
   const reset = (event: Event) => {
     if (!(event.target instanceof HTMLFormElement)) return;

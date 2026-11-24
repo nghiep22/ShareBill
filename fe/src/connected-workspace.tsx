@@ -26,6 +26,13 @@ import { clearDeviceData, clearExpenseDraft, getTripSnapshot, preferenceKey, sav
 const invitePattern = /^[A-Za-z0-9_-]{43}$/;
 const isExpenseDetail = (route: string) => route === 'khoan-chi' || route === 'sua-khoan-chi';
 
+function itineraryDay(query: URLSearchParams) {
+  const day = query.get('day');
+  if (!day || !/^\d{4}-\d{2}-\d{2}$/.test(day)) return undefined;
+  const date = new Date(day + 'T00:00:00Z');
+  return Number.isFinite(date.getTime()) && date.toISOString().slice(0, 10) === day ? day : undefined;
+}
+
 function replaceRoute(route: string) {
   window.history.replaceState(window.history.state, '', '#' + route);
   window.dispatchEvent(new Event('hashchange'));
@@ -302,6 +309,7 @@ function AuthenticatedWorkspace({ session, api, hash, onSignOut }: { session: Se
 
   const update: UpdateTrip = (_next, command, onSaved) => {
     if (!command || !data || !selected || overview.loading || networkUnavailable) return;
+    if (command.type === 'itinerary' && (itinerary.loading || itinerary.error || !itinerary.data)) return;
     mutation.run(async () => {
       const result = await sendTripCommand(api, selected, data, command);
       if (device && command.type === 'save-expense' && !command.previous) await clearExpenseDraft(device).catch(() => setStorageError(true));
@@ -385,7 +393,14 @@ function AuthenticatedWorkspace({ session, api, hash, onSignOut }: { session: Se
       case 'hoat-dong': content = <ActivityScreen data={data} onMore={historyActivity.more} loading={historyActivity.loading} />; break;
       case 'loi-moi': content = <InviteManager data={data} key={selected} tripId={selected} api={api} epoch={epoch} run={mutation.run} />; break;
       case 'lich-trinh':
-        content = itinerary.data ? <Itinerary data={data} key={selected} update={update} loading={itinerary.loading} /> :
+        content = itinerary.data ? <Itinerary data={data} key={selected} update={update} loading={itinerary.loading}
+          disabled={overview.loading || mutation.busy || networkUnavailable || Boolean(itinerary.error)} saving={mutation.busy}
+          readError={itinerary.error} selectedDay={itineraryDay(query)}
+          onDayChange={day => {
+            const next = new URLSearchParams(query);
+            next.set('day', day);
+            replaceRoute(tripRoute(selected, 'lich-trinh', undefined, next.toString()));
+          }} /> :
           <><PageTitle title="Lịch trình chuyến đi" back={tripHref(data, 'tong-quan')} />{itinerary.loading && <p role="status">Đang tải lịch trình…</p>}</>;
         break;
       default: content = <PageTitle title="Không tìm thấy màn hình" back="#chuyen-di" />;

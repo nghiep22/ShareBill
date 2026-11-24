@@ -81,6 +81,21 @@ test('an update preserves entered text and applies automatically after leaving t
   await page.getByRole('heading', { name: 'Tạo tài khoản', exact: true }).waitFor();
 });
 
+test('changing a view-only date does not block an automatic update after focus leaves it', async t => {
+  const { page } = await fixture(t);
+  await page.evaluate(() => {
+    const input = document.createElement('input');
+    input.type = 'date';
+    input.setAttribute('data-pwa-view-control', '');
+    input.setAttribute('aria-label', 'Ngày xem');
+    document.body.append(input);
+  });
+  await page.getByLabel('Ngày xem', { exact: true }).fill('2026-12-06');
+  await page.getByRole('heading', { name: 'Đăng nhập', exact: true }).click();
+  await release(page);
+  await reloaded(page);
+});
+
 test('an update waits for a saving operation and an open dialog to finish', async t => {
   const { page } = await fixture(t);
   await page.locator('.workspace').evaluate(node => node.dataset.pwaBusy = 'true');

@@ -418,7 +418,8 @@ input[type="radio"], input[type="checkbox"] { min-height: 0; width: 16px; height
 .timeline-card .row-controls button:hover, .member-settings:hover { background: var(--mint); }
 .itinerary-days { flex-wrap: nowrap; overflow-x: auto; min-width: 0; padding-block: 2px 8px; scrollbar-width: thin; }
 .itinerary-days > * { flex: none; white-space: nowrap; }
-.itinerary-date { max-width: 175px; }
+.itinerary-day-picker { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px 12px; font-size: 14px; font-weight: 670; }
+.itinerary-day-picker input { width: min(175px, 100%); }
 .idea-row { display: flex; align-items: center; gap: 8px; padding-block: 8px; border-top: 1px solid var(--line); }
 .idea-row > div { flex: 1; min-width: 0; overflow-wrap: anywhere; }
 .idea-row p { font-size: 12px; margin-top: 3px; }

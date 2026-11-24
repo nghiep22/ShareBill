@@ -2,6 +2,14 @@
 
 Ngày khảo sát 18/11/2026 · Phạm vi mã trong workspace, giao diện và API local, Firebase Emulator, bộ thiết kế `GiaoDien` và đặc tả nghiệp vụ.
 
+## Lịch trình khi đổi ngày và nhiều máy cùng sửa ngày 24/11/2026
+
+Ngày đang xem được lưu trong query `day` của link lịch trình; giữ khi tải lại và bỏ qua ngày không hợp lệ. Chuyến chưa định ngày mở hoạt động sớm nhất, có bộ chọn ngày luôn hiển thị để mở ngày chưa có hoạt động hoặc ngày ngoài hàng nút cuộn. Chọn ngày xem không đánh dấu là bản nhập cần giữ khi cập nhật PWA.
+
+Khi tải lại chậm/lỗi, giữ lịch đã tải để xem và khóa các lệnh ghi tới khi có dữ liệu hợp lệ. Hộp thoại sửa/xóa hiển thị lỗi đọc ngay bên trong, giữ bản nhập. Xóa hoạt động kiểm version lúc mở; nếu lịch trình đã đổi, cần xem lại hoạt động mới nhất trước khi xác nhận, hoặc báo hoạt động đã bị gỡ. Không thay đổi API hay công thức tiền.
+
+Ba hành trình mới kiểm link ngày, chuyến chưa có ngày/dài ngày, ngày sai, giữ bản sửa khi xung đột, kiểm tra lại trước khi xóa, hoạt động bị máy khác gỡ và trạng thái tải chậm/lỗi. Bộ PWA có thêm ca chọn ngày xem rồi tự cập nhật, nâng tổng lên 5 ca. TypeScript, production build và lượt kiểm tra cuối 24/24 hành trình cùng 5/5 PWA đạt.
+
 ## Khôi phục tài khoản và ổn định phiên ngày 24/11/2026
 
 Bổ sung **Quên mật khẩu** từ đăng nhập và API `/api/v1/auth/password-reset`: email được chuẩn hóa, Firebase gửi hướng dẫn tiếng Việt, phản hồi không tiết lộ địa chỉ có tài khoản hay không và không trả mã đặt lại. Form đăng nhập/đăng ký/khôi phục khóa gửi lặp và hiện trạng thái đang xử lý. Lỗi REST hoặc kiểm tra token tạm thời trả 503/429 thay vì xóa phiên; token sai/hết hạn/thu hồi vẫn trả 401 và tài khoản bị khóa trả 403, áp dụng cho cả API người dùng và quản trị. Phản hồi refresh thiếu dữ liệu cũng được coi là lỗi dịch vụ.

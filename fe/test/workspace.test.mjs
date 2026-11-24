@@ -202,6 +202,137 @@ async function paymentImageTransport(context, root, actor, qrPayload) {
   return { name: qrPayload ? 'chuyen-khoan.jpg' : 'chuyen-khoan.png', mimeType: contentType, buffer };
 }
 
+test('itinerary day links survive reload and support undated trips, long ranges and invalid dates', async t => {
+  const { page, session, trip, screen } = await fixture(t);
+  await page.setViewportSize({ width: 320, height: 568 });
+  const path = 'trips/' + trip.id + '/itinerary';
+  const activity = (title, day) => ({ action: 'add-activity', title, day, time: '08:00', place: '', note: '' });
+  await call(path, session, { method: 'POST', version: 1, body: activity('Hoạt động sau', '2026-12-03') });
+  await call(path, session, { method: 'POST', version: 2, body: activity('Hoạt động trước', '2026-12-01') });
+  await page.goto(screen('lich-trinh'));
+  await page.getByRole('heading', { name: 'Hoạt động trước', exact: true }).waitFor();
+  const picker = page.getByLabel('Ngày xem lịch trình', { exact: true });
+  assert.equal(await picker.inputValue(), '2026-12-01', 'Undated trips start with the earliest activity');
+  await picker.fill('2026-12-06');
+  await page.waitForURL('**day=2026-12-06');
+  await page.reload();
+  await heading(page, 'Lịch trình chuyến đi');
+  await picker.waitFor();
+  assert.equal(await picker.inputValue(), '2026-12-06');
+  await page.getByRole('button', { name: 'Thêm hoạt động', exact: true }).click();
+  const form = page.getByRole('dialog', { name: 'Thêm hoạt động', exact: true });
+  assert.equal(await form.getByLabel('Ngày', { exact: true }).inputValue(), '2026-12-06');
+  await form.getByLabel('Hoạt động', { exact: true }).fill('Đi chơi ngày đã chọn');
+  await form.getByLabel('Giờ', { exact: true }).fill('09:30');
+  await form.getByRole('button', { name: 'Lưu hoạt động', exact: true }).click();
+  await page.getByRole('heading', { name: 'Đi chơi ngày đã chọn', exact: true }).waitFor();
+  const stored = await call(path, session);
+  assert.equal(stored.activities.find(item => item.title === 'Đi chơi ngày đã chọn').day, '2026-12-06');
+  await page.goto(screen('lich-trinh') + '?day=2026-02-31');
+  await picker.waitFor();
+  assert.equal(await picker.inputValue(), '2026-12-01', 'Invalid calendar dates fall back safely');
+  await page.getByRole('heading', { name: 'Hoạt động trước', exact: true }).waitFor();
+  await call('trips/' + trip.id, session, { method: 'PATCH', version: 1,
+    body: { startDate: '2026-12-01', endDate: '2026-12-30' } });
+  await page.goto(screen('lich-trinh') + '?day=2026-12-30');
+  await page.reload();
+  await picker.waitFor();
+  assert.equal(await picker.inputValue(), '2026-12-30');
+  assert.ok(await page.locator('.itinerary-days button').count() >= 14, 'Long trip dates are loaded');
+  const box = await picker.boundingBox();
+  assert.ok(box.x >= 0 && box.x + box.width <= 320, 'The date picker stays reachable without horizontal scrolling');
+  assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth), false);
+  await picker.fill('2026-12-03');
+  await page.getByRole('heading', { name: 'Hoạt động sau', exact: true }).waitFor();
+});
+
+test('itinerary edits survive competing changes and deletion requires reviewing the latest activity', async t => {
+  const { page, session, trip, screen } = await fixture(t);
+  const path = 'trips/' + trip.id + '/itinerary';
+  const fields = { title: 'Hoạt động ban đầu', day: '2026-12-01', time: '08:00', place: 'Đà Lạt', note: '' };
+  const added = await call(path, session, { method: 'POST', version: 1, body: { action: 'add-activity', ...fields } });
+  await page.goto(screen('lich-trinh'));
+  await page.getByRole('button', { name: 'Sửa Hoạt động ban đầu', exact: true }).click();
+  const editing = page.getByRole('dialog', { name: 'Sửa hoạt động', exact: true });
+  await editing.getByLabel('Hoạt động', { exact: true }).fill('Giữ bản đang nhập');
+  await editing.getByLabel('Giờ', { exact: true }).fill('09:30');
+  await call(path, session, { method: 'POST', version: 2, body: { action: 'add-activity', ...fields, title: 'Hoạt động từ máy khác' } });
+  await page.evaluate(() => window.dispatchEvent(new Event('online')));
+  await editing.getByRole('region', { name: 'Xung đột lịch trình', exact: true }).waitFor();
+  assert.equal(await editing.getByLabel('Hoạt động', { exact: true }).inputValue(), 'Giữ bản đang nhập');
+  assert.equal(await editing.getByLabel('Giờ', { exact: true }).inputValue(), '09:30');
+  assert.equal(await editing.getByRole('button', { name: 'Lưu hoạt động', exact: true }).isDisabled(), true);
+  await editing.getByRole('button', { name: 'Áp bản nhập lên lịch mới', exact: true }).click();
+  await editing.getByRole('button', { name: 'Lưu hoạt động', exact: true }).click();
+  await page.getByRole('heading', { name: 'Giữ bản đang nhập', exact: true }).waitFor();
+  await page.getByRole('button', { name: 'Xóa Giữ bản đang nhập', exact: true }).click();
+  const removing = page.getByRole('dialog', { name: 'Xóa hoạt động?', exact: true });
+  await call(path, session, { method: 'POST', version: 4,
+    body: { action: 'edit-activity', id: added.id, ...fields, title: 'Tên vừa được đổi trên máy khác', time: '10:30' } });
+  await page.evaluate(() => window.dispatchEvent(new Event('online')));
+  await removing.getByRole('region', { name: 'Thay đổi trước khi xóa', exact: true }).waitFor();
+  assert.equal(await removing.getByRole('button', { name: 'Xóa hoạt động', exact: true }).isDisabled(), true);
+  await removing.getByText(/Tên vừa được đổi trên máy khác/).waitFor();
+  await removing.getByRole('button', { name: 'Kiểm tra hoạt động mới nhất', exact: true }).click();
+  await removing.getByText(/Tên vừa được đổi trên máy khác/).waitFor();
+  await removing.getByRole('button', { name: 'Xóa hoạt động', exact: true }).click();
+  await removing.waitFor({ state: 'detached' });
+  const saved = await call(path, session);
+  assert.equal(saved.activities.some(item => item.id === added.id), false);
+  assert.equal(saved.activities.some(item => item.title === 'Hoạt động từ máy khác'), true);
+  const other = saved.activities.find(item => item.title === 'Hoạt động từ máy khác');
+  await page.getByRole('button', { name: 'Xóa Hoạt động từ máy khác', exact: true }).click();
+  await call(path, session, { method: 'POST', version: saved.version, body: { action: 'remove-activity', id: other.id } });
+  await page.evaluate(() => window.dispatchEvent(new Event('online')));
+  await removing.getByText('Hoạt động này đã được gỡ khỏi lịch trình.', { exact: true }).waitFor();
+  assert.equal(await removing.getByRole('button', { name: 'Xóa hoạt động', exact: true }).isDisabled(), true);
+});
+
+test('itinerary keeps the schedule visible but locks writes while refreshing or retrying an error', async t => {
+  const { page, context, session, trip, screen } = await fixture(t);
+  const path = 'trips/' + trip.id + '/itinerary';
+  await call(path, session, { method: 'POST', version: 1,
+    body: { action: 'add-activity', title: 'Lịch trình đã tải', day: '2026-12-01', time: '08:00', place: '', note: '' } });
+  await page.goto(screen('lich-trinh'));
+  await page.getByRole('heading', { name: 'Lịch trình đã tải', exact: true }).waitFor();
+  let release;
+  const gate = new Promise(resolve => { release = resolve; });
+  t.after(() => release());
+  let writes = 0;
+  await context.route('**/api/v1/' + path, async route => {
+    if (route.request().method() !== 'GET') { writes++; await route.continue(); return; }
+    await gate;
+    await route.fulfill({ status: 503, contentType: 'application/json',
+      body: JSON.stringify({ error: { code: 'TEMPORARY_FAILURE', message: 'Chưa tải lại được lịch trình.' } }) });
+  });
+  await page.evaluate(() => window.dispatchEvent(new Event('online')));
+  await page.getByRole('status').filter({ hasText: 'Đang cập nhật lịch trình…' }).waitFor();
+  const add = page.getByRole('button', { name: 'Thêm hoạt động', exact: true });
+  assert.equal(await add.isDisabled(), true);
+  assert.equal(await page.getByRole('heading', { name: 'Lịch trình đã tải', exact: true }).isVisible(), true);
+  release();
+  await page.getByRole('alert').filter({ hasText: 'Chưa tải lại được lịch trình.' }).waitFor();
+  assert.equal(await add.isDisabled(), true);
+  const edit = page.getByRole('button', { name: 'Sửa Lịch trình đã tải', exact: true });
+  assert.equal(await edit.isDisabled(), true);
+  await add.evaluate(button => button.click());
+  assert.equal(writes, 0);
+  await context.unroute('**/api/v1/' + path);
+  await page.getByRole('button', { name: 'Tải lại', exact: true }).first().click();
+  await page.waitForFunction(() => !document.querySelector('.page-title button')?.disabled);
+  assert.equal(await add.isEnabled(), true);
+  await edit.click();
+  const dialog = page.getByRole('dialog', { name: 'Sửa hoạt động', exact: true });
+  await dialog.waitFor();
+  await dialog.getByLabel('Hoạt động', { exact: true }).fill('Giữ khi tải lại lỗi');
+  await context.route('**/api/v1/' + path, route => route.fulfill({ status: 503, contentType: 'application/json',
+    body: JSON.stringify({ error: { code: 'TEMPORARY_FAILURE', message: 'Chưa tải lại được lịch trình.' } }) }));
+  await page.evaluate(() => window.dispatchEvent(new Event('online')));
+  await dialog.getByRole('alert').filter({ hasText: 'Chưa tải lại được lịch trình.' }).waitFor();
+  assert.equal(await dialog.getByLabel('Hoạt động', { exact: true }).inputValue(), 'Giữ khi tải lại lỗi');
+  assert.equal(await dialog.getByRole('button', { name: 'Lưu hoạt động', exact: true }).isDisabled(), true);
+});
+
 test('password recovery sends one request, keeps account identity and prevents duplicate login submissions', async t => {
   assert.ok(['localhost', '127.0.0.1'].includes(new URL(apiOrigin).hostname), 'Password recovery integration requires the local Auth Emulator');
   const email = randomUUID() + '@example.test';
