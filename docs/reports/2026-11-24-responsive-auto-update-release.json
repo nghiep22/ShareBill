@@ -1,0 +1,20 @@
+{
+  "checkedAt": "2026-11-24T08:32:01.567Z",
+  "webUrl": "https://sharebill-nghiep22.vercel.app",
+  "webCommit": "a35e0bda14b9636ca0e5aac620c7cb8b9472f2fb",
+  "webDeployment": "dpl_GoMwirkC1CyAJWUCeER7WtbX5DHR",
+  "checks": {
+    "canonicalRelease": true,
+    "publishedUpdateProtocol": true,
+    "apiHealthy": true,
+    "apiCors": true,
+    "mobileBrowserAndPasswordControl": true,
+    "cloudShellWorksOffline": true,
+    "noBrowserErrors": true
+  },
+  "localTests": {
+    "browser": 19,
+    "pwaUpdates": 4
+  },
+  "apiCommit": "39ba5c8fee654663780b194db526d91c4f9cf1c0"
+}
