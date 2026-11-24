@@ -157,6 +157,10 @@ export class ShareBillApi {
     return this.authorized<T>(path, body === undefined ? {} : { method: 'POST', body });
   }
 
+  async resetPassword(email: string): Promise<void> {
+    await request('/auth/password-reset', { method: 'POST', body: { email } });
+  }
+
   async page<T>(path: string, query: Record<string, string | undefined>, cursor?: string): Promise<Page<T>> {
     const params = new URLSearchParams();
     for (const [name, value] of Object.entries(query)) if (value) params.set(name, value);

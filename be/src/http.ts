@@ -7,12 +7,23 @@ export class ApiError extends Error {
   constructor(public status: number, public code: string, message: string) { super(message); }
 }
 
+export function tokenVerificationError(cause: unknown, invalidCode: 'UNAUTHENTICATED' | 'INVALID_REFRESH_TOKEN' = 'UNAUTHENTICATED'): ApiError {
+  const code = typeof cause === 'object' && cause !== null && 'code' in cause ? cause.code : undefined;
+  if (code === 'auth/user-disabled') return new ApiError(403, 'ACCOUNT_DISABLED', 'Tài khoản đang tạm khóa.');
+  if (code === 'auth/too-many-requests') return new ApiError(429, 'RATE_LIMITED', 'Thử lại sau ít phút.');
+  if (typeof code === 'string' && ['auth/id-token-expired', 'auth/id-token-revoked', 'auth/invalid-id-token',
+    'auth/argument-error', 'auth/invalid-argument', 'auth/user-not-found'].includes(code)) {
+    return new ApiError(401, invalidCode, 'Phiên đăng nhập không hợp lệ. Vui lòng đăng nhập lại.');
+  }
+  return new ApiError(503, 'AUTH_UNAVAILABLE', 'Không thể kết nối dịch vụ đăng nhập.');
+}
+
 export async function requireUser(request: FastifyRequest): Promise<string> {
   const token = request.headers.authorization?.match(/^Bearer (.+)$/)?.[1];
   if (!token) throw new ApiError(401, 'UNAUTHENTICATED', 'Vui lòng đăng nhập.');
   let uid: string;
   try { uid = (await auth().verifyIdToken(token, true)).uid; }
-  catch { throw new ApiError(401, 'UNAUTHENTICATED', 'Phiên đăng nhập không hợp lệ.'); }
+  catch (cause) { throw tokenVerificationError(cause); }
   const user = await db().doc(`users/${uid}`).get();
   if (user.exists && user.get('status') === 'disabled') throw new ApiError(403, 'ACCOUNT_DISABLED', 'Tài khoản đang tạm khóa.');
   return uid;

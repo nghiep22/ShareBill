@@ -1,12 +1,12 @@
 import type { FastifyRequest } from 'fastify';
 import { auth, db } from '../firebase.js';
-import { ApiError } from '../http.js';
+import { ApiError, tokenVerificationError } from '../http.js';
 
 export async function adminIdentity(request: FastifyRequest, recent = false) {
   const token = request.headers.authorization?.match(/^Bearer (.+)$/)?.[1];
   if (!token) throw new ApiError(401, 'UNAUTHENTICATED', 'Đăng nhập bằng Google để tiếp tục.');
-  const claims = await auth().verifyIdToken(token, true).catch(() => {
-    throw new ApiError(401, 'UNAUTHENTICATED', 'Phiên quản trị đã hết hạn. Hãy đăng nhập lại.');
+  const claims = await auth().verifyIdToken(token, true).catch(cause => {
+    throw tokenVerificationError(cause);
   });
   if (claims.firebase?.sign_in_provider !== 'google.com' || claims.email_verified !== true) {
     throw new ApiError(403, 'ADMIN_FORBIDDEN', 'Cần danh tính Google đã xác minh để vào khu vực quản trị.');

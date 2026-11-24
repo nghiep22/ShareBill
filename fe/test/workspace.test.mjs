@@ -202,6 +202,89 @@ async function paymentImageTransport(context, root, actor, qrPayload) {
   return { name: qrPayload ? 'chuyen-khoan.jpg' : 'chuyen-khoan.png', mimeType: contentType, buffer };
 }
 
+test('password recovery sends one request, keeps account identity and prevents duplicate login submissions', async t => {
+  assert.ok(['localhost', '127.0.0.1'].includes(new URL(apiOrigin).hostname), 'Password recovery integration requires the local Auth Emulator');
+  const email = randomUUID() + '@example.test';
+  const password = 'Recovery-Fixture-123!';
+  const nextPassword = 'Recovered-Fixture-456!';
+  const session = await call('auth/register', null, { method: 'POST', body: { email, password, displayName: 'Recovery fixture' } });
+  const context = await browser.newContext({ viewport: { width: 320, height: 568 } });
+  t.after(() => context.close());
+  const page = await context.newPage();
+  await page.goto(web + '/#dang-nhap');
+  await page.getByRole('link', { name: 'Quên mật khẩu?', exact: true }).click();
+  await heading(page, 'Quên mật khẩu');
+  assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth), false);
+  let requests = 0, releaseReset, resetStarted;
+  const resetGate = new Promise(resolve => { releaseReset = resolve; });
+  const resetRequest = new Promise(resolve => { resetStarted = resolve; });
+  await context.route('**/api/v1/auth/password-reset', async route => {
+    requests++; resetStarted(); await resetGate; await route.continue();
+  });
+  await page.getByLabel('Email đăng ký', { exact: true }).fill(email);
+  await page.getByRole('button', { name: 'Gửi hướng dẫn', exact: true }).click();
+  await resetRequest;
+  assert.equal(await page.getByLabel('Email đăng ký', { exact: true }).isDisabled(), true);
+  const sending = page.getByRole('button', { name: 'Đang gửi yêu cầu…', exact: true });
+  assert.equal(await sending.isDisabled(), true);
+  await sending.evaluate(button => button.click());
+  assert.equal(requests, 1);
+  releaseReset();
+  await page.getByRole('status').filter({ hasText: 'Nếu email này đã được đăng ký' }).waitFor();
+  assert.equal(requests, 1);
+
+  const response = await fetch('http://127.0.0.1:9099/emulator/v1/projects/demo-sharebill/oobCodes');
+  const { oobCodes } = await response.json();
+  const code = oobCodes.find(item => item.email === email && item.requestType === 'PASSWORD_RESET');
+  assert.ok(code);
+  const changed = await fetch('http://127.0.0.1:9099/identitytoolkit.googleapis.com/v1/accounts:resetPassword?key=demo', {
+    method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ oobCode: code.oobCode, newPassword: nextPassword }),
+  });
+  assert.equal(changed.status, 200);
+  await page.getByRole('link', { name: 'Về đăng nhập', exact: true }).click();
+  await heading(page, 'Đăng nhập');
+  await page.getByLabel('Email', { exact: true }).fill(email);
+  await page.getByLabel('Mật khẩu', { exact: true }).fill(nextPassword);
+  let releaseLogin, loginStarted, logins = 0;
+  const loginGate = new Promise(resolve => { releaseLogin = resolve; });
+  const loginRequest = new Promise(resolve => { loginStarted = resolve; });
+  await context.route('**/api/v1/auth/login', async route => {
+    logins++; loginStarted(); await loginGate; await route.continue();
+  });
+  await page.getByRole('button', { name: 'Đăng nhập', exact: true }).click();
+  await loginRequest;
+  assert.equal(await page.getByLabel('Mật khẩu', { exact: true }).isDisabled(), true);
+  const loggingIn = page.getByRole('button', { name: 'Đang đăng nhập…', exact: true });
+  assert.equal(await loggingIn.isDisabled(), true);
+  await loggingIn.evaluate(button => button.click());
+  releaseLogin();
+  await heading(page, 'Chuyến đi của tôi');
+  assert.equal(logins, 1);
+  assert.equal(await page.evaluate(() => JSON.parse(sessionStorage.getItem('sharebill-live-session-v1')).user.uid), session.user.uid);
+});
+
+test('a temporary refresh outage keeps the session and recovers when the user retries', async t => {
+  const { page, context, session, screen } = await fixture(t);
+  await page.goto(screen('tong-quan'));
+  await heading(page, 'Tổng quan');
+  await context.route('**/api/v1/auth/refresh', route => route.fulfill({ status: 503, contentType: 'application/json',
+    body: JSON.stringify({ error: { code: 'AUTH_UNAVAILABLE', message: 'Không thể kết nối dịch vụ đăng nhập.' } }) }));
+  await page.evaluate(() => {
+    const key = 'sharebill-live-session-v1';
+    const saved = JSON.parse(sessionStorage.getItem(key));
+    sessionStorage.setItem(key, JSON.stringify({ ...saved, expiresAt: 0 }));
+  });
+  await page.reload();
+  await page.getByRole('alert').filter({ hasText: 'Không thể kết nối dịch vụ đăng nhập.' }).waitFor();
+  assert.equal(await page.getByRole('heading', { name: 'Đăng nhập', exact: true }).count(), 0);
+  assert.equal(await page.evaluate(() => JSON.parse(sessionStorage.getItem('sharebill-live-session-v1')).user.uid), session.user.uid);
+  await context.unroute('**/api/v1/auth/refresh');
+  await page.getByRole('button', { name: 'Tải lại', exact: true }).first().click();
+  await heading(page, 'Tổng quan');
+  await page.getByRole('heading', { name: 'Đà Lạt E2E', exact: true }).waitFor();
+  assert.ok(await page.evaluate(() => JSON.parse(sessionStorage.getItem('sharebill-live-session-v1')).expiresAt > Date.now()));
+});
+
 test('authentication has no demo entry point and PWA retires cached preview pages', async t => {
   const context = await browser.newContext();
   t.after(() => context.close());

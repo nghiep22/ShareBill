@@ -13,7 +13,7 @@ import { Balances, Expenses, Overview, Settlements, type ExpenseFilters, type Se
 import { ExpenseDetail, ExpenseForm } from './expense';
 import { Members } from './members';
 import { categories, type Demo } from './model';
-import { ActivityScreen, CreateTrip, SignIn, Trips } from './screens';
+import { ActivityScreen, CreateTrip, PasswordReset, SignIn, Trips } from './screens';
 import { Itinerary, Settings } from './trip';
 import type { UpdateTrip } from './trip-command';
 import { MutationFeedback, PageTitle } from './ui';
@@ -108,9 +108,13 @@ export function ConnectedWorkspace() {
         </div>}
       </section>
     </div>;
+  } else if (route === 'quen-mat-khau') {
+    content = <PasswordReset busy={auth.busy} onSubmit={(email, onSent) => {
+      auth.run(() => api.resetPassword(email), onSent);
+    }} />;
   } else {
     const registering = route === 'dang-ky';
-    content = <SignIn key={route} registering={registering} onSubmit={(profile, password) => {
+    content = <SignIn key={route} registering={registering} busy={auth.busy} onSubmit={(profile, password) => {
       auth.run(() => api.signIn(profile.email, password, registering ? profile.name : undefined), () => {
         const invite = pendingInvite.current;
         pendingInvite.current = undefined;

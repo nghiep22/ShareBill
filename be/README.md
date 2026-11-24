@@ -34,7 +34,9 @@ Trong terminal **cmd** của VS Code, có thể chạy `cd be` rồi `npm run em
 
 ### Thử API trên Swagger UI
 
-Khi Emulator và API đã chạy, mở **http://localhost:3001/docs/**. Trang này mô tả 68 thao tác hiện có. Đặc tả JSON ở `http://localhost:3001/docs/json`.
+Khi Emulator và API đã chạy, mở **http://localhost:3001/docs/**. Trang này mô tả 70 thao tác hiện có. Đặc tả JSON ở `http://localhost:3001/docs/json`.
+
+`POST /api/v1/auth/password-reset` nhận `{ "email": "ban@example.com" }`, không cần đăng nhập và trả `{ "data": { "accepted": true } }` cho cả email có hoặc không có tài khoản. Firebase gửi hướng dẫn đặt lại mật khẩu bằng tiếng Việt khi có thể gửi; API không trả mã hay liên kết đặt lại. Khi chạy local, lấy thư/mã từ Auth Emulator; bộ test khôi phục không gửi thư thật. Lỗi Firebase tạm thời ở đăng nhập, làm mới token và kiểm quyền API/user/admin trả 503 để thử lại; token hết hạn/thu hồi vẫn trả 401, tài khoản bị khóa trả 403 và giới hạn tần suất trả 429.
 
 1. Mở **Tài khoản → POST /api/v1/auth/register** (hoặc `login`), bấm **Try it out**, điền email/mật khẩu/tên rồi **Execute**. Mỗi lần đăng ký cần email mới.
 2. Trong response, sao chép **`data.accessToken`**. Bấm **Authorize** ở đầu trang, dán token vào ô BearerAuth **không thêm chữ `Bearer`**, rồi **Authorize**.

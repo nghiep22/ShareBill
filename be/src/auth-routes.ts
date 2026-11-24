@@ -1,7 +1,7 @@
 import type { FastifyInstance, FastifyReply } from 'fastify';
 import { z } from 'zod';
 import { auth } from './firebase.js';
-import { ApiError, requireUser } from './http.js';
+import { ApiError, requireUser, tokenVerificationError } from './http.js';
 import { bootstrapUserProfile, readUserProfile, type UserProfile } from './services/user-profile.js';
 
 const email = z.string().trim().toLowerCase().pipe(z.email().max(254));
@@ -9,10 +9,12 @@ const password = z.string().min(8).max(128);
 const registerInput = z.strictObject({ email, password, displayName: z.string().trim().min(1).max(80) });
 const loginInput = z.strictObject({ email, password: z.string().min(1).max(128) });
 const refreshInput = z.strictObject({ refreshToken: z.string().min(1).max(4096) });
+const resetInput = z.strictObject({ email });
+const refreshReply = z.object({ id_token: z.string().min(1), refresh_token: z.string().min(1),
+  expires_in: z.string().regex(/^[1-9]\d*$/), user_id: z.string().min(1) });
 
 type AuthReply = { idToken: string; refreshToken: string; expiresIn: string; localId: string; email: string; displayName?: string };
-type RefreshReply = { id_token: string; refresh_token: string; expires_in: string; user_id: string };
-type AuthAction = 'register' | 'login' | 'refresh';
+type AuthAction = 'register' | 'login' | 'refresh' | 'password-reset';
 
 function webApiKey(): string {
   const key = process.env.FIREBASE_WEB_API_KEY;
@@ -21,12 +23,13 @@ function webApiKey(): string {
 }
 
 function firebaseUrl(action: AuthAction): string {
+  const accountAction = action === 'register' ? 'signUp' : action === 'password-reset' ? 'sendOobCode' : 'signInWithPassword';
   const path = action === 'refresh' ? '/securetoken.googleapis.com/v1/token' :
-    `/identitytoolkit.googleapis.com/v1/accounts:${action === 'register' ? 'signUp' : 'signInWithPassword'}`;
+    `/identitytoolkit.googleapis.com/v1/accounts:${accountAction}`;
   const emulator = process.env.FIREBASE_AUTH_EMULATOR_HOST;
   const base = emulator ? `http://${emulator}${path}` :
     action === 'refresh' ? 'https://securetoken.googleapis.com/v1/token' :
-      `https://identitytoolkit.googleapis.com/v1/accounts:${action === 'register' ? 'signUp' : 'signInWithPassword'}`;
+      `https://identitytoolkit.googleapis.com/v1/accounts:${accountAction}`;
   return `${base}?key=${encodeURIComponent(webApiKey())}`;
 }
 
@@ -34,14 +37,19 @@ function upstreamError(action: AuthAction, code: string): ApiError {
   if (code === 'TOO_MANY_ATTEMPTS_TRY_LATER' || code === 'QUOTA_EXCEEDED') {
     return new ApiError(429, 'RATE_LIMITED', 'Thử lại sau ít phút.');
   }
+  if (code === 'USER_DISABLED') return new ApiError(403, 'ACCOUNT_DISABLED', 'Tài khoản đã bị khóa.');
   if (action === 'register') {
     if (code === 'EMAIL_EXISTS') return new ApiError(409, 'EMAIL_EXISTS', 'Email này đã được sử dụng.');
     if (code === 'WEAK_PASSWORD' || code.startsWith('WEAK_PASSWORD :') || code === 'INVALID_EMAIL') {
       return new ApiError(422, 'INVALID_INPUT', 'Email hoặc mật khẩu chưa hợp lệ.');
     }
   }
-  if (action === 'login') return new ApiError(401, 'INVALID_CREDENTIALS', 'Email hoặc mật khẩu không đúng.');
-  if (action === 'refresh') return new ApiError(401, 'INVALID_REFRESH_TOKEN', 'Phiên đăng nhập đã hết hạn.');
+  if (action === 'login' && ['EMAIL_NOT_FOUND', 'INVALID_PASSWORD', 'INVALID_LOGIN_CREDENTIALS', 'INVALID_EMAIL'].includes(code)) {
+    return new ApiError(401, 'INVALID_CREDENTIALS', 'Email hoặc mật khẩu không đúng.');
+  }
+  if (action === 'refresh' && ['INVALID_REFRESH_TOKEN', 'TOKEN_EXPIRED', 'USER_NOT_FOUND'].includes(code)) {
+    return new ApiError(401, 'INVALID_REFRESH_TOKEN', 'Phiên đăng nhập đã hết hạn.');
+  }
   return new ApiError(503, 'AUTH_UNAVAILABLE', 'Không thể kết nối dịch vụ đăng nhập.');
 }
 
@@ -50,7 +58,8 @@ async function callFirebase<T>(action: AuthAction, body: Record<string, unknown>
   try {
     response = await fetch(firebaseUrl(action), {
       method: 'POST',
-      headers: { 'content-type': body instanceof URLSearchParams ? 'application/x-www-form-urlencoded' : 'application/json' },
+      headers: { 'content-type': body instanceof URLSearchParams ? 'application/x-www-form-urlencoded' : 'application/json',
+        ...(action === 'password-reset' && { 'X-Firebase-Locale': 'vi' }) },
       body: body instanceof URLSearchParams ? body : JSON.stringify(body),
       signal: AbortSignal.timeout(10_000),
     });
@@ -58,12 +67,17 @@ async function callFirebase<T>(action: AuthAction, body: Record<string, unknown>
     if (error instanceof ApiError) throw error;
     throw new ApiError(503, 'AUTH_UNAVAILABLE', 'Không thể kết nối dịch vụ đăng nhập.');
   }
+  if (response.status === 429) throw new ApiError(429, 'RATE_LIMITED', 'Thử lại sau ít phút.');
+  if (response.status >= 500) throw new ApiError(503, 'AUTH_UNAVAILABLE', 'Không thể kết nối dịch vụ đăng nhập.');
   let payload: unknown;
   try { payload = await response.json(); }
   catch { throw new ApiError(503, 'AUTH_UNAVAILABLE', 'Phản hồi đăng nhập không hợp lệ.'); }
   if (!response.ok) {
     const code = z.object({ error: z.object({ message: z.string() }) }).safeParse(payload);
-    throw upstreamError(action, code.success ? code.data.error.message : 'UNKNOWN');
+    const message = code.success ? code.data.error.message : 'UNKNOWN';
+    // A reset request must not reveal whether an address has an account.
+    if (action === 'password-reset' && ['EMAIL_NOT_FOUND', 'USER_DISABLED'].includes(message)) return {} as T;
+    throw upstreamError(action, message);
   }
   return payload as T;
 }
@@ -78,6 +92,14 @@ function tokenData(idToken: string, refreshToken: string, expiresIn: string, use
 function noStore(reply: FastifyReply): void { reply.header('Cache-Control', 'no-store'); }
 
 export async function registerAuthRoutes(app: FastifyInstance): Promise<void> {
+  app.post('/api/v1/auth/password-reset', async (request, reply) => {
+    noStore(reply);
+    const parsed = resetInput.safeParse(request.body);
+    if (!parsed.success) throw new ApiError(422, 'INVALID_INPUT', 'Nhập địa chỉ email hợp lệ.');
+    await callFirebase('password-reset', { requestType: 'PASSWORD_RESET', email: parsed.data.email });
+    return { data: { accepted: true } };
+  });
+
   app.post('/api/v1/auth/register', async (request, reply) => {
     noStore(reply);
     const parsed = registerInput.safeParse(request.body);
@@ -103,10 +125,13 @@ export async function registerAuthRoutes(app: FastifyInstance): Promise<void> {
     noStore(reply);
     const parsed = refreshInput.safeParse(request.body);
     if (!parsed.success) throw new ApiError(422, 'INVALID_INPUT', 'Thiếu refresh token.');
-    const result = await callFirebase<RefreshReply>('refresh', new URLSearchParams({ grant_type: 'refresh_token', refresh_token: parsed.data.refreshToken }));
+    const payload = await callFirebase<unknown>('refresh', new URLSearchParams({ grant_type: 'refresh_token', refresh_token: parsed.data.refreshToken }));
+    const refreshed = refreshReply.safeParse(payload);
+    if (!refreshed.success) throw new ApiError(503, 'AUTH_UNAVAILABLE', 'Phản hồi đăng nhập không hợp lệ.');
+    const result = refreshed.data;
     let decoded: Awaited<ReturnType<ReturnType<typeof auth>['verifyIdToken']>>;
     try { decoded = await auth().verifyIdToken(result.id_token, true); }
-    catch { throw new ApiError(401, 'INVALID_REFRESH_TOKEN', 'Phiên đăng nhập đã hết hạn.'); }
+    catch (cause) { throw tokenVerificationError(cause, 'INVALID_REFRESH_TOKEN'); }
     if (decoded.uid !== result.user_id) throw new ApiError(401, 'INVALID_REFRESH_TOKEN', 'Phiên đăng nhập đã hết hạn.');
     if (!decoded.email) throw new ApiError(401, 'INVALID_REFRESH_TOKEN', 'Phiên đăng nhập đã hết hạn.');
     const identity = await auth().getUser(decoded.uid);

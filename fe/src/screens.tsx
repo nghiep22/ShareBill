@@ -99,12 +99,13 @@ export function CreateTrip({ profile, onCreate, remote }: { profile?: Profile; o
   </div>;
 }
 
-export function SignIn({ registering, onSubmit }: { registering: boolean; onSubmit: (profile: Profile, password: string) => void }) {
+export function SignIn({ registering, onSubmit, busy = false }: { registering: boolean; onSubmit: (profile: Profile, password: string) => void; busy?: boolean }) {
   const [error, setError] = useState('');
   const [passwordVisible, setPasswordVisible] = useState(false);
   const passwordId = useId();
   function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (busy) return;
     const fields = new FormData(event.currentTarget);
     const email = String(fields.get('email')).trim();
     const name = registering ? String(fields.get('name')).trim() : email.split('@')[0];
@@ -116,22 +117,47 @@ export function SignIn({ registering, onSubmit }: { registering: boolean; onSubm
       <span className="tile-icon"><WalletCards size={23} aria-hidden /></span>
       <h1>{registering ? 'Tạo tài khoản' : 'Đăng nhập'}</h1>
       <p>Lưu chuyến đi và chia chi phí với các thành viên trong nhóm.</p>
-      <form className="form-stack field-card auth-fields" onSubmit={submit}>
-        {registering && <label>Tên hiển thị<input name="name" autoComplete="name" maxLength={80} required /></label>}
-        <label>Email<input name="email" type="email" autoComplete="email" placeholder="ban@example.com" maxLength={254} required /></label>
+      <form className="form-stack field-card auth-fields" onSubmit={submit} aria-busy={busy}>
+        {registering && <label>Tên hiển thị<input name="name" autoComplete="name" maxLength={80} required disabled={busy} /></label>}
+        <label>Email<input name="email" type="email" autoComplete="email" placeholder="ban@example.com" maxLength={254} required disabled={busy} /></label>
         <div className="password-field">
           <label htmlFor={passwordId}>Mật khẩu</label>
           <div className="password-control">
-            <input id={passwordId} name="password" type={passwordVisible ? 'text' : 'password'} minLength={registering ? 8 : 1} autoComplete={registering ? 'new-password' : 'current-password'} required />
-            <button className="password-toggle" type="button" aria-label={passwordVisible ? 'Ẩn mật khẩu' : 'Hiện mật khẩu'} aria-pressed={passwordVisible} aria-controls={passwordId} onClick={() => setPasswordVisible(visible => !visible)}>
+            <input id={passwordId} name="password" type={passwordVisible ? 'text' : 'password'} minLength={registering ? 8 : 1} maxLength={128} autoComplete={registering ? 'new-password' : 'current-password'} required disabled={busy} />
+            <button className="password-toggle" type="button" disabled={busy} aria-label={passwordVisible ? 'Ẩn mật khẩu' : 'Hiện mật khẩu'} aria-pressed={passwordVisible} aria-controls={passwordId} onClick={() => setPasswordVisible(visible => !visible)}>
               {passwordVisible ? <EyeOff size={20} aria-hidden /> : <Eye size={20} aria-hidden />}
             </button>
           </div>
         </div>
         {error && <p className="error" role="alert">{error}</p>}
-        <button className="primary-button">{registering ? 'Tạo tài khoản' : 'Đăng nhập'} <ArrowRight size={17} aria-hidden /></button>
+        <button className="primary-button" disabled={busy}>{busy ? registering ? 'Đang tạo tài khoản…' : 'Đang đăng nhập…' : registering ? 'Tạo tài khoản' : 'Đăng nhập'} <ArrowRight size={17} aria-hidden /></button>
       </form>
+      {!registering && <a className="text-button" href="#quen-mat-khau">Quên mật khẩu?</a>}
       <a className="text-button" href={registering ? '#dang-nhap' : '#dang-ky'}>{registering ? 'Đã có tài khoản? Đăng nhập' : 'Chưa có tài khoản? Đăng ký'}</a>
+    </div>
+  </div>;
+}
+
+export function PasswordReset({ busy, onSubmit }: { busy: boolean; onSubmit: (email: string, onSent: () => void) => void }) {
+  const [sent, setSent] = useState(false);
+  function submit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (busy) return;
+    const email = String(new FormData(event.currentTarget).get('email')).trim();
+    onSubmit(email, () => setSent(true));
+  }
+  return <div className="form-page auth-page">
+    <div className="card field-card">
+      <span className="tile-icon"><WalletCards size={23} aria-hidden /></span>
+      <h1>Quên mật khẩu</h1>
+      {sent ? <p role="status">Nếu email này đã được đăng ký, hướng dẫn đặt lại mật khẩu sẽ được gửi tới hộp thư của bạn. Hãy kiểm tra cả thư rác.</p> : <>
+        <p>Nhập email dùng cho tài khoản ShareBill để nhận hướng dẫn đặt lại mật khẩu.</p>
+        <form className="form-stack field-card auth-fields" onSubmit={submit} aria-busy={busy}>
+          <label>Email đăng ký<input name="email" type="email" autoComplete="email" placeholder="ban@example.com" maxLength={254} required disabled={busy} /></label>
+          <button className="primary-button" disabled={busy}>{busy ? 'Đang gửi yêu cầu…' : 'Gửi hướng dẫn'} <ArrowRight size={17} aria-hidden /></button>
+        </form>
+      </>}
+      <a className="text-button" href="#dang-nhap">Về đăng nhập</a>
     </div>
   </div>;
 }

@@ -13,6 +13,8 @@ pnpm --dir fe dev
 
 Để dùng ứng dụng tại `http://localhost:3000`, chạy [Firebase Emulator và backend](../be/README.md#chạy-local), sau đó đăng ký hoặc đăng nhập. Các thao tác nghiệp vụ cần API.
 
+Màn hình đăng nhập có **Quên mật khẩu?** để yêu cầu hướng dẫn qua email. Firebase xử lý liên kết đặt lại mật khẩu; giao diện dùng cùng thông báo cho email có hoặc chưa có tài khoản. Khi đang đăng nhập, đăng ký hoặc gửi yêu cầu khôi phục, form hiện trạng thái và khóa gửi lặp. Lỗi dịch vụ tạm thời giữ phiên để có thể thử lại.
+
 Để thử cài PWA và tải lại khi mất mạng, dừng máy chủ dev rồi chạy bản production.
 
 ```sh
@@ -38,7 +40,7 @@ Trên điện thoại, thanh dưới mở Tổng quan, Chi tiêu, Số dư và T
 
 ## Kiểm thử trình duyệt và quản trị
 
-`pnpm --dir fe test:browser` chạy 18 hành trình bằng Playwright với frontend cổng 3000, API 3001 và Emulator 8080/9099, gồm kiểm bố cục từ 320–1280px, màn hình thấp, điều hướng bằng bàn phím và nút Quay lại. Cài Chromium bằng `pnpm --dir fe exec playwright install chromium`. Trên Windows có thể đặt `PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH` tới Chrome. Đặt `SHAREBILL_PWA_TEST=1` khi kiểm bản static production để kiểm cả reload offline và hành trình thứ 19 cho smoke S18; đặt cùng `RELEASE_COMMIT` khi build FE, chạy API và chạy bộ test. [Hướng dẫn smoke và cấu hình cloud](../docs/STAGING_SMOKE.md).
+`pnpm --dir fe test:browser` chạy 20 hành trình bằng Playwright với frontend cổng 3000, API 3001 và Emulator 8080/9099, gồm kiểm bố cục từ 320–1280px, màn hình thấp, điều hướng bằng bàn phím, nút Quay lại, khôi phục mật khẩu và phục hồi phiên sau lỗi dịch vụ. Cài Chromium bằng `pnpm --dir fe exec playwright install chromium`. Trên Windows có thể đặt `PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH` tới Chrome. Đặt `SHAREBILL_PWA_TEST=1` khi kiểm bản static production để kiểm cả reload offline và hành trình thứ 21 cho smoke S18; đặt cùng `RELEASE_COMMIT` khi build FE, chạy API và chạy bộ test. [Hướng dẫn smoke và cấu hình cloud](../docs/STAGING_SMOKE.md).
 
 Sau khi build, `pnpm --dir fe test:pwa` chạy 4 tình huống đổi phiên bản service worker thực tế: tự tải lại đúng một lần, giữ nội dung đang nhập, chờ giao dịch/hộp thoại và chờ tab khác đang soạn. Bộ này dùng máy chủ local riêng và được chạy trong CI.
 

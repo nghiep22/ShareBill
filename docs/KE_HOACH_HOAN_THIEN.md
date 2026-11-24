@@ -2,6 +2,12 @@
 
 Ngày khảo sát 18/11/2026 · Phạm vi mã trong workspace, giao diện và API local, Firebase Emulator, bộ thiết kế `GiaoDien` và đặc tả nghiệp vụ.
 
+## Khôi phục tài khoản và ổn định phiên ngày 24/11/2026
+
+Bổ sung **Quên mật khẩu** từ đăng nhập và API `/api/v1/auth/password-reset`: email được chuẩn hóa, Firebase gửi hướng dẫn tiếng Việt, phản hồi không tiết lộ địa chỉ có tài khoản hay không và không trả mã đặt lại. Form đăng nhập/đăng ký/khôi phục khóa gửi lặp và hiện trạng thái đang xử lý. Lỗi REST hoặc kiểm tra token tạm thời trả 503/429 thay vì xóa phiên; token sai/hết hạn/thu hồi vẫn trả 401 và tài khoản bị khóa trả 403, áp dụng cho cả API người dùng và quản trị. Phản hồi refresh thiếu dữ liệu cũng được coi là lỗi dịch vụ.
+
+Kiểm chứng: 22 kiểm thử Auth theo HTTP (gồm ma trận kiểm tra token user/admin/refresh), 16 ca Emulator liên quan tài khoản/quản trị, 21 hành trình trình duyệt và 4 tình huống cập nhật PWA đạt. Đã thử yêu cầu khôi phục → lấy mã trong Auth Emulator → đổi mật khẩu → từ chối mật khẩu cũ → đăng nhập cùng UID; mã đã dùng không thể dùng lại. Kiểm thử trình duyệt còn giữ phiên khi refresh trả 503 rồi phục hồi khi thử lại. OpenAPI có 70 thao tác. Chỉ dùng thư giả lập trong kiểm thử local; chưa nghiệm thu giao thư vào hộp thư thật.
+
 ## Hoàn thiện giao diện ngày 24/11/2026
 
 Theo yêu cầu cập nhật tự động: bỏ thông báo và bước xác nhận phiên bản PWA. App kiểm bản mới mỗi phút và khi quay lại/có mạng, hỏi trạng thái các tab trước khi kích hoạt, chờ nội dung đang nhập, lệnh ghi và hộp thoại; sau đó tự tải lại đúng một lần. Bốn kiểm thử thay phiên bản service worker thật đã đạt, gồm cả bảo vệ form ở tab khác. Các tab còn ở cơ chế cũ cần xác nhận cập nhật một lần hoặc đóng hết tab rồi mở lại.
