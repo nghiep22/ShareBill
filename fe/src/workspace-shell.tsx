@@ -1,13 +1,14 @@
 'use client';
 
 import {
-  CalendarDays, ChevronDown, ChevronRight, CircleHelp, History, LayoutGrid, Luggage,
+  CalendarDays, ChevronDown, ChevronRight, CircleHelp, Ellipsis, History, LayoutGrid, Luggage,
   ReceiptText, RefreshCw, Scale, Settings2, UserRound, Users, WalletCards, WifiOff,
 } from 'lucide-react';
 import { useEffect, useRef, useState, useSyncExternalStore, type ReactNode } from 'react';
 import { isOwner, memberFor, viewerOf, type Demo } from './model';
 import { Avatar, Dialog } from './ui';
 import { tripHref } from './workspace-route';
+import { watchPwaUpdates } from './pwa-update';
 
 const tabs = [
   { id: 'tong-quan', label: 'Tổng quan', Icon: LayoutGrid },
@@ -44,37 +45,9 @@ export function useOnline() {
 }
 
 export function useServiceWorker() {
-  const [waiting, setWaiting] = useState<ServiceWorkerRegistration>();
   useEffect(() => {
-    let active = true;
-    let registration: ServiceWorkerRegistration | undefined;
-    let installing: ServiceWorker | null | undefined;
-    const check = () => {
-      if (active && registration?.waiting && navigator.serviceWorker.controller) setWaiting(registration);
-    };
-    const found = () => {
-      installing?.removeEventListener('statechange', check);
-      installing = registration?.installing;
-      installing?.addEventListener('statechange', check);
-    };
-    if (process.env.NODE_ENV === 'production' && 'serviceWorker' in navigator) {
-      void navigator.serviceWorker.register('/sw.js').then(value => {
-        if (!active) return;
-        registration = value;
-        registration.addEventListener('updatefound', found);
-        check();
-      }).catch(() => {});
-    }
-    return () => {
-      active = false;
-      registration?.removeEventListener('updatefound', found);
-      installing?.removeEventListener('statechange', check);
-    };
+    if (process.env.NODE_ENV === 'production') return watchPwaUpdates();
   }, []);
-  return waiting ? () => {
-    navigator.serviceWorker.addEventListener('controllerchange', () => window.location.reload(), { once: true });
-    waiting.waiting?.postMessage({ type: 'ACTIVATE_UPDATE' });
-  } : undefined;
 }
 
 function Brand({ target }: { target: string }) {
@@ -83,24 +56,28 @@ function Brand({ target }: { target: string }) {
   </a>;
 }
 
-function Navigation({ desktop, active, data }: { desktop?: boolean; active: string; data: Demo }) {
+function Navigation({ desktop, active, data, onMore, moreOpen }: { desktop?: boolean; active: string; data: Demo; onMore?: () => void; moreOpen?: boolean }) {
   return <nav className={desktop ? 'side-nav' : 'bottom-nav'} aria-label={desktop ? 'Điều hướng chuyến đi' : 'Điều hướng chính'}>
     {(desktop ? [...tabs, ...extra] : tabs).map(({ id, label, Icon }) =>
       <a key={id} href={tripHref(data, id)} aria-current={active === id ? 'page' : undefined}>
         <span className="nav-icon"><Icon size={20} strokeWidth={active === id ? 2.3 : 1.8} aria-hidden /></span><span>{label}</span>
       </a>)}
+    {!desktop && <button type="button" aria-label="Thêm mục điều hướng" aria-haspopup="dialog" aria-expanded={moreOpen}
+      className={extra.some(item => item.id === active) ? 'nav-current' : undefined} onClick={onMore}>
+      <span className="nav-icon"><Ellipsis size={21} aria-hidden /></span><span>Thêm</span>
+    </button>}
   </nav>;
 }
 
-export function WorkspaceShell({ hash, route, data, profileName, publicPage, refresh, children }: {
-  hash: string; route: string; data?: Demo; profileName?: string; publicPage?: boolean; refresh?: () => void; children: ReactNode;
+export function WorkspaceShell({ hash, route, data, profileName, publicPage, refresh, updateBusy, children }: {
+  hash: string; route: string; data?: Demo; profileName?: string; publicPage?: boolean; refresh?: () => void; updateBusy?: boolean; children: ReactNode;
 }) {
   const form = route === 'them-khoan-chi' || route === 'sua-khoan-chi';
-  const active = route === 'khoan-chi' || form ? 'chi-tieu' : route === 'quyet-toan' ? 'so-du' : route;
+  const active = route === 'khoan-chi' || form ? 'chi-tieu' : route === 'quyet-toan' ? 'so-du' : route === 'loi-moi' ? 'thanh-vien' : route;
   const viewer = data && memberFor(data, viewerOf(data));
   const online = useOnline();
-  const activateUpdate = useServiceWorker();
-  const [confirmUpdate, setConfirmUpdate] = useState(false);
+  useServiceWorker();
+  const [moreOpen, setMoreOpen] = useState(false);
   const main = useRef<HTMLElement>(null);
   const lastHash = useRef(hash);
   const home = data ? tripHref(data, 'tong-quan') : publicPage ? '#dang-nhap' : '#chuyen-di';
@@ -108,11 +85,12 @@ export function WorkspaceShell({ hash, route, data, profileName, publicPage, ref
   useEffect(() => {
     if (lastHash.current === hash) return;
     lastHash.current = hash;
+    setMoreOpen(false);
     window.scrollTo(0, 0);
     main.current?.focus({ preventScroll: true });
   }, [hash]);
 
-  return <div className={'workspace' + (form ? ' workspace-form' : '') + (publicPage ? ' workspace-public' : '')}>
+  return <div className={'workspace' + (form ? ' workspace-form' : '') + (publicPage ? ' workspace-public' : '')} data-pwa-busy={updateBusy || undefined}>
     {!publicPage && <aside className="sidebar">
       <Brand target={home} />
       <a className="trip-switcher" href="#chuyen-di" aria-current={route === 'chuyen-di' ? 'page' : undefined}>
@@ -129,7 +107,7 @@ export function WorkspaceShell({ hash, route, data, profileName, publicPage, ref
     <div className="app">
       <header className="app-header">
         <div className={publicPage ? undefined : 'mobile-brand'}><Brand target={home} /></div>
-        {!publicPage && <div className="app-breadcrumb"><a href="#chuyen-di">Chuyến đi</a>{data && <><ChevronRight size={15} aria-hidden /><strong>{data.trip.name}</strong></>}</div>}
+        {!publicPage && <div className="app-breadcrumb"><a href="#chuyen-di">Chuyến đi</a>{data && <><ChevronRight size={15} aria-hidden /><strong title={data.trip.name}>{data.trip.name}</strong></>}</div>}
         <div className="header-actions">
           {publicPage ? <a className="secondary-button compact" href={route === 'dang-ky' ? '#dang-nhap' : '#dang-ky'}>{route === 'dang-ky' ? 'Đăng nhập' : 'Đăng ký'}</a> : <>
             <a className="icon-button mobile-trips" href="#chuyen-di" aria-label="Danh sách chuyến đi"><Luggage size={21} aria-hidden /></a>
@@ -141,16 +119,19 @@ export function WorkspaceShell({ hash, route, data, profileName, publicPage, ref
       </header>
       <main className={'main' + (active === 'tong-quan' && data ? ' main-overview' : '')} tabIndex={-1} ref={main}>
         {!online && <p className="inline-note workspace-notice" role="status"><WifiOff size={17} aria-hidden /> Ngoại tuyến · Cần kết nối mạng để đồng bộ</p>}
-        {activateUpdate && <p className="inline-note workspace-notice" role="status">Có phiên bản ShareBill mới.
-          <button className="text-button" onClick={() => setConfirmUpdate(true)}>Cập nhật</button></p>}
         {children}
       </main>
     </div>
-    {!publicPage && !form && data && <Navigation active={active} data={data} />}
-    {confirmUpdate && <Dialog title="Cập nhật ShareBill?" onClose={() => setConfirmUpdate(false)}>
-      <p>Trang sẽ tải lại. Hãy lưu nội dung đang nhập trước khi cập nhật. Bản nháp đã lưu trên thiết bị tin cậy có thể mở lại.</p>
-      <div className="button-pair"><button className="secondary-button" onClick={() => setConfirmUpdate(false)}>Để sau</button>
-        <button className="primary-button" onClick={activateUpdate}>Tải phiên bản mới</button></div>
+    {!publicPage && !form && data && <Navigation active={active} data={data} onMore={() => setMoreOpen(true)} moreOpen={moreOpen} />}
+    {moreOpen && data && <Dialog title="Mục khác trong chuyến đi" onClose={() => setMoreOpen(false)}>
+      <nav className="more-nav" aria-label="Các mục khác">
+        {extra.map(({ id, label, Icon }) =>
+          <a key={id} href={tripHref(data, id)} aria-current={active === id ? 'page' : undefined} onClick={() => setMoreOpen(false)}>
+            <Icon size={20} aria-hidden /><span>{label}</span><ChevronRight size={17} aria-hidden />
+          </a>)}
+        <a href="#tai-khoan" onClick={() => setMoreOpen(false)}><UserRound size={20} aria-hidden /><span>Tài khoản</span><ChevronRight size={17} aria-hidden /></a>
+        <a href="#tro-giup" onClick={() => setMoreOpen(false)}><CircleHelp size={20} aria-hidden /><span>Trợ giúp</span><ChevronRight size={17} aria-hidden /></a>
+      </nav>
     </Dialog>}
   </div>;
 }

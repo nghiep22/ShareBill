@@ -2,6 +2,14 @@
 
 Ngày khảo sát 18/11/2026 · Phạm vi mã trong workspace, giao diện và API local, Firebase Emulator, bộ thiết kế `GiaoDien` và đặc tả nghiệp vụ.
 
+## Hoàn thiện giao diện ngày 24/11/2026
+
+Theo yêu cầu cập nhật tự động: bỏ thông báo và bước xác nhận phiên bản PWA. App kiểm bản mới mỗi phút và khi quay lại/có mạng, hỏi trạng thái các tab trước khi kích hoạt, chờ nội dung đang nhập, lệnh ghi và hộp thoại; sau đó tự tải lại đúng một lần. Bốn kiểm thử thay phiên bản service worker thật đã đạt, gồm cả bảo vệ form ở tab khác. Các tab còn ở cơ chế cũ cần xác nhận cập nhật một lần hoặc đóng hết tab rồi mở lại.
+
+Hoàn thiện bố cục responsive và điều hướng trên điện thoại: menu **Thêm** mở các mục phụ, tự đóng khi chuyển trang hoặc dùng nút Quay lại; màn hình lời mời giữ mục Thành viên đang chọn. Tiêu đề và thao tác chính bám đầu màn hình khi cuộn, nút lưu khoản chi bám cuối vùng nhìn. Danh sách thành viên và phần chia tiền đứng trước các mục tùy chọn; lịch trình dài ngày dùng thanh ngày cuộn ngang. Tên chuyến dài được thu gọn ở thanh đầu trang desktop, vẫn xem đầy đủ trong tổng quan. Trạng thái đồng bộ thường nằm cuối nội dung; cảnh báo ngoại tuyến vẫn ở đầu trang.
+
+Kiểm chứng local: TypeScript và build FE/BE đạt; 157 kiểm thử unit/HTTP backend, 10 kiểm thử công cụ smoke và 19 hành trình Chromium trên bản static production đều đạt. Bộ giao diện kiểm các độ rộng 320, 390, 768, 960, 1280px, chiều cao 568px, tên chuyến 100 ký tự, menu bằng bàn phím và nút Quay lại. Đã kiểm trực quan desktop và điện thoại. Các hành trình tiền, QR/ảnh chuyển khoản, quản trị, PWA và ngoại tuyến dùng API/Firebase Emulator. Đợt này chưa triển khai cloud; nghiệm thu thiết bị thật và các cổng vận hành bên dưới vẫn còn mở.
+
 ## Tiến độ triển khai ngày 18/11/2026
 
 Ngày 20/11, đợt phục hồi: thêm [diễn tập O11/O12 local](RESTORE_REHEARSAL.md) và job CI `recovery`. Đã export/import thực tế 53 document, 5 tài khoản (email/mật khẩu, Google và disabled), 1 ảnh có generation/bytes đúng; 18 cổng về tiền/quyền/replay/repair đạt và checker 0 lỗi. Lượt local mất 37,608 giây, phần target/import/verify 18,604 giây. Đây chưa là RPO/RTO cloud; backup định kỳ, IAM/retention và phục hồi staging tiếp tục mở. Bản export riêng được loại khỏi Git/Vercel; artifact CI chỉ gồm báo cáo tổng hợp.

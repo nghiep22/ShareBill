@@ -119,7 +119,7 @@ export function ConnectedWorkspace() {
       });
     }} />;
   }
-  return <WorkspaceShell publicPage hash={hash} route={route}>
+  return <WorkspaceShell publicPage hash={hash} route={route} updateBusy={auth.busy}>
     {sessionProblem && <p className="inline-note error" role="alert">{sessionProblem}</p>}
     {auth.busy && <p className="inline-note" role="status">Đang xử lý…</p>}
     {auth.error && <p className="inline-note error" role="alert">{auth.error}</p>}
@@ -396,7 +396,7 @@ function AuthenticatedWorkspace({ session, api, hash, onSignOut }: { session: Se
   const pendingHelp = data && mutation.code === 'PENDING_SETTLEMENTS_FOR_PARTICIPANT'
     ? { label: 'Mở các khoản đang chờ xác nhận', href: tripHref(data, 'quyet-toan') } : undefined;
   return <WorkspaceShell hash={hash} route={route} data={data} profileName={session.user.displayName}
-    refresh={canRefresh && !mutation.busy ? refresh : undefined}>
+    refresh={canRefresh && !mutation.busy ? refresh : undefined} updateBusy={mutation.busy}>
     {mutation.busy && <div className="inline-note workspace-notice" role="status">Đang lưu trên máy chủ…</div>}
     {!mutation.busy && updating && <div className="inline-note workspace-notice" role="status">Đang cập nhật dữ liệu…</div>}
     {(mutation.error || readError || staleSuggestions) && <div className="inline-note error workspace-notice" role="alert">
@@ -406,14 +406,17 @@ function AuthenticatedWorkspace({ session, api, hash, onSignOut }: { session: Se
     {notice && <p className="inline-note workspace-notice" role="status">{notice}</p>}
     {data && !financialSnapshot(data).complete && <p className="inline-note error" role="alert"><span>Chưa đủ dữ liệu số dư để kết luận số tiền cần trả hoặc chốt chuyến. Tải lại dữ liệu để kiểm tra.</span><button className="text-button" disabled={mutation.busy} onClick={refresh}>Tải lại</button></p>}
     {storageError && <p className="inline-note error" role="status">Thiết bị gặp lỗi khi lưu hoặc xóa dữ liệu ngoại tuyến.</p>}
-    {data && (offlineCache || overview.loadedAt) && <p className="inline-note" role="status">
-      {networkUnavailable ? 'Dữ liệu đã tải trước đó' : 'Đồng bộ'} lúc {new Date(offlineCache?.at ?? overview.loadedAt!).toLocaleString('vi-VN')}.
-      {networkUnavailable && ' Bạn có thể soạn nháp khoản chi trên thiết bị tin cậy.'}
+    {data && networkUnavailable && (offlineCache || overview.loadedAt) && <p className="inline-note" role="status">
+      Dữ liệu đã tải trước đó lúc {new Date(offlineCache?.at ?? overview.loadedAt!).toLocaleString('vi-VN')}.
+      {' Bạn có thể soạn nháp khoản chi trên thiết bị tin cậy.'}
     </p>}
     {data?.remote?.suspended && <p className="inline-note" role="status">Chuyến đang tạm khóa. Bạn vẫn có thể xem lịch sử.</p>}
     <PendingOperations api={api} busy={mutation.busy} />
     <MutationFeedback.Provider value={{ busy: mutation.busy || updating, offline: networkUnavailable, error: mutation.error, recovery: pendingHelp }}>
       {content}
     </MutationFeedback.Provider>
+    {data && !networkUnavailable && overview.loadedAt && <p className="sync-caption">
+      Đồng bộ lúc {new Date(overview.loadedAt).toLocaleString('vi-VN')}
+    </p>}
   </WorkspaceShell>;
 }

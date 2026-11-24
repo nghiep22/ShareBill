@@ -22,7 +22,7 @@ pnpm --dir fe start
 
 Mở ứng dụng khi có mạng để service worker lưu giao diện. Trong Tài khoản, chọn **Tin cậy thiết bị này** để lưu snapshot và nháp thêm khoản chi mới trong IndexedDB. Dữ liệu tách theo API, UID và chuyến, hết hạn đọc sau 24 giờ. Khi ngoại tuyến, có thể mở tổng quan, số dư và soạn khoản chi mới từ snapshot. App kiểm lại dữ liệu khi có mạng và chờ người dùng bấm lưu. Nháp sửa khoản chi và ảnh upload chưa lưu ngoại tuyến. Tắt lựa chọn hoặc đăng xuất để xóa dữ liệu riêng trên thiết bị.
 
-Khi có phiên bản mới, app hỏi trước khi tải lại. Khi thử trên điện thoại, phục vụ thư mục `fe/out` qua HTTPS. Khi quay lại dev, worker tại `public/sw.js` gỡ worker production cũ sau khi trình duyệt cập nhật worker.
+App tự kiểm phiên bản mới mỗi phút khi đang mở và kiểm lại khi có mạng hoặc quay về ứng dụng. Bản mới tự áp dụng và tải lại khi các tab ShareBill không có nội dung đang nhập, giao dịch đang lưu hoặc hộp thoại đang mở; không hiện thông báo yêu cầu cập nhật. Sau khi lưu hoặc rời form, app tự tiếp tục cập nhật. Tab còn chạy phiên bản cũ cần bấm **Cập nhật** một lần hoặc đóng hết tab ShareBill rồi mở lại để nhận cơ chế này. Khi thử trên điện thoại, phục vụ thư mục `fe/out` qua HTTPS. Khi quay lại dev, worker tại `public/sw.js` gỡ worker production cũ sau khi trình duyệt cập nhật worker.
 
 ## Tích hợp backend
 
@@ -34,9 +34,13 @@ Trong **Lịch trình**, chủ chuyến thêm, sửa, xóa hoạt động và du
 
 Link màn hình chuyến có dạng `/#chuyen/{tripId}/khoan-chi/{expenseId}?category=food`. Bộ lọc đi cùng link khi mở chi tiết và quay lại. App kiểm revision qua API mỗi 30 giây khi tab đang hiện, cùng lúc chuyển màn hình, trở lại foreground hoặc có mạng. Sau lỗi mạng, mục **thao tác chưa rõ kết quả** cho tra operation. Gửi lại đúng nội dung/version dùng lại key đã lưu trong tab.
 
+Trên điện thoại, thanh dưới mở Tổng quan, Chi tiêu, Số dư và Thành viên. Mục **Thêm** mở Lịch trình, Hoạt động, Cài đặt chuyến đi, Tài khoản và Trợ giúp. Tiêu đề cùng thao tác chính luôn ở đầu màn hình khi cuộn; nút lưu khoản chi nằm ở cuối vùng nhìn. Danh sách ngày lịch trình cuộn ngang cho chuyến dài ngày.
+
 ## Kiểm thử trình duyệt và quản trị
 
-`pnpm --dir fe test:browser` chạy 14 hành trình bằng Playwright với frontend cổng 3000, API 3001 và Emulator 8080/9099. Cài Chromium bằng `pnpm --dir fe exec playwright install chromium`. Trên Windows có thể đặt `PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH` tới Chrome. Đặt `SHAREBILL_PWA_TEST=1` khi kiểm bản static production để kiểm cả reload offline và hành trình thứ 15 cho smoke S18; đặt cùng `RELEASE_COMMIT` khi build FE, chạy API và chạy bộ test. [Hướng dẫn smoke và cấu hình cloud](../docs/STAGING_SMOKE.md).
+`pnpm --dir fe test:browser` chạy 18 hành trình bằng Playwright với frontend cổng 3000, API 3001 và Emulator 8080/9099, gồm kiểm bố cục từ 320–1280px, màn hình thấp, điều hướng bằng bàn phím và nút Quay lại. Cài Chromium bằng `pnpm --dir fe exec playwright install chromium`. Trên Windows có thể đặt `PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH` tới Chrome. Đặt `SHAREBILL_PWA_TEST=1` khi kiểm bản static production để kiểm cả reload offline và hành trình thứ 19 cho smoke S18; đặt cùng `RELEASE_COMMIT` khi build FE, chạy API và chạy bộ test. [Hướng dẫn smoke và cấu hình cloud](../docs/STAGING_SMOKE.md).
+
+Sau khi build, `pnpm --dir fe test:pwa` chạy 4 tình huống đổi phiên bản service worker thực tế: tự tải lại đúng một lần, giữ nội dung đang nhập, chờ giao dịch/hộp thoại và chờ tab khác đang soạn. Bộ này dùng máy chủ local riêng và được chạy trong CI.
 
 Trang `/admin` dùng Google sign-in và quyền server trong `platformAdmins/{uid}`. Sao chép các trường Firebase public trong [.env.example](.env.example) và đặt giá trị của môi trường khi build. Với project demo trên localhost, Google popup dùng Auth Emulator. Môi trường cloud cần Google provider và authorized domains đã cấu hình. Phiên quản trị nằm trong bộ nhớ, đăng nhập lại sau reload. API kiểm quyền ở mỗi request và yêu cầu xác thực trong 10 phút cho lệnh ghi.
 

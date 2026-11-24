@@ -54,19 +54,20 @@ export function Overview({ data, loadingExpenses, loadingTransfers }: { data: De
   const transfers = suggestions(data);
   const pending = data.remote?.pendingCount ?? data.settlements.filter(item => settlementStatus(item) === 'pending').length;
   return <>
-    <PageTitle title="Tổng quan" description="Chi tiêu và kế hoạch chuyến đi">
+    <PageTitle title="Tổng quan">
       {canWrite(data) && <a className="primary-button compact overview-add" href={tripHref(data, 'them-khoan-chi')} aria-label="Thêm khoản chi"><Plus size={20} aria-hidden /> <span>Thêm khoản chi</span></a>}
     </PageTitle>
     <section className="trip-card overview-cover" aria-label="Thông tin chuyến đi">
       <div className={'trip-cover' + (trip.cover ? '' : ' cover-plain')}>
         <div className="trip-cover-top">
-          <span className="trip-status"><span />{data.remote?.suspended ? 'Tạm khóa' : trip.closed ? 'Đã chốt chuyến' : 'Đang mở'}</span>
           <a className="icon-button cover-settings" href={tripHref(data, 'cai-dat')} aria-label="Cài đặt chuyến đi"><Settings2 size={20} aria-hidden /></a>
         </div>
         <div className="trip-cover-text">
           {trip.place && <p><MapPin size={15} aria-hidden /> {trip.place}</p>}
           <h2>{trip.name}</h2>
-          <div className="trip-dates"><CalendarDays size={16} aria-hidden /> {dateRange(trip)}</div>
+          <div className="trip-dates"><CalendarDays size={16} aria-hidden /> {dateRange(trip)}
+            <span className="trip-status">{data.remote?.suspended ? 'Tạm khóa' : trip.closed ? 'Đã chốt chuyến' : 'Đang mở'}</span>
+          </div>
         </div>
       </div>
       <div className="trip-members">
@@ -258,10 +259,6 @@ export function Balances({ data, update, loading, disabled, receiptActions }: { 
       </>}
       {pending > 0 && <a className="text-button" href={tripHref(data, 'quyet-toan')}>{pending} khoản đang chờ xác nhận <ChevronRight size={15} aria-hidden /></a>}
     </div>
-    {groupEqual && complete && <section className="card field-card" aria-label="Cách chia đều của nhóm">
-      <h2>Tổng chi chia đều cho {group.length} thành viên</h2>
-      <p><Amount value={data.remote!.total} /> ÷ {group.length} người. Mỗi người chịu <strong><Amount value={Number(BigInt(data.remote!.total) / BigInt(group.length))} />{data.remote!.total % group.length > 0 && <> – <Amount value={Number(BigInt(data.remote!.total) / BigInt(group.length)) + 1} /></>}</strong>.</p>
-    </section>}
     <section aria-label="Số tiền cần chuyển">
       <div className="section-heading"><h2>Số tiền cần chuyển</h2>
         {complete && canWrite(data) && debtors.length > 0 && creditors.length > 0 &&
@@ -291,6 +288,10 @@ export function Balances({ data, update, loading, disabled, receiptActions }: { 
           : <button className="soft-button transfer-button" disabled={disabled} onClick={() => open(suggestion)}><ArrowDownUp size={16} aria-hidden /> {data.remote ? suggestion.from === me ? 'Chuyển khoản' : 'Ghi nhận thay' : 'Ghi nhận đã chuyển'}</button>)}
       </div>)}</div>
     </section>
+    {groupEqual && complete && <section className="card field-card" aria-label="Cách chia đều của nhóm">
+      <h2>Tổng chi chia đều cho {group.length} thành viên</h2>
+      <p><Amount value={data.remote!.total} /> ÷ {group.length} người. Mỗi người chịu <strong><Amount value={Number(BigInt(data.remote!.total) / BigInt(group.length))} />{data.remote!.total % group.length > 0 && <> – <Amount value={Number(BigInt(data.remote!.total) / BigInt(group.length)) + 1} /></>}</strong>.</p>
+    </section>}
     <section>
       <div className="section-heading"><h2>Số tiền của từng thành viên</h2><span className="tag">{visibleMembers.length} người</span></div>
       <div className="card rows">{visibleMembers.map(member => {

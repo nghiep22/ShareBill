@@ -6,6 +6,7 @@
 **/dist
 **/.vercel
 **/.maintenance
+**/.sites-preview
 **/.env
 **/.env.*
 **/*service-account*.json

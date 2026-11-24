@@ -54,7 +54,7 @@ Triển khai hiện tại dùng REST signal kiểm quyền mỗi 30 giây khi ta
 
 - **Kết quả** Cài app lên màn hình chính và mở offline page.
 - **Phạm vi file/module** Manifest/icons/service worker/offline page FE.
-- **Việc làm** HTTPS/manifest/icons, shell cache allowlist; bỏ qua API/admin/Auth/ảnh signed; update prompt khi có draft.
+- **Việc làm** HTTPS/manifest/icons, shell cache allowlist; bỏ qua API/admin/Auth/ảnh signed; từ 24/11/2026 tự cập nhật khi các tab không có bản nhập, lệnh ghi hoặc hộp thoại đang mở. Có 4 kiểm thử thay service worker thật; phiên bản cũ vẫn nhận lệnh xác nhận cập nhật để chuyển tiếp.
 - **Kiểm thử** Install trên thiết bị thật; service worker update khi đang nhập form; không cache private response.
 - **Hoàn tất khi** App cài được; update không làm mất draft hoặc phục vụ dữ liệu user khác.
 

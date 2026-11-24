@@ -58,11 +58,6 @@ export function Members({ data, update, accounts, view, receiptActions, disabled
     <PageTitle title="Thành viên & phân quyền" description={data.trip.name}>
       {canEdit && <a className="primary-button compact" href={tripHref(data, 'loi-moi')}><UserPlus size={18} aria-hidden /> Mời bạn</a>}
     </PageTitle>
-    <PaymentQrCard data={data} update={update} actions={receiptActions} disabled={disabled} />
-    <section className="card field-card">
-      <h2><ShieldCheck size={20} aria-hidden /> Quyền trong chuyến</h2>
-      <p><strong>{data.remote && !data.ownerId ? 'Chủ chuyến' : nameOf(data, ownerOf(data))}</strong> quản lý thành viên, lời mời và chốt chuyến. Thành viên có tài khoản có thể ghi khoản chi.</p>
-    </section>
     <div className="section-heading"><h2><Users size={20} aria-hidden /> Danh sách thành viên</h2>
       {canEdit && !groupEqual && <button className="secondary-button" onClick={() => edit('new')}><UserPlus size={17} aria-hidden /> Thêm người</button>}</div>
     {!groupEqual && <div className="segmented compact-segments" aria-label="Loại thành viên">
@@ -87,6 +82,11 @@ export function Members({ data, update, accounts, view, receiptActions, disabled
         </div>;
       })}
     </div>}
+    <PaymentQrCard data={data} update={update} actions={receiptActions} disabled={disabled} />
+    <section className="card field-card">
+      <h2><ShieldCheck size={20} aria-hidden /> Quyền trong chuyến</h2>
+      <p><strong>{data.remote && !data.ownerId ? 'Chủ chuyến' : nameOf(data, ownerOf(data))}</strong> quản lý thành viên, lời mời và chốt chuyến. Thành viên có tài khoản có thể ghi khoản chi.</p>
+    </section>
     {editing && !confirm && <Dialog title={selected ? 'Quản lý ' + nameOf(data, selected.id) : 'Thêm người chia tiền'} onClose={() => setEditing(null)}>
       {canEdit && <form className="field-card dialog-fields" onSubmit={save}>
         <label>Tên hiển thị<input name="name" defaultValue={selected?.name} maxLength={80} required /></label>

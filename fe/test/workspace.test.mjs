@@ -67,6 +67,101 @@ function heading(page, name) {
   return page.getByRole('heading', { name, exact: true }).first().waitFor({ timeout: 10000 });
 }
 
+test('responsive screens keep primary actions and navigation reachable while scrolling', async t => {
+  const { page, trip, session, screen, create } = await fixture(t);
+  await call('trips/' + trip.id, session, { method: 'PATCH', version: 1, body: { startDate: '2026-11-18', endDate: '2026-12-02' } });
+  for (let index = 0; index < 12; index++) await create('Khoản chi ' + index, 'food');
+  for (const width of [320, 390, 768, 1280]) {
+    await page.setViewportSize({ width, height: 844 });
+    await page.goto(screen('chi-tieu'));
+    await heading(page, 'Chi tiêu');
+    await page.getByText('Khoản chi 11', { exact: true }).waitFor();
+    assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth), false, 'Expense overflow at ' + width);
+    await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight));
+    const title = await page.locator('.page-title').boundingBox();
+    const header = await page.locator('.app-header').boundingBox();
+    assert.ok(Math.abs(title.y - header.y - header.height) < 2, 'Sticky title at ' + width);
+    const add = page.getByRole('link', { name: 'Thêm khoản chi', exact: true });
+    assert.ok((await add.boundingBox()).y >= header.height, 'Add action remains visible at ' + width);
+    await add.click();
+    await heading(page, 'Thêm khoản chi');
+    assert.equal(await page.evaluate(() => window.scrollY), 0);
+    const payer = await page.getByRole('group', { name: 'Ai đã trả tiền?' }).boundingBox();
+    const invoices = await page.getByRole('region', { name: 'Ảnh hóa đơn của khoản chi', exact: true }).boundingBox();
+    assert.ok(payer.y < invoices.y, 'Payer comes before optional invoices');
+    const save = await page.getByRole('button', { name: /Lưu khoản chi/ }).boundingBox();
+    assert.ok(save.y > 0 && save.y + save.height <= 844, 'Save stays in viewport at ' + width);
+    assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth), false, 'Form overflow at ' + width);
+  }
+  await page.setViewportSize({ width: 390, height: 844 });
+  for (const [route, title] of [['tong-quan', 'Tổng quan'], ['so-du', 'Số dư & quyết toán'], ['thanh-vien', 'Thành viên & phân quyền'], ['quyet-toan', 'Lịch sử chuyển tiền']]) {
+    await page.goto(screen(route));
+    await heading(page, title);
+    assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth), false, 'Screen overflow: ' + route);
+  }
+  await page.goto(screen('thanh-vien'));
+  await heading(page, 'Thành viên & phân quyền');
+  const members = await page.getByRole('heading', { name: 'Danh sách thành viên' }).boundingBox();
+  const qr = await page.getByRole('region', { name: 'QR nhận tiền của bạn', exact: true }).boundingBox();
+  assert.ok(members.y < qr.y, 'Member list comes before QR settings');
+  await page.goto(screen('chi-tieu'));
+  await heading(page, 'Chi tiêu');
+  await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight));
+  const more = page.getByRole('button', { name: 'Thêm mục điều hướng', exact: true });
+  await more.click();
+  const menu = page.getByRole('dialog', { name: 'Mục khác trong chuyến đi', exact: true });
+  await menu.getByRole('link', { name: 'Lịch trình', exact: true }).click();
+  await heading(page, 'Lịch trình chuyến đi');
+  assert.equal(await menu.count(), 0);
+  assert.equal(await page.evaluate(() => window.scrollY), 0);
+  const dayStrip = page.locator('.itinerary-days');
+  await dayStrip.getByRole('button').first().waitFor();
+  assert.ok((await dayStrip.boundingBox()).height < 80, 'Long trips keep dates in one row');
+  assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth), false);
+  await dayStrip.getByRole('button').last().click();
+  assert.equal(await dayStrip.getByRole('button').last().getAttribute('aria-pressed'), 'true');
+  await more.click();
+  await menu.getByRole('link', { name: 'Cài đặt chuyến đi', exact: true }).click();
+  await heading(page, 'Cài đặt chuyến đi');
+  assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth), false);
+  await more.click();
+  await page.goBack();
+  await heading(page, 'Lịch trình chuyến đi');
+  await menu.waitFor({ state: 'detached' });
+  assert.equal(await more.getAttribute('aria-expanded'), 'false', 'Back closes the navigation dialog');
+  await more.focus();
+  await page.keyboard.press('Enter');
+  await menu.waitFor();
+  await page.keyboard.press('Escape');
+  await menu.waitFor({ state: 'detached' });
+  await more.focus();
+  await page.keyboard.press('Enter');
+  await menu.getByRole('link', { name: 'Tài khoản', exact: true }).click();
+  await heading(page, 'Tài khoản');
+  await menu.waitFor({ state: 'detached' });
+  await page.goto(screen('loi-moi'));
+  await heading(page, 'Mời bạn vào chuyến đi');
+  assert.equal(await page.getByRole('navigation', { name: 'Điều hướng chính', exact: true }).getByRole('link', { name: 'Thành viên', exact: true }).getAttribute('aria-current'), 'page');
+
+  const { trip: currentTrip } = await call('trips/' + trip.id + '/overview', session);
+  const longName = 'Chuyến đi cùng gia đình và bạn bè '.repeat(3).slice(0, 100);
+  await call('trips/' + trip.id, session, { method: 'PATCH', version: currentTrip.version, body: { name: longName } });
+  for (const width of [320, 960, 1280]) {
+    await page.setViewportSize({ width, height: 568 });
+    await page.goto(screen('chi-tieu'));
+    await page.getByText('Khoản chi 11', { exact: true }).waitFor();
+    await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight));
+    const title = await page.locator('.page-title').boundingBox();
+    const header = await page.locator('.app-header').boundingBox();
+    assert.ok(Math.abs(title.y - header.y - header.height) < 2, 'Long trip names keep sticky actions clear at ' + width);
+    assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth), false);
+    await page.getByRole('link', { name: 'Thêm khoản chi', exact: true }).click();
+    await heading(page, 'Thêm khoản chi');
+    const save = await page.getByRole('button', { name: /Lưu khoản chi/ }).boundingBox();
+    assert.ok(save.y > 0 && save.y + save.height <= 568, 'Save remains reachable on short screens at ' + width);
+  }
+});
+
 // Stub only image transport; QR attachment, settlement creation, permissions and balances use the real API/Firestore emulator.
 async function paymentImageTransport(context, root, actor, qrPayload) {
   assert.ok(['localhost', '127.0.0.1'].includes(new URL(apiOrigin).hostname));

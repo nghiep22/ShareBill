@@ -18,3 +18,4 @@ trap cleanup EXIT
 curl --fail --silent --show-error --retry 20 --retry-connrefused --retry-delay 1 http://localhost:3001/health > /dev/null
 curl --fail --silent --show-error --retry 20 --retry-connrefused --retry-delay 1 http://localhost:3000/ > /dev/null
 pnpm --dir fe test:browser
+pnpm --dir fe test:pwa
