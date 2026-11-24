@@ -213,8 +213,17 @@ test('itinerary day links survive reload and support undated trips, long ranges 
   await page.getByRole('heading', { name: 'Hoạt động trước', exact: true }).waitFor();
   const picker = page.getByLabel('Ngày xem lịch trình', { exact: true });
   assert.equal(await picker.inputValue(), '2026-12-01', 'Undated trips start with the earliest activity');
+  const earlier = await call(path, session, { method: 'POST', version: 3, body: activity('Ngày thêm từ máy khác', '2026-11-30') });
+  await page.evaluate(() => window.dispatchEvent(new Event('online')));
+  const earlierDay = page.locator('.itinerary-days').getByRole('button', { name: '30/11/2026', exact: true });
+  await earlierDay.waitFor();
+  assert.equal(await picker.inputValue(), '2026-12-01', 'A remote activity does not move the day being viewed');
+  await call(path, session, { method: 'POST', version: 4, body: { action: 'remove-activity', id: earlier.id } });
+  await page.evaluate(() => window.dispatchEvent(new Event('online')));
+  await earlierDay.waitFor({ state: 'detached' });
   await picker.fill('2026-12-06');
   await page.waitForURL('**day=2026-12-06');
+  assert.equal(await picker.evaluate(input => document.activeElement === input), true, 'Changing only the day keeps keyboard focus in the date input');
   await page.reload();
   await heading(page, 'Lịch trình chuyến đi');
   await picker.waitFor();

@@ -18,8 +18,8 @@ export function Itinerary({ data, update, loading, disabled, saving, readError, 
   selectedDay?: string; onDayChange?: (day: string) => void;
 }) {
   const first = data.trip.start || data.plans.map(plan => plan.day).sort()[0] || today(data.trip.timezone);
-  const [localDay, setLocalDay] = useState<string>();
-  const day = selectedDay ?? localDay ?? first;
+  const [localDay, setLocalDay] = useState(first);
+  const day = selectedDay ?? localDay;
   const selectDay = onDayChange ?? setLocalDay;
   const [editing, setEditing] = useState<(Partial<Plan> & { ideaId?: string; version?: number }) | null>(null);
   const [remove, setRemove] = useState<(Plan & { version?: number }) | null>(null);

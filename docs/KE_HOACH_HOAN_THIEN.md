@@ -4,7 +4,7 @@ Ngày khảo sát 18/11/2026 · Phạm vi mã trong workspace, giao diện và A
 
 ## Lịch trình khi đổi ngày và nhiều máy cùng sửa ngày 24/11/2026
 
-Ngày đang xem được lưu trong query `day` của link lịch trình; giữ khi tải lại và bỏ qua ngày không hợp lệ. Chuyến chưa định ngày mở hoạt động sớm nhất, có bộ chọn ngày luôn hiển thị để mở ngày chưa có hoạt động hoặc ngày ngoài hàng nút cuộn. Chọn ngày xem không đánh dấu là bản nhập cần giữ khi cập nhật PWA.
+Ngày đang xem được lưu trong query `day` của link lịch trình; giữ khi tải lại và bỏ qua ngày không hợp lệ. Chuyến chưa định ngày mở hoạt động sớm nhất, có bộ chọn ngày luôn hiển thị để mở ngày chưa có hoạt động hoặc ngày ngoài hàng nút cuộn. Đổi query giữ focus/vị trí cuộn; hoạt động mới từ máy khác không tự đổi ngày mặc định đang xem. Chọn ngày xem không đánh dấu là bản nhập cần giữ khi cập nhật PWA.
 
 Khi tải lại chậm/lỗi, giữ lịch đã tải để xem và khóa các lệnh ghi tới khi có dữ liệu hợp lệ. Hộp thoại sửa/xóa hiển thị lỗi đọc ngay bên trong, giữ bản nhập. Xóa hoạt động kiểm version lúc mở; nếu lịch trình đã đổi, cần xem lại hoạt động mới nhất trước khi xác nhận, hoặc báo hoạt động đã bị gỡ. Không thay đổi API hay công thức tiền.
 

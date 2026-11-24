@@ -84,8 +84,10 @@ export function WorkspaceShell({ hash, route, data, profileName, publicPage, ref
 
   useEffect(() => {
     if (lastHash.current === hash) return;
+    const screenChanged = lastHash.current.split('?')[0] !== hash.split('?')[0];
     lastHash.current = hash;
     setMoreOpen(false);
+    if (!screenChanged) return;
     window.scrollTo(0, 0);
     main.current?.focus({ preventScroll: true });
   }, [hash]);
