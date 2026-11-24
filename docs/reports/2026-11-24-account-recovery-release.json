@@ -1,0 +1,51 @@
+{
+  "checkedAt": "2026-11-24T08:51:48.470Z",
+  "commit": "f936eaaceed74501033e477015aa747c8ef5f4e3",
+  "webUrl": "https://sharebill-nghiep22.vercel.app",
+  "apiUrl": "https://sharebill-api-staging.vercel.app",
+  "checks": {
+    "releaseAndReadOnlySmoke": true,
+    "resetValidationWithoutSendingEmail": true,
+    "invalidCredentialsRemainUnauthorized": true,
+    "invalidRefreshRemainsUnauthorized": true,
+    "mobileRecoveryPageAndValidation": true,
+    "offlineShellAndRecoveryRoute": true,
+    "noBrowserErrors": true
+  },
+  "localTests": {
+    "focusedAuthHttp": 22,
+    "authAndAdminEmulator": 16,
+    "browser": 21,
+    "pwaUpdates": 4
+  },
+  "scope": "Auth recovery and service failure handling. Cloud checks send no reset email; actual email action and password changes are exercised only in the local Auth Emulator.",
+  "remaining": [
+    "Delivery into a real email inbox and email action on a physical device"
+  ],
+  "smokeChecks": [
+    {
+      "name": "api-release",
+      "passed": true
+    },
+    {
+      "name": "web-release",
+      "passed": true
+    },
+    {
+      "name": "web-admin-shell",
+      "passed": true
+    },
+    {
+      "name": "cors-versioned-commands",
+      "passed": true
+    },
+    {
+      "name": "unauthenticated-guards",
+      "passed": true
+    }
+  ],
+  "deployments": {
+    "web": "dpl_Bvayg1oVmmBEiupJ298PnSPy5DwH",
+    "api": "dpl_7QVYDAS2DEksV6asXEcsuWgDEMbn"
+  }
+}

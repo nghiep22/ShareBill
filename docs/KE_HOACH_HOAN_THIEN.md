@@ -8,6 +8,8 @@ Bổ sung **Quên mật khẩu** từ đăng nhập và API `/api/v1/auth/passwo
 
 Kiểm chứng: 22 kiểm thử Auth theo HTTP (gồm ma trận kiểm tra token user/admin/refresh), 16 ca Emulator liên quan tài khoản/quản trị, 21 hành trình trình duyệt và 4 tình huống cập nhật PWA đạt. Đã thử yêu cầu khôi phục → lấy mã trong Auth Emulator → đổi mật khẩu → từ chối mật khẩu cũ → đăng nhập cùng UID; mã đã dùng không thể dùng lại. Kiểm thử trình duyệt còn giữ phiên khi refresh trả 503 rồi phục hồi khi thử lại. OpenAPI có 70 thao tác. Chỉ dùng thư giả lập trong kiểm thử local; chưa nghiệm thu giao thư vào hộp thư thật.
 
+Đã triển khai cả FE/API cùng SHA `f936eaaceed74501033e477015aa747c8ef5f4e3`. Kiểm trên domain thật đạt release identity, CORS/quyền, route khôi phục, kiểm email/body trước khi gửi, sai mật khẩu và refresh token vẫn trả 401, bố cục 320px và mở lại trang khi offline; không có lỗi JavaScript. Kiểm cloud không gửi email khôi phục. [Bằng chứng phát hành](reports/2026-11-24-account-recovery-release.json).
+
 ## Hoàn thiện giao diện ngày 24/11/2026
 
 Theo yêu cầu cập nhật tự động: bỏ thông báo và bước xác nhận phiên bản PWA. App kiểm bản mới mỗi phút và khi quay lại/có mạng, hỏi trạng thái các tab trước khi kích hoạt, chờ nội dung đang nhập, lệnh ghi và hộp thoại; sau đó tự tải lại đúng một lần. Bốn kiểm thử thay phiên bản service worker thật đã đạt, gồm cả bảo vệ form ở tab khác. Các tab còn ở cơ chế cũ cần xác nhận cập nhật một lần hoặc đóng hết tab rồi mở lại.
