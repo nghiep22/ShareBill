@@ -10,6 +10,8 @@ Khi tải lại chậm/lỗi, giữ lịch đã tải để xem và khóa các l
 
 Ba hành trình mới kiểm link ngày, chuyến chưa có ngày/dài ngày, ngày sai, giữ bản sửa khi xung đột, kiểm tra lại trước khi xóa, hoạt động bị máy khác gỡ và trạng thái tải chậm/lỗi. Bộ PWA có thêm ca chọn ngày xem rồi tự cập nhật, nâng tổng lên 5 ca. TypeScript, production build và lượt kiểm tra cuối 24/24 hành trình cùng 5/5 PWA đạt.
 
+Đã triển khai FE tại SHA `f3e901b610c35b166746215cb5410459a969be2d`, giữ API `f936eaaceed74501033e477015aa747c8ef5f4e3`. Trên domain thật, chuyến thử riêng đã kiểm giữ focus/ngày khi tải lại, bố cục 320/390/1280px, lưu hoạt động qua API và kiểm tra lại bản mới trước khi xóa sau sửa đồng thời. Chuyến thử đã chốt, tổng chi và ledgerVersion vẫn bằng 0. Sau chỉnh focus, kiểm riêng thêm 5 hành trình điều hướng/lịch trình và luồng tiền đều đạt. [Báo cáo phát hành và ghi chú kiểm thử](reports/2026-11-24-itinerary-reliability-release.json).
+
 ## Khôi phục tài khoản và ổn định phiên ngày 24/11/2026
 
 Bổ sung **Quên mật khẩu** từ đăng nhập và API `/api/v1/auth/password-reset`: email được chuẩn hóa, Firebase gửi hướng dẫn tiếng Việt, phản hồi không tiết lộ địa chỉ có tài khoản hay không và không trả mã đặt lại. Form đăng nhập/đăng ký/khôi phục khóa gửi lặp và hiện trạng thái đang xử lý. Lỗi REST hoặc kiểm tra token tạm thời trả 503/429 thay vì xóa phiên; token sai/hết hạn/thu hồi vẫn trả 401 và tài khoản bị khóa trả 403, áp dụng cho cả API người dùng và quản trị. Phản hồi refresh thiếu dữ liệu cũng được coi là lỗi dịch vụ.

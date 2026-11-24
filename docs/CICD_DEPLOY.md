@@ -1,5 +1,7 @@
 # ShareBill — CI/CD, triển khai và vận hành
 
+**24/11/2026, lịch trình:** FE đã lên SHA `f3e901b610c35b166746215cb5410459a969be2d`, giữ ngày xem trong link, giữ focus khi đổi bộ lọc, khóa ghi lúc tải chậm/lỗi và yêu cầu kiểm tra lại hoạt động trước khi xóa nếu có sửa đồng thời. Bộ 24 hành trình và 5 PWA đạt; có kiểm lại các luồng liên quan sau chỉnh focus. Cloud đã kiểm thật trên chuyến synthetic, gồm lưu/xóa qua API, giữ ngày sau reload và bố cục 320/390/1280px; chuyến đã chốt và không phát sinh tiền. [Báo cáo phát hành](reports/2026-11-24-itinerary-reliability-release.json).
+
 **24/11/2026, khôi phục tài khoản:** FE/API đã lên cùng SHA `f936eaaceed74501033e477015aa747c8ef5f4e3`, bổ sung quên mật khẩu và phân biệt lỗi dịch vụ Auth với hết phiên. Đã kiểm release, CORS/quyền, validation khôi phục không gửi thư, lỗi đăng nhập/refresh, giao diện 320px và offline trên domain thật. Luồng đổi mật khẩu kiểm bằng thư/mã của Auth Emulator; giao thư vào hộp thư thật còn cần nghiệm thu. [Báo cáo phát hành](reports/2026-11-24-account-recovery-release.json).
 
 **24/11/2026:** đã triển khai giao diện responsive và cập nhật PWA tự động tại SHA `a35e0bda14b9636ca0e5aac620c7cb8b9472f2fb` lên domain web hiện tại. Worker mới chờ các tab sẵn sàng rồi tự kích hoạt/tải lại, bảo vệ bản nhập và lệnh ghi; phiên bản cũ vẫn hỗ trợ nút xác nhận cập nhật một lần để chuyển tiếp. Đã đạt 19 hành trình local, 4 tình huống đổi worker, và kiểm release/worker/API/CORS/mobile/offline trên domain thật. [Báo cáo phát hành](reports/2026-11-24-responsive-auto-update-release.json).

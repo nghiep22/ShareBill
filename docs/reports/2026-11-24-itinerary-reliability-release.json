@@ -1,0 +1,32 @@
+{
+  "checkedAt": "2026-11-24T09:24:15.232Z",
+  "webUrl": "https://sharebill-nghiep22.vercel.app",
+  "apiUrl": "https://sharebill-api-staging.vercel.app",
+  "webCommit": "f3e901b610c35b166746215cb5410459a969be2d",
+  "checks": {
+    "canonicalRelease": true,
+    "dayChangePreservesKeyboardFocus": true,
+    "dayLinkSurvivesReload": true,
+    "reachableDatePickerAndResponsiveLayout": true,
+    "activitySavedThroughCloudApi": true,
+    "competingEditRequiresReviewBeforeDeletion": true,
+    "noFinancialChanges": true,
+    "noBrowserErrors": true,
+    "syntheticTripArchived": true
+  },
+  "localTests": {
+    "browser": 24,
+    "pwaUpdates": 5,
+    "afterFocusAdjustment": {
+      "navigationAndItinerary": 5,
+      "money": 1
+    }
+  },
+  "scope": "Isolated synthetic itinerary in staging; no expenses, transfers, emails or real user trips modified.",
+  "apiCommit": "f936eaaceed74501033e477015aa747c8ef5f4e3",
+  "tripId": "c71fdd5e-dcd6-44b5-8d59-3bfb9e4f91c3",
+  "webDeployment": "dpl_3Gm1yHndzz5B35CHMbu7Ck7QDmqi",
+  "verificationNotes": [
+    "The first full browser run timed out opening an expense editor. Its isolated rerun and the subsequent full 24-test run passed. After the final focus adjustment, five navigation/itinerary checks and the money journey passed again."
+  ]
+}
