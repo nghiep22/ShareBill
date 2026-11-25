@@ -1172,6 +1172,123 @@ test('expense invoices are visible on create and shared with members outside the
   await shared.getByAltText('Hóa đơn 1', { exact: true }).waitFor();
 });
 
+test('invitation QR opens the right trip and supports native sharing, clipboard and Zalo fallbacks', { timeout: 90000 }, async t => {
+  const { page, context, session, trip, screen } = await fixture(t);
+  await context.addInitScript(() => {
+    window.__inviteShares = []; window.__shareMode = 'success'; window.__clipboardFails = false;
+    Object.defineProperty(navigator, 'canShare', { configurable: true, value: () => window.__shareMode !== 'unsupported' });
+    Object.defineProperty(navigator, 'share', { configurable: true, value: async data => {
+      if (window.__shareMode === 'cancel') throw new DOMException('Cancelled', 'AbortError');
+      if (window.__shareMode === 'error') throw new DOMException('Denied', 'NotAllowedError');
+      window.__inviteShares.push({ title: data.title, text: data.text, url: data.url,
+        file: data.files?.[0] && { name: data.files[0].name, type: data.files[0].type, size: data.files[0].size } });
+    } });
+    Object.defineProperty(navigator, 'clipboard', { configurable: true, value: {
+      writeText: async text => { if (window.__clipboardFails) throw new Error('Denied'); window.__inviteCopiedText = text; },
+      write: async items => {
+        if (window.__clipboardFails) throw new Error('Denied');
+        const blob = await items[0].getType('image/png');
+        window.__inviteCopiedImage = { type: blob.type, size: blob.size };
+      },
+    } });
+  });
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto(screen('loi-moi'));
+  await heading(page, 'Mời bạn vào chuyến đi');
+  assert.equal(await page.getByRole('heading', { name: 'QR tham gia chuyến đi', exact: true }).count(), 0);
+  await page.getByRole('combobox', { name: /Thời hạn/ }).selectOption('1');
+  await page.getByLabel('Số lượt tham gia', { exact: true }).fill('4');
+  await page.getByRole('button', { name: 'Tạo liên kết', exact: true }).click();
+  const image = page.getByAltText('QR mời tham gia chuyến đi ' + trip.name, { exact: true });
+  await image.waitFor();
+  const inviteUrl = await page.getByLabel('Đường dẫn tham gia', { exact: true }).inputValue();
+  assert.equal(new URL(inviteUrl).origin, new URL(web).origin);
+  assert.match(new URL(inviteUrl).hash, /^#tham-gia\/[A-Za-z0-9_-]{43}$/);
+  const [download] = await Promise.all([page.waitForEvent('download'), page.getByRole('link', { name: 'Tải ảnh gửi Zalo', exact: true }).click()]);
+  const bytes = await readFile(await download.path());
+  const sharp = createRequire(new URL('../../be/package.json', import.meta.url))('sharp');
+  const pixels = await sharp(bytes).ensureAlpha().raw().toBuffer({ resolveWithObject: true });
+  const jsQR = createRequire(new URL('../package.json', import.meta.url))('jsqr');
+  const decoded = jsQR(new Uint8ClampedArray(pixels.data), pixels.info.width, pixels.info.height);
+  assert.equal(decoded?.data, inviteUrl, 'Downloaded invitation QR encodes the entire URL, including its fragment token');
+  assert.equal(pixels.info.width, 900); assert.equal(pixels.info.height, 1120);
+  for (const width of [320, 390, 1280]) {
+    await page.setViewportSize({ width, height: 844 });
+    assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth), false, 'Invitation overflow at ' + width);
+  }
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.getByRole('button', { name: 'Chia sẻ liên kết qua Zalo', exact: true }).click();
+  await page.getByText('Đã mở chia sẻ liên kết.', { exact: false }).waitFor();
+  assert.equal(await page.evaluate(() => window.__inviteShares[0].url), inviteUrl);
+  await page.getByRole('button', { name: 'Chia sẻ ảnh', exact: true }).click();
+  await page.getByText('Đã mở chia sẻ ảnh.', { exact: false }).waitFor();
+  const shared = await page.evaluate(() => window.__inviteShares[1]);
+  assert.equal(shared.title, 'ShareBill · Mời vào chuyến đi');
+  assert.equal(shared.file.type, 'image/png'); assert.equal(shared.file.size, bytes.length);
+  assert.ok(shared.text.includes(inviteUrl));
+  await page.getByRole('button', { name: 'Sao chép liên kết', exact: true }).click();
+  assert.equal(await page.evaluate(() => window.__inviteCopiedText), inviteUrl);
+  await page.getByRole('button', { name: 'Sao chép ảnh', exact: true }).click();
+  await page.getByText('Đã sao chép ảnh.', { exact: false }).waitFor();
+  assert.deepEqual(await page.evaluate(() => window.__inviteCopiedImage), { type: 'image/png', size: bytes.length });
+  await page.getByRole('button', { name: 'Sao chép nội dung gửi nhóm', exact: true }).click();
+  assert.ok((await page.evaluate(() => window.__inviteCopiedText)).includes(inviteUrl));
+  assert.equal(await page.getByRole('link', { name: 'Mở Zalo Web', exact: true }).getAttribute('href'), 'https://chat.zalo.me/');
+  await page.evaluate(() => { window.__shareMode = 'unsupported'; });
+  await page.getByRole('button', { name: 'Chia sẻ ảnh', exact: true }).click();
+  await page.getByText('Thiết bị chưa hỗ trợ chia sẻ ảnh trực tiếp.', { exact: false }).waitFor();
+  await page.getByRole('button', { name: 'Chia sẻ liên kết qua Zalo', exact: true }).click();
+  await page.getByText('Thiết bị chưa hỗ trợ chia sẻ liên kết trực tiếp.', { exact: false }).waitFor();
+  assert.equal(await page.evaluate(() => window.__inviteShares.length), 2);
+  await page.evaluate(() => { window.__shareMode = 'error'; });
+  await page.getByRole('button', { name: 'Chia sẻ ảnh', exact: true }).click();
+  await page.getByText('Chưa chia sẻ được ảnh.', { exact: false }).waitFor();
+  await page.getByRole('button', { name: 'Chia sẻ liên kết qua Zalo', exact: true }).click();
+  await page.getByText('Chưa chia sẻ được liên kết.', { exact: false }).waitFor();
+  await page.evaluate(() => { window.__shareMode = 'cancel'; });
+  await page.getByRole('button', { name: 'Chia sẻ ảnh', exact: true }).click();
+  assert.equal(await page.getByText('Chưa chia sẻ được ảnh.', { exact: false }).count(), 0);
+  await page.getByRole('button', { name: 'Chia sẻ liên kết qua Zalo', exact: true }).click();
+  assert.equal(await page.getByText('Chưa chia sẻ được liên kết.', { exact: false }).count(), 0);
+  await page.evaluate(() => { window.__clipboardFails = true; });
+  await page.getByRole('button', { name: 'Sao chép ảnh', exact: true }).click();
+  await page.getByText('Chưa sao chép được ảnh.', { exact: false }).waitFor();
+  await page.getByRole('button', { name: 'Sao chép nội dung gửi nhóm', exact: true }).click();
+  assert.equal(await page.getByRole('textbox', { name: /Nội dung gửi nhóm Zalo/ }).inputValue(), shared.text);
+  await page.getByRole('button', { name: 'Sao chép liên kết', exact: true }).click();
+  await page.getByText('Chọn đường dẫn bên trên để sao chép', { exact: false }).waitFor();
+
+  // Opening the decoded QR in a different account goes through preview and acceptance.
+  const member = await call('auth/register', null, { method: 'POST', body: {
+    email: randomUUID() + '@example.test', password: 'BrowserFixture-123!', displayName: 'Bạn quét QR',
+  } });
+  const memberContext = await browser.newContext();
+  t.after(() => memberContext.close());
+  await memberContext.addInitScript(session => sessionStorage.setItem('sharebill-live-session-v1', JSON.stringify(session)),
+    { ...member, expiresAt: Date.now() + member.expiresIn * 1000 });
+  const memberPage = await memberContext.newPage();
+  await memberPage.goto(decoded.data);
+  await heading(memberPage, 'Lời mời tham gia');
+  await memberPage.getByRole('button', { name: 'Tham gia chuyến đi', exact: true }).click();
+  await heading(memberPage, 'Tổng quan');
+  assert.ok((await call('trips/' + trip.id + '/members', session)).memberships.some(item => item.uid === member.user.uid && item.status === 'active'));
+
+  // Creating another link must replace both the displayed QR and its downloaded payload.
+  await page.getByRole('button', { name: 'Tạo liên kết', exact: true }).click();
+  await page.waitForFunction(previous => document.querySelector('input[readonly]')?.value !== previous, inviteUrl);
+  const secondUrl = await page.getByLabel('Đường dẫn tham gia', { exact: true }).inputValue();
+  await image.waitFor();
+  const src = await image.getAttribute('src');
+  const secondPixels = await sharp(Buffer.from(src.split(',')[1], 'base64')).ensureAlpha().raw().toBuffer({ resolveWithObject: true });
+  assert.equal(jsQR(new Uint8ClampedArray(secondPixels.data), secondPixels.info.width, secondPixels.info.height)?.data, secondUrl);
+  if (process.env.SHAREBILL_INVITE_QR_SCREENSHOT) await page.screenshot({ path: process.env.SHAREBILL_INVITE_QR_SCREENSHOT, fullPage: true });
+  await page.getByRole('button', { name: 'Thu hồi', exact: true }).first().click();
+  await page.getByRole('dialog', { name: 'Thu hồi lời mời?', exact: true }).getByRole('button', { name: 'Thu hồi liên kết', exact: true }).click();
+  await image.waitFor({ state: 'detached' });
+  assert.equal(await page.getByLabel('Đường dẫn tham gia', { exact: true }).count(), 0);
+  assert.equal(await page.getByRole('button', { name: 'Chia sẻ ảnh', exact: true }).count(), 0);
+});
+
 test('shares named bank QR images using remaining debt with native sharing and Zalo download fallback', { timeout: 90000 }, async t => {
   const { page, context, session, trip, screen } = await fixture(t);
   const root = 'trips/' + trip.id;

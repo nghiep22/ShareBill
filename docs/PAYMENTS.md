@@ -20,6 +20,8 @@ Trong **Số dư** hoặc **Chi tiết khoản chi**, bấm **Chia sẻ QR qua Z
 
 Ảnh PNG ghi tên nhóm, người chuyển, người nhận, số tiền, thời điểm tạo và tên bill nếu mở từ chi tiết khoản chi. Người dùng có thể **Chia sẻ ảnh** qua bảng chia sẻ của thiết bị rồi chọn Zalo/nhóm nhận, hoặc **Tải ảnh gửi Zalo** và **Sao chép nội dung gửi nhóm**. Thiết bị không hỗ trợ chia sẻ file vẫn tải được PNG. Nội dung sao chép chỉ có liên kết nhóm cần đăng nhập, không có token hay URL xem ảnh ký tạm thời.
 
+Có thể **Sao chép ảnh** rồi dán vào cuộc trò chuyện Zalo, hoặc **Mở Zalo Web** để gửi ảnh đã tải. Giao diện hướng dẫn cách gửi khi chia sẻ trực tiếp/clipboard bị chặn. Cả QR chuyển khoản và QR mời nhóm dùng Web Share API; xem [công nghệ và các hàm QR](QR_SHARING.md).
+
 QR được đọc, kiểm CRC và tạo ảnh ngay trong trình duyệt từ QR người nhận đã lưu; không dùng API tạo QR bên ngoài hoặc công khai kho Blob. Chia sẻ ảnh không tạo/xác nhận settlement. Khi số dư thay đổi, QR mới dùng số mới; ảnh đã gửi là ảnh chụp số dư tại thời điểm tạo, cần đối chiếu số dư trước khi chuyển.
 
 ## Hợp đồng API và dữ liệu

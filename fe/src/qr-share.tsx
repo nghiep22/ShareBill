@@ -4,7 +4,7 @@ import { useRef, useState } from 'react';
 import { money } from './model';
 
 export type QrShareInfo = { group: string; from: string; to: string; context?: string; url: string };
-export type PreparedQrShare = { src: string; file: File; text: string };
+export type PreparedQrShare = { src: string; file: File; text: string; title?: string };
 
 function drawLines(ctx: CanvasRenderingContext2D, text: string, x: number, y: number, width: number, lineHeight: number, limit = 2) {
   const words = Array.from(text.replace(/\s+/g, ' ').trim());
@@ -58,6 +58,31 @@ export async function prepareQrShare(qrSrc: string, info: QrShareInfo, amount: n
       'Số còn nợ hiện tại, đã trừ tiền ứng và các khoản đã xác nhận.', 'Kiểm tra số dư trước khi chuyển: ' + info.url].filter(Boolean).join('\n') };
 }
 
+/** The invite capability stays in the URL fragment and is encoded locally. */
+export async function prepareInviteQrShare(url: string, group: string, expiresAt: string): Promise<PreparedQrShare> {
+  const { default: qr } = await import('qrcode');
+  const src = await qr.toDataURL(url, { width: 620, margin: 4, errorCorrectionLevel: 'M' });
+  await document.fonts.ready;
+  const image = new Image(); image.src = src; await image.decode();
+  const canvas = document.createElement('canvas'); canvas.width = 900; canvas.height = 1120;
+  const ctx = canvas.getContext('2d');
+  if (!ctx) throw new Error('Chưa tạo được QR lời mời.');
+  ctx.fillStyle = '#ffffff'; ctx.fillRect(0, 0, 900, 1120);
+  ctx.fillStyle = '#006c62'; ctx.fillRect(0, 0, 900, 138);
+  ctx.fillStyle = '#ffffff'; ctx.font = '700 40px sans-serif'; ctx.fillText('ShareBill', 56, 62);
+  ctx.font = '26px sans-serif'; ctx.fillText('Mời bạn vào chuyến đi', 56, 108);
+  ctx.fillStyle = '#14243a'; ctx.font = '700 36px sans-serif'; drawLines(ctx, group, 56, 202, 788, 46);
+  ctx.imageSmoothingEnabled = false; ctx.drawImage(image, 140, 294, 620, 620);
+  ctx.fillStyle = '#53647a'; ctx.font = '25px sans-serif';
+  ctx.fillText('Quét QR để mở lời mời và tham gia chuyến đi.', 56, 964);
+  const expiry = new Date(expiresAt).toLocaleString('vi-VN', { timeZone: 'Asia/Ho_Chi_Minh' });
+  ctx.font = '22px sans-serif'; ctx.fillText('Hết hạn: ' + expiry, 56, 1016);
+  ctx.fillText('Đăng nhập ShareBill rồi xác nhận tham gia.', 56, 1060);
+  const blob = await new Promise<Blob>((resolve, reject) => canvas.toBlob(value => value ? resolve(value) : reject(new Error('Chưa tạo được QR lời mời.')), 'image/png'));
+  return { src: canvas.toDataURL('image/png'), file: new File([blob], 'sharebill-loi-moi.png', { type: 'image/png' }),
+    title: 'ShareBill · Mời vào chuyến đi', text: ['Mời bạn tham gia chuyến đi ' + group + '.', 'Hết hạn: ' + expiry, url].join('\n') };
+}
+
 export function QrShareActions({ prepared }: { prepared: PreparedQrShare }) {
   const [message, setMessage] = useState('');
   const [busy, setBusy] = useState(false);
@@ -65,23 +90,33 @@ export function QrShareActions({ prepared }: { prepared: PreparedQrShare }) {
   const locked = useRef(false);
   async function share() {
     if (locked.current) return;
-    const data: ShareData = { files: [prepared.file], title: 'ShareBill · QR chuyển tiền', text: prepared.text };
-    if (!navigator.share || !navigator.canShare?.({ files: data.files })) {
-      setMessage('Thiết bị chưa hỗ trợ chia sẻ ảnh trực tiếp.'); return;
-    }
     locked.current = true; setBusy(true); setMessage('');
-    try { await navigator.share(data); setMessage('Đã mở chia sẻ ảnh.'); }
+    try {
+      const data: ShareData = { files: [prepared.file], title: prepared.title ?? 'ShareBill · QR chuyển tiền', text: prepared.text };
+      if (!navigator.share || !navigator.canShare?.({ files: data.files })) {
+        setMessage('Thiết bị chưa hỗ trợ chia sẻ ảnh trực tiếp. Hãy tải hoặc sao chép ảnh, mở Zalo rồi gửi vào cuộc trò chuyện.'); return;
+      }
+      await navigator.share(data); setMessage('Đã mở chia sẻ ảnh. Chọn Zalo và cuộc trò chuyện muốn gửi.');
+    }
     catch (cause) {
-      if (!(cause instanceof DOMException && cause.name === 'AbortError')) setMessage('Chưa chia sẻ được ảnh.');
+      if (!(cause instanceof DOMException && cause.name === 'AbortError')) setMessage('Chưa chia sẻ được ảnh. Hãy tải hoặc sao chép ảnh rồi gửi trong Zalo.');
     } finally { locked.current = false; setBusy(false); }
   }
   return <div className="qr-share-actions">
     <button type="button" className="primary-button" disabled={busy} onClick={() => void share()}>Chia sẻ ảnh</button>
     <a className="secondary-button" href={prepared.src} download={prepared.file.name}>Tải ảnh gửi Zalo</a>
+    <button type="button" className="secondary-button" onClick={async () => {
+      try {
+        await navigator.clipboard.write([new ClipboardItem({ 'image/png': prepared.file })]);
+        setMessage('Đã sao chép ảnh. Mở Zalo, dán ảnh vào cuộc trò chuyện rồi bấm gửi.');
+      } catch { setMessage('Chưa sao chép được ảnh. Bấm Tải ảnh gửi Zalo rồi đính kèm ảnh trong cuộc trò chuyện.'); }
+    }}>Sao chép ảnh</button>
+    <a className="secondary-button" href="https://chat.zalo.me/" target="_blank" rel="noopener noreferrer">Mở Zalo Web</a>
     <button type="button" className="text-button" onClick={async () => {
       try { await navigator.clipboard.writeText(prepared.text); setMessage('Đã sao chép nội dung.'); }
       catch { setManualCopy(true); setMessage('Không thể sao chép tự động.'); }
     }}>Sao chép nội dung gửi nhóm</button>
+    <p className="payment-caption">Chọn Zalo trong bảng chia sẻ. Nếu không thấy Zalo, tải hoặc sao chép ảnh rồi mở Zalo để gửi.</p>
     {message && <p role="status">{message}</p>}
     {manualCopy && <label>Nội dung gửi nhóm Zalo<textarea readOnly value={prepared.text} rows={6} /></label>}
   </div>;

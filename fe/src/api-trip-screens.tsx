@@ -1,11 +1,12 @@
 'use client';
 
-import { CircleHelp, Clipboard, Link2, LogOut, Settings2, UserPlus } from 'lucide-react';
+import { CircleHelp, Link2, LogOut, Settings2, UserPlus } from 'lucide-react';
 import { useState, type FormEvent } from 'react';
 import type { Session, ShareBillApi } from './api-client';
 import type { InviteDto, InvitePreview, Membership } from './api-data';
 import { useApiPage } from './api-queries';
 import { canWrite, isOwner, memberFor, nameOf, type Demo } from './model';
+import { InviteShare } from './invite-share';
 import { Avatar, Dialog, Empty, PageTitle } from './ui';
 import { tripHref } from './workspace-route';
 
@@ -20,22 +21,16 @@ export function InviteManager({ data, tripId, api, epoch, run }: {
   const owner = isOwner(data);
   const page = useApiPage<InviteDto>(api, owner ? path : undefined, { limit: '20' }, epoch);
   const [created, setCreated] = useState<InviteDto>();
-  const [notice, setNotice] = useState('');
   const [revoke, setRevoke] = useState<InviteDto>();
   const url = created?.token ? new URL('/#tham-gia/' + created.token, window.location.origin).href : '';
+  const createdStatus = page.items.find(invite => invite.id === created?.id)?.status ?? created?.status;
   if (!owner) return <PageTitle title="Chỉ chủ chuyến có thể quản lý lời mời" back={tripHref(data, 'thanh-vien')} />;
 
   function create(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const fields = new FormData(event.currentTarget);
     const body = { expiresInDays: Number(fields.get('days')), maxUses: Number(fields.get('limit')) };
-    setNotice('');
     run(() => api.write<InviteDto>(path, body), setCreated);
-  }
-
-  async function copy() {
-    try { await navigator.clipboard.writeText(url); setNotice('Đã sao chép liên kết.'); }
-    catch { setNotice('Chọn đường dẫn bên trên để sao chép.'); }
   }
 
   const labels = { active: 'Còn hiệu lực', revoked: 'Đã thu hồi', invalidated: 'Mất hiệu lực', exhausted: 'Hết lượt', expired: 'Hết hạn' };
@@ -51,11 +46,8 @@ export function InviteManager({ data, tripId, api, epoch, run }: {
     </form>}
     {created && <section className="card field-card">
       <h2>Liên kết vừa tạo</h2>
-      {url ? <>
-        <label>Đường dẫn tham gia<input value={url} readOnly onFocus={event => event.currentTarget.select()} /></label>
-        <button className="primary-button" onClick={() => void copy()}><Clipboard size={18} aria-hidden /> Sao chép liên kết</button>
-        {notice && <p role="status">{notice}</p>}
-      </> : <p role="status">{created.message ?? 'Đường dẫn chỉ xuất hiện khi tạo. Hãy thu hồi lời mời này và tạo lời mời mới.'}</p>}
+      {url && createdStatus === 'active' && canWrite(data) ? <InviteShare key={url} url={url} group={data.trip.name} expiresAt={created.expiresAt} />
+        : <p role="status">{url ? 'Lời mời không còn hiệu lực. Hãy tạo liên kết mới để chia sẻ.' : created.message ?? 'Đường dẫn chỉ xuất hiện khi tạo. Hãy thu hồi lời mời này và tạo lời mời mới.'}</p>}
     </section>}
     <section className="card field-card">
       <h2>Quản lý liên kết</h2>

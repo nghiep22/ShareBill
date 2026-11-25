@@ -372,6 +372,8 @@ input[type="radio"], input[type="checkbox"] { min-height: 0; width: 16px; height
 .qr-share-actions > .primary-button, .qr-share-actions > .secondary-button { padding-inline: 10px; }
 .qr-share-actions p, .share-recipient p, .share-chosen { overflow-wrap: anywhere; }
 .qr-share-actions textarea { width: 100%; }
+.invite-qr { justify-items: center; }
+.invite-qr > img { width: min(360px, 100%); height: auto; max-height: none; border-radius: 0; }
 .share-recipient { border: 1px solid var(--line); border-radius: 12px; }
 .share-recipient > .amount { font-size: 22px; font-weight: 750; color: var(--teal-dark); }
 .payment-picker input[type="file"] { width: 100%; max-width: 100%; font-size: 13px; }
