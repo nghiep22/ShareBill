@@ -6,6 +6,8 @@ Trong **Thêm khoản chi** hoặc **Sửa khoản chi**, mục **Ảnh hóa đ�
 
 Sau khi lưu, mọi tài khoản đang có quyền truy cập nhóm đều xem được hóa đơn trong **Chi tiêu → Chi tiết khoản chi**, kể cả người không nằm trong phần chia của khoản đó. Bấm ảnh thu nhỏ để phóng to, hoặc mở ảnh để lưu. Ảnh dùng cùng kho Vercel Blob riêng tư hiện có; không công khai đường dẫn cố định. Khi ảnh hết hạn hoặc tải lỗi, có thể bấm thử lại để xin liên kết xem mới. Tài khoản ngoài nhóm hoặc đã bị gỡ quyền không được cấp liên kết xem.
 
+Mục **Ảnh hóa đơn** luôn hiện ngay dưới thông tin khoản chi, kèm số ảnh đã đính kèm. Nếu chưa có ảnh, hiển thị **Khoản chi này chưa có ảnh hóa đơn**. Người được sửa khoản chi có thể bấm **Thêm ảnh hóa đơn** (hoặc **Quản lý ảnh hóa đơn** khi đã có ảnh), chọn ảnh ở màn hình sửa và bấm **Lưu khoản chi**. Chọn tệp xong cần lưu khoản chi để gắn ảnh; khoản chưa đính kèm ảnh sẽ không có ảnh gốc để mở.
+
 **Vercel Blob, 20/11/2026:** runtime tự chọn `VercelReceiptStorage` khi có `BLOB_READ_WRITE_TOKEN` hoặc `BLOB_STORE_ID`. Kho staging `sharebill-private-images` ở Singapore (`sin1`), access **private**, thuộc gói Hobby. Upload trực tiếp bằng signed PUT cố định pathname/MIME/dung lượng, TTL tối đa 5 phút; không cho overwrite. Finalize giữ nguyên kiểm ảnh thật/lease/claim. ETag dùng làm generation, kiểm lại khi đọc và dùng `ifMatch` khi xóa. Link xem ký riêng từng object, TTL 60 giây. Nếu không cấu hình Blob, adapter Cloud Storage hiện có vẫn được dùng. Không đổi provider của kho đã có ảnh mà chưa di chuyển dữ liệu.
 
 Không cần bật billing Firebase để dùng adapter này. Hạn mức Hobby và cách dừng khi vượt mức theo [Vercel Blob pricing](https://vercel.com/docs/vercel-blob/usage-and-pricing).

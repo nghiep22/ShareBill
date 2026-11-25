@@ -381,6 +381,7 @@ export function ExpenseDetail({ data, expense, update, receiptActions }: { data:
   const [voiding, setVoiding] = useState(false);
   const [image, setImage] = useState<Receipt | null>(null);
   const [error, setError] = useState('');
+  const receipts = expense.receipts ?? [];
   function voidExpense(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const reason = String(new FormData(event.currentTarget).get('reason')).trim();
@@ -401,6 +402,16 @@ export function ExpenseDetail({ data, expense, update, receiptActions }: { data:
       {expense.voidReason && <p>Lý do hủy: {expense.voidReason}</p>}
       <p>{expense.createdBy && 'Được tạo bởi ' + nameOf(data, expense.createdBy)}{expense.editedBy && ' · Sửa lần cuối bởi ' + nameOf(data, expense.editedBy)}</p>
     </section>
+    <section className="card field-card" aria-label="Ảnh hóa đơn của khoản chi">
+      <h2><ReceiptText size={18} aria-hidden /> Ảnh hóa đơn <span className="tag">{receipts.length}/3 ảnh</span></h2>
+      {receipts.length ? <>
+        <p>Bấm vào ảnh để xem hóa đơn.</p>
+        <div className="receipt-grid">{receipts.map(receipt => <PaymentImage key={receipt.id} receipt={receipt} actions={receiptActions} label={receipt.name} onOpen={() => setImage(receipt)} />)}</div>
+      </> : <p>Khoản chi này chưa có ảnh hóa đơn.</p>}
+      {canEditExpense(data, expense) && <a className="secondary-button" href={tripHref(data, 'sua-khoan-chi', expense.id)}>
+        <ImagePlus size={18} aria-hidden /> {receipts.length ? 'Quản lý ảnh hóa đơn' : 'Thêm ảnh hóa đơn'}
+      </a>}
+    </section>
     {!expense.voided && <ShareRepaymentQrs data={data} actions={receiptActions} context={'Bill: ' + expense.title} />}
     <section>
       {data.remote?.sharingMode === 'group-equal' ? <>
@@ -415,10 +426,6 @@ export function ExpenseDetail({ data, expense, update, receiptActions }: { data:
       <a className="text-button" href={tripHref(data, 'so-du')}>Xem số tiền còn cần trả / được nhận</a>
       </>}
     </section>
-    {Boolean(expense.receipts?.length) && <section className="card field-card" aria-label="Ảnh hóa đơn của khoản chi">
-      <h2>Ảnh hóa đơn</h2>
-      <div className="receipt-grid">{expense.receipts?.map(receipt => <PaymentImage key={receipt.id} receipt={receipt} actions={receiptActions} label={receipt.name} onOpen={() => setImage(receipt)} />)}</div>
-    </section>}
     {canEditExpense(data, expense) && <div className="button-pair">
       <a className="secondary-button" href={tripHref(data, 'sua-khoan-chi', expense.id)}><Pencil size={17} aria-hidden /> Sửa khoản chi</a>
       <button className="danger-button" onClick={() => { setError(''); setVoiding(true); }}><Trash2 size={17} aria-hidden /> Hủy khoản chi</button>

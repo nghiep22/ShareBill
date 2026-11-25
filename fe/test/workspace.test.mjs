@@ -1114,6 +1114,57 @@ test('incomplete financial snapshots never show a zero debt or enable archive', 
   assert.equal(await page.getByText('NaNđ', { exact: false }).count(), 0);
 });
 
+test('expense detail always shows invoices and can add an invoice to an existing group expense', async t => {
+  const { page, context, session, trip, screen, expenses } = await fixture(t, 'group-equal');
+  const root = 'trips/' + trip.id;
+  const saved = await call(expenses, session, { method: 'POST', body: {
+    title: 'Vé chưa có hóa đơn', amountMinor: 700000, payerParticipantId: trip.ownerParticipantId,
+    occurredOn: '2026-11-25', category: 'tickets', splitMethod: 'equal', split: { participantIds: [trip.ownerParticipantId] },
+  } });
+  const original = await call(expenses + '/' + saved.id, session);
+  const uploaded = { ...await paymentImageTransport(context, root, session), name: 'hoa-don-ve.png' };
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto(screen('khoan-chi/' + saved.id));
+  await heading(page, 'Vé chưa có hóa đơn');
+  const invoices = page.getByRole('region', { name: 'Ảnh hóa đơn của khoản chi', exact: true });
+  await invoices.getByText('Khoản chi này chưa có ảnh hóa đơn.', { exact: true }).waitFor();
+  assert.equal(await invoices.getByText('0/3 ảnh', { exact: true }).isVisible(), true);
+  const add = invoices.getByRole('link', { name: 'Thêm ảnh hóa đơn', exact: true });
+  for (const width of [320, 390, 1280]) {
+    await page.setViewportSize({ width, height: 844 });
+    assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth), false, 'Empty invoice overflow at ' + width);
+    assert.ok((await invoices.boundingBox()).y < (await page.getByRole('button', { name: 'Chia sẻ QR qua Zalo', exact: true }).boundingBox()).y);
+  }
+  await page.setViewportSize({ width: 390, height: 844 });
+  await add.click();
+  await heading(page, 'Sửa khoản chi');
+  const [chooser] = await Promise.all([page.waitForEvent('filechooser'), invoices.getByRole('button', { name: 'Tải ảnh hóa đơn', exact: true }).click()]);
+  await chooser.setFiles(uploaded);
+  await invoices.getByRole('button', { name: 'Xem ảnh ' + uploaded.name, exact: true }).waitFor();
+  await page.getByRole('button', { name: /Lưu khoản chi/ }).click();
+  await heading(page, 'Vé chưa có hóa đơn');
+  await invoices.getByRole('button', { name: 'Xem ảnh Hóa đơn 1', exact: true }).waitFor();
+  const updated = await call(expenses + '/' + saved.id, session);
+  assert.equal(updated.receiptIds.length, 1);
+  for (const key of ['title', 'amountMinor', 'payerParticipantId', 'splitMethod', 'shares']) assert.deepEqual(updated[key], original[key]);
+  assert.equal(await invoices.getByText('1/3 ảnh', { exact: true }).isVisible(), true);
+  assert.equal(await invoices.getByRole('link', { name: 'Thêm ảnh hóa đơn', exact: true }).count(), 0);
+  assert.equal(await invoices.getByRole('link', { name: 'Quản lý ảnh hóa đơn', exact: true }).isVisible(), true);
+  await page.reload();
+  await invoices.getByRole('button', { name: 'Xem ảnh Hóa đơn 1', exact: true }).click();
+  const viewer = page.getByRole('dialog', { name: 'Ảnh hóa đơn', exact: true });
+  await viewer.getByAltText('Hóa đơn 1', { exact: true }).evaluate(element => element.decode());
+  assert.equal(await viewer.getByRole('link', { name: 'Mở ảnh để lưu hoặc phóng to', exact: true }).isVisible(), true);
+  await viewer.getByRole('button', { name: 'Đóng', exact: true }).click();
+  await invoices.getByRole('link', { name: 'Quản lý ảnh hóa đơn', exact: true }).click();
+  await heading(page, 'Sửa khoản chi');
+  await invoices.getByRole('button', { name: 'Bỏ ảnh Hóa đơn 1', exact: true }).click();
+  await page.getByRole('button', { name: /Lưu khoản chi/ }).click();
+  await heading(page, 'Vé chưa có hóa đơn');
+  await invoices.getByText('Khoản chi này chưa có ảnh hóa đơn.', { exact: true }).waitFor();
+  assert.equal((await call(expenses + '/' + saved.id, session)).receiptIds.length, 0);
+});
+
 test('expense invoices are visible on create and shared with members outside the expense split', async t => {
   const { page, context: ownerContext, session, trip, screen, expenses } = await fixture(t);
   const root = 'trips/' + trip.id;
