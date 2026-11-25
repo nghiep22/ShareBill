@@ -1,0 +1,33 @@
+{
+  "checkedAt": "2026-11-25T02:05:21.488Z",
+  "webUrl": "https://sharebill-nghiep22.vercel.app",
+  "apiUrl": "https://sharebill-api-staging.vercel.app",
+  "webCommit": "8b20c2b233dee5e1d8167ac9874b0451d049066c",
+  "webDeployment": "dpl_HTmPvFbDM3aY9oEqV7VDETAGXfn2",
+  "checks": {
+    "canonicalRelease": true,
+    "apiHealthy": true,
+    "pwaWorkerPublished": true,
+    "inviteCreatedThroughCloudApi": true,
+    "generatedQrContainsCanonicalJoinUrl": true,
+    "downloadableInvitePng": true,
+    "responsive3203901280": true,
+    "linkAndImageSharePayloads": true,
+    "imageClipboardPayload": true,
+    "inviteLinkCopy": true,
+    "zaloManualFallback": true,
+    "revocationRemovesQr": true,
+    "noFinancialChanges": true,
+    "noBrowserErrors": true,
+    "syntheticTripArchived": true
+  },
+  "localTests": {
+    "qrBrowserJourneys": 2,
+    "vietQr": 26,
+    "typecheck": true,
+    "productionBuild": true
+  },
+  "scope": "Isolated synthetic trip; no expenses, transfers, emails or real user trips modified. Native share and clipboard are mocked; no Zalo messages sent.",
+  "apiCommit": "f936eaaceed74501033e477015aa747c8ef5f4e3",
+  "tripId": "cf38ede3-4e7b-4274-800f-8cb1ffdc3b5e"
+}
