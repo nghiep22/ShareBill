@@ -12,6 +12,8 @@ Lượt Emulator toàn bộ có 89/90 ca đạt, ca phân trang cũ thất bại
 
 QR mời nhóm, chia sẻ/tải/sao chép ảnh gửi Zalo và mục hóa đơn luôn hiện đã triển khai và kiểm cloud trong các đợt trước cùng ngày. Bằng chứng và SHA hiện tại được ghi tại [lịch sử triển khai](CICD_DEPLOY.md).
 
+Đợt ngoại tuyến đã lên FE tại SHA `5eafee6bd0e0b7b5181d9511253ed024249c0767`. Domain thật kiểm thành công nhóm hai người với công nợ 75.000đ, reload offline, soạn nháp, người thứ ba tham gia, reconnect không tự submit và lưu đúng ba phần sau khi người dùng bấm lưu. Cache cũ thiếu cách chia hiện hướng dẫn tải lại và phục hồi khi có mạng. Chuyến synthetic đã chốt, các khoản thử đã hủy. [Báo cáo cloud và phạm vi kiểm thử](reports/2026-11-25-offline-group-reliability-release.json).
+
 Các cổng còn cần nghiệm thu riêng: Safari iOS/Chrome Android và camera trên thiết bị vật lý, giao thư khôi phục mật khẩu thật, Google operator trên cloud, lịch workers/cảnh báo và backup/restore cloud. Kiểm thử Google Emulator, viewport điện thoại và diễn tập restore local không thay cho các cổng này. Những ghi chú ngày 18–24/11 bên dưới là bằng chứng theo từng thời điểm.
 
 ## Lịch trình khi đổi ngày và nhiều máy cùng sửa ngày 24/11/2026

@@ -1,0 +1,39 @@
+{
+  "checkedAt": "2026-11-25T06:59:29.230Z",
+  "webUrl": "https://sharebill-nghiep22.vercel.app",
+  "apiUrl": "https://sharebill-api-staging.vercel.app",
+  "webCommit": "5eafee6bd0e0b7b5181d9511253ed024249c0767",
+  "webDeployment": "dpl_2AHZySSF9Ugfv8edD4VEmTmhBDrB",
+  "checks": {
+    "canonicalRelease": true,
+    "groupSharingSurvivesOfflineReload": true,
+    "offlineGroupBalancesCorrect": true,
+    "reconnectNeverAutoSubmitsDraft": true,
+    "draftUsesUpdatedMembershipOnExplicitSave": true,
+    "oldCacheRequiresFreshConnection": true,
+    "freshConnectionRestoresOverview": true,
+    "noBrowserErrors": true,
+    "syntheticTripArchived": true
+  },
+  "localTests": {
+    "backendUnitHttp": 179,
+    "smokeTools": 10,
+    "browserJourneys": 28,
+    "pwaUpdates": 5,
+    "backendEmulatorInitial": {
+      "passed": 89,
+      "failed": 1,
+      "total": 90
+    },
+    "paginationAfterFixtureFix": {
+      "passed": 2,
+      "failed": 0
+    }
+  },
+  "verificationNotes": [
+    "The initial Emulator run found an obsolete pagination fixture that created 32 pending payments for one pair. The fixture now uses 32 distinct valid pairs; its two tests passed again. The other 89 cases passed in the full run."
+  ],
+  "scope": "Isolated synthetic group, accounts and expenses. No real user records or external messages modified.",
+  "apiCommit": "f936eaaceed74501033e477015aa747c8ef5f4e3",
+  "tripId": "bd4e66b1-dce9-43a9-a4ff-5486e0ae5515"
+}
