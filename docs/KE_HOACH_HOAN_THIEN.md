@@ -10,6 +10,8 @@ Cron `0 20 * * *` tương ứng khoảng 03:00–03:59 giờ Việt Nam, hằng 
 
 Local đã đạt 188 unit/HTTP (9 ca route mới), 17 ca Emulator Auth/quản trị/worker (7 ca fencing mới) và hành trình Google operator qua giao diện System. FE/BE typecheck/build đạt; OpenAPI có 71 thao tác. Cron secret được lưu phía project API. [Runbook và giới hạn](SCHEDULED_MAINTENANCE.md); SHA/bằng chứng cloud được ghi trong lịch sử triển khai. Backup/restore cloud, cleanup tự động, thông báo có người nhận và nghiệm thu lịch tự kích hoạt đầu tiên vẫn cần kiểm riêng.
 
+FE/API đã deploy cùng SHA `83f321a773f0b239ee97169689217ab25107dcb4`. Cloud kiểm request bảo vệ, một lượt xác thực (24 hồ sơ Auth, một chuyến, 0 lỗi/sai lệch trong lượt), request lặp bị cooldown và smoke ứng dụng synthetic đạt. Vercel project có cron enabled, đúng definition và deployment đang phục vụ domain. Chu kỳ ledger vẫn queued; lần cron tự kích hoạt đầu tiên chưa quan sát. [Báo cáo chi tiết](reports/2026-11-25-scheduled-maintenance-release.json).
+
 ## Rà soát và ổn định chế độ ngoại tuyến ngày 25/11/2026
 
 Đã bổ sung snapshot riêng tư các trường `sharingMode`, `equalParticipantIds`, `myParticipantId`. Nhóm tự chia đều tiếp tục giữ đúng danh sách chia, số dư và danh tính người đang xem sau khi reload ngoại tuyến; không quay về giao diện chia từng khoản. Sau khi có mạng, form kiểm theo danh sách thành viên hiện tại và chờ người dùng bấm lưu. Bản cache cũ thiếu cách chia của chuyến đang mở được bỏ qua, có hướng dẫn kết nối lại thay vì tự suy đoán cách chia.
