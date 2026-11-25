@@ -21,7 +21,7 @@ describe('Swagger UI', () => {
 
       const operations = Object.entries(spec.paths).flatMap(([path, methods]) =>
         Object.entries(methods as Record<string, unknown>).map(([method, details]) => ({ path, method, details })));
-      expect(operations).toHaveLength(70);
+      expect(operations).toHaveLength(71);
       expect(spec.paths['/api/v1/trips/{tripId}/share-equally'].post).toBeDefined();
       for (const { path, method, details } of operations) {
         const url = path.replace(/\{([^}]+)\}/g, ':$1');

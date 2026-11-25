@@ -11,6 +11,7 @@ import { increment } from './services/trip-access.js';
 import { ticketFields } from './support-routes.js';
 import { uid as uidSchema } from './database/integrity-schemas.js';
 import { reconciliationSummary } from './services/ledger-reconciliation.js';
+import { maintenanceSummary } from './services/scheduled-maintenance.js';
 
 const root = '/api/admin/v1';
 const statuses = ticketFields.shape.status;
@@ -308,5 +309,6 @@ function jobSummary(doc: DocumentSnapshot) {
   return { id: doc.id, uid: doc.get('uid') ?? null, status: doc.get('status'), attempts: doc.get('attempts') ?? 0,
     moderationVersion: doc.get('moderationVersion') ?? null, lastErrorCode: doc.get('lastErrorCode') ?? null, updatedAt: dateOf(doc.get('updatedAt')),
     ...(repair && { kind: 'projection_repair', repairSummary: repairResult?.success ? repairResult.data : null }),
-    ...(doc.get('kind') === 'ledger_reconcile' && { kind: 'ledger_reconcile', resultSummary: reconciliationSummary(doc.get('resultSummary')) }) };
+    ...(doc.get('kind') === 'ledger_reconcile' && { kind: 'ledger_reconcile', resultSummary: reconciliationSummary(doc.get('resultSummary')) }),
+    ...(doc.get('kind') === 'scheduled_maintenance' && { kind: 'scheduled_maintenance', maintenanceSummary: maintenanceSummary(doc.get('resultSummary')) }) };
 }

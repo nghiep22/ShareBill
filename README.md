@@ -31,6 +31,8 @@ S18 đã deploy FE/API cùng SHA, kiểm Auth/luồng tiền và 18 index trên 
 
 [QR mời vào nhóm và chia sẻ qua Zalo](docs/QR_SHARING.md): cách dùng, thư viện QR, các hàm tạo/đọc QR và cơ chế chia sẻ ảnh/liên kết.
 
+[Bảo trì định kỳ](docs/SCHEDULED_MAINTENANCE.md): worker Auth, đối soát chỉ đọc, lịch miễn phí hằng ngày và cách theo dõi kết quả trong quản trị.
+
 ## Hướng triển khai đề xuất
 
 - **Frontend:** thư mục `fe/` dành cho Next.js/React + TypeScript, responsive mobile-first, PWA và website quản trị React.

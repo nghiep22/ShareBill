@@ -19,6 +19,7 @@ import { registerAuthRoutes } from './auth-routes.js';
 import { registerItineraryRoutes } from './itinerary-routes.js';
 import { registerSupportRoutes } from './support-routes.js';
 import { registerAdminRoutes } from './admin-routes.js';
+import { registerMaintenanceRoutes } from './maintenance-routes.js';
 import { releaseIdentity } from './release.js';
 import { createServer } from './logging.js';
 
@@ -63,5 +64,6 @@ export async function buildApp(app = createServer(), options: { receipts?: Recei
   await registerItineraryRoutes(app);
   await registerSupportRoutes(app);
   await registerAdminRoutes(app);
+  await registerMaintenanceRoutes(app);
   return app;
 }

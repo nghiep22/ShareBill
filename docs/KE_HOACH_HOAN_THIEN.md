@@ -2,6 +2,14 @@
 
 Ngày khảo sát 18/11/2026 · Phạm vi mã trong workspace, giao diện và API local, Firebase Emulator, bộ thiết kế `GiaoDien` và đặc tả nghiệp vụ.
 
+## Worker bảo trì và lịch Hobby ngày 25/11/2026
+
+Đã bổ sung endpoint máy chủ dùng `CRON_SECRET`, không nhận Firebase token/query scope hoặc HEAD. Một lượt đồng bộ Auth có giới hạn và kiểm một chuyến bằng worker đối soát hiện có. Transaction nhận khóa 5 phút, cooldown 15 phút và kiểm chủ khóa/hạn khóa trước mỗi checkpoint; request trùng không chạy worker, callback cũ sau crash/reclaim không công bố kết quả. Auth/ledger lỗi độc lập, bộ đếm chưa biết giữ null, exception riêng tư không lưu vào job.
+
+Cron `0 20 * * *` tương ứng khoảng 03:00–03:59 giờ Việt Nam, hằng ngày trên Vercel Hobby. Giữ gói miễn phí; cooldown 15 phút không đồng nghĩa scheduler chạy mỗi 15 phút. Với nhiều người/chuyến, một chu kỳ cần nhiều ngày; không cam kết đã quét toàn dự án chỉ vì lượt hiện tại thành công. UI quản trị có nhãn **Bảo trì định kỳ**, trạng thái và bộ đếm đã kiểm schema, không trả secret/lease/checkpoint/diff.
+
+Local đã đạt 188 unit/HTTP (9 ca route mới), 17 ca Emulator Auth/quản trị/worker (7 ca fencing mới) và hành trình Google operator qua giao diện System. FE/BE typecheck/build đạt; OpenAPI có 71 thao tác. Cron secret được lưu phía project API. [Runbook và giới hạn](SCHEDULED_MAINTENANCE.md); SHA/bằng chứng cloud được ghi trong lịch sử triển khai. Backup/restore cloud, cleanup tự động, thông báo có người nhận và nghiệm thu lịch tự kích hoạt đầu tiên vẫn cần kiểm riêng.
+
 ## Rà soát và ổn định chế độ ngoại tuyến ngày 25/11/2026
 
 Đã bổ sung snapshot riêng tư các trường `sharingMode`, `equalParticipantIds`, `myParticipantId`. Nhóm tự chia đều tiếp tục giữ đúng danh sách chia, số dư và danh tính người đang xem sau khi reload ngoại tuyến; không quay về giao diện chia từng khoản. Sau khi có mạng, form kiểm theo danh sách thành viên hiện tại và chờ người dùng bấm lưu. Bản cache cũ thiếu cách chia của chuyến đang mở được bỏ qua, có hướng dẫn kết nối lại thay vì tự suy đoán cách chia.

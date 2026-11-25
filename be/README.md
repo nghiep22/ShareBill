@@ -188,6 +188,8 @@ Các lệnh ghi nghiệp vụ kiểm tra quyền trong Firestore transaction và
 
 ## Kiểm tra
 
+[Bảo trì định kỳ trên Vercel Hobby](../docs/SCHEDULED_MAINTENANCE.md) chạy worker Auth và một lượt đối soát có giới hạn qua endpoint riêng có `CRON_SECRET`. Không dùng token tài khoản người dùng để gọi. Lịch cơ bản hằng ngày, kết quả có trong Hệ thống quản trị; backup cloud và cleanup tự động chưa được bật.
+
 Tạo một bộ dữ liệu mẫu khi Auth/Firestore Emulator đang chạy:
 
 ```powershell

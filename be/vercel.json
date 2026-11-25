@@ -5,8 +5,9 @@
   "buildCommand": "npx --yes pnpm@11.25.0 build",
   "outputDirectory": "public",
   "functions": {
-    "api/index.ts": { "includeFiles": "openapi.json" }
+    "api/index.ts": { "includeFiles": "openapi.json", "maxDuration": 240 }
   },
+  "crons": [{ "path": "/api/internal/maintenance", "schedule": "0 20 * * *" }],
   "rewrites": [
     { "source": "/(.*)", "destination": "/api/index" }
   ]

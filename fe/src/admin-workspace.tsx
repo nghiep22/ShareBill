@@ -16,13 +16,16 @@ type Note = { id: string; note: string; actorUid: string; createdAt: string };
 type Audit = { id: string; action: string; actorUid: string; targetType: string; targetId: string; reason: string; createdAt: string };
 type Dashboard = { users: number; trips: number; support: number; failures: number; updatedAt: string; tickets: Ticket[]; activity: Audit[] };
 type Job = { id: string; uid?: string; status: string; moderationVersion?: number; attempts: number; lastErrorCode: string | null; updatedAt: string;
-  kind?: 'ledger_reconcile' | 'projection_repair'; repairSummary?: { changedDocuments: number } | null;
+  kind?: 'ledger_reconcile' | 'projection_repair' | 'scheduled_maintenance'; repairSummary?: { changedDocuments: number } | null;
+  maintenanceSummary?: { authScanned: number | null; authProcessed: number | null; authErrors: number;
+    ledgerProcessed: number | null; ledgerIssues: number; ledgerScanErrors: number; ledgerState: string } | null;
   resultSummary?: { tripsScanned: number; tripsChecked: number; tripsWithIssues: number; issueCount: number; scanErrors: number } | null };
 type System = { environment: string; release: string | null; jobs: Job[]; maintenance: Job[] };
 const names: Record<string, string> = {
   open: 'Mới gửi', in_progress: 'Đang xử lý', resolved: 'Đã xử lý', active: 'Đang hoạt động', disabled: 'Đã khóa',
   archived: 'Đã chốt', normal: 'Bình thường', suspended: 'Tạm khóa', synced: 'Đã đồng bộ', pending: 'Đang đồng bộ',
   queued: 'Đang chờ', running: 'Đang chạy', succeeded: 'Thành công', failed: 'Lỗi', superseded: 'Đã có lệnh mới hơn',
+  'lease-held': 'Đang có lượt khác chạy', 'not-due': 'Chưa đến lượt đối soát', 'not-run': 'Chưa chạy',
   usability: 'Thao tác', balance: 'Số dư', receipt: 'Ảnh hóa đơn', account: 'Tài khoản', other: 'Khác',
   user: 'Người dùng', trip: 'Chuyến đi', support: 'Báo lỗi',
   'ticket.status_updated': 'Đổi trạng thái báo lỗi', 'ticket.note_added': 'Thêm ghi chú',
@@ -299,9 +302,13 @@ function SystemView({ data }: { data: System }) {
     {!data.jobs.length && <p>Chưa có tác vụ đồng bộ.</p>}
     <h2>Tác vụ bảo trì gần đây</h2>
     {data.maintenance.map(job => <div key={job.id}>
-      <p>{job.kind === 'ledger_reconcile' ? 'Đối soát sổ tiền' : job.kind === 'projection_repair' ? 'Sửa số dư từ sổ tiền' : job.id} · {label(job.status)} · {time(job.updatedAt)}</p>
+      <p>{job.kind === 'scheduled_maintenance' ? 'Bảo trì định kỳ' : job.kind === 'ledger_reconcile' ? 'Đối soát sổ tiền' : job.kind === 'projection_repair' ? 'Sửa số dư từ sổ tiền' : job.id} · {label(job.status)} · {time(job.updatedAt)}</p>
       {job.resultSummary && <p>Đã kiểm {job.resultSummary.tripsChecked}/{job.resultSummary.tripsScanned} chuyến · {job.resultSummary.tripsWithIssues} chuyến cần kiểm tra · {job.resultSummary.issueCount} sai lệch · {job.resultSummary.scanErrors} lỗi quét</p>}
       {job.repairSummary && <p>Đã sửa {job.repairSummary.changedDocuments} bản ghi số dư, bộ đếm và thông báo cập nhật. Chuyến tiếp tục tạm khóa để kiểm tra.</p>}
+      {job.maintenanceSummary && <>
+        <p>Tài khoản: đã kiểm {job.maintenanceSummary.authScanned ?? 'chưa rõ'}, xử lý {job.maintenanceSummary.authProcessed ?? 'chưa rõ'} tác vụ · {job.maintenanceSummary.authErrors} lỗi.</p>
+        <p>Đối soát: {label(job.maintenanceSummary.ledgerState)} · {job.maintenanceSummary.ledgerProcessed ?? 'chưa rõ'} chuyến trong lượt · {job.maintenanceSummary.ledgerIssues} sai lệch trong chu kỳ · {job.maintenanceSummary.ledgerScanErrors} lỗi quét.</p>
+      </>}
       {job.lastErrorCode && <p className="error">{job.lastErrorCode}</p>}
     </div>)}
     {!data.maintenance.length && <p>Chưa có kết quả bảo trì.</p>}

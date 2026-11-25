@@ -1808,20 +1808,29 @@ test('a Google operator processes a user ticket through the admin screens', asyn
   const store = getFirestore(fixtureApp);
   const job = store.doc('maintenanceJobs/ledger-reconcile-' + randomUUID());
   const repair = store.doc('maintenanceJobs/projection-repair-' + randomUUID());
+  const scheduled = store.doc('maintenanceJobs/scheduled-test-' + randomUUID());
   await job.set({ kind: 'ledger_reconcile', status: 'failed', attempts: 1, lastErrorCode: 'RECONCILE_ISSUES_FOUND',
     resultSummary: { tripsScanned: 3, tripsChecked: 2, tripsWithIssues: 1, issueCount: 2, scanErrors: 1 },
     checkpoint: 'private-reconcile-checkpoint', privateDiff: 'private-reconcile-financial-values',
     updatedAt: Timestamp.now() });
   await repair.set({ kind: 'projection_repair', status: 'succeeded', attempts: 1,
     resultSummary: { changedDocuments: 4 }, backupRef: 'private-repair-backup', reason: 'private-repair-reason', updatedAt: Timestamp.now() });
+  await scheduled.set({ kind: 'scheduled_maintenance', status: 'succeeded', attempts: 1,
+    resultSummary: { authScanned: 25, authQueued: 2, authProcessed: 2, authErrors: 0,
+      ledgerProcessed: 1, ledgerIssues: 0, ledgerScanErrors: 0, ledgerState: 'queued' },
+    leaseOwner: 'private-scheduler-lease', updatedAt: Timestamp.now() });
   try {
     await admin.getByRole('link', { name: 'Hệ thống', exact: true }).click();
     await admin.getByText('Đối soát sổ tiền', { exact: false }).waitFor();
     await admin.getByText('Đã kiểm 2/3 chuyến · 1 chuyến cần kiểm tra · 2 sai lệch · 1 lỗi quét', { exact: true }).waitFor();
     await admin.getByText('Sửa số dư từ sổ tiền', { exact: false }).waitFor();
     await admin.getByText('Đã sửa 4 bản ghi số dư, bộ đếm và thông báo cập nhật. Chuyến tiếp tục tạm khóa để kiểm tra.', { exact: true }).waitFor();
+    await admin.getByText('Bảo trì định kỳ', { exact: false }).waitFor();
+    await admin.getByText('Tài khoản: đã kiểm 25, xử lý 2 tác vụ · 0 lỗi.', { exact: true }).waitFor();
+    await admin.getByText('Đối soát: Đang chờ · 1 chuyến trong lượt · 0 sai lệch trong chu kỳ · 0 lỗi quét.', { exact: true }).waitFor();
     assert.equal(await admin.getByText(/private-reconcile/).count(), 0);
     assert.equal(await admin.getByText(/private-repair/).count(), 0);
-  } finally { await Promise.all([job.delete(), repair.delete()]); }
+    assert.equal(await admin.getByText(/private-scheduler/).count(), 0);
+  } finally { await Promise.all([job.delete(), repair.delete(), scheduled.delete()]); }
   assert.deepEqual(errors, []);
 });

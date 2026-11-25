@@ -89,6 +89,25 @@ describe.skipIf(!enabled)('platform administration', () => {
     } finally { await ref.delete(); }
   });
 
+  it('exposes only validated scheduled maintenance counters without worker leases or private fields', async () => {
+    const operator = await account(); await grant(operator);
+    const id = 'scheduled-test-' + randomUUID(), ref = db().doc('maintenanceJobs/' + id);
+    const resultSummary = { authScanned: 25, authQueued: 2, authProcessed: 2, authErrors: 0,
+      ledgerProcessed: 1, ledgerIssues: 0, ledgerScanErrors: 0, ledgerState: 'queued' };
+    await ref.set({ kind: 'scheduled_maintenance', status: 'succeeded', attempts: 1, resultSummary,
+      leaseOwner: 'private-scheduler-lease', privateDiff: 'private-scheduler-source', updatedAt: Timestamp.now() });
+    try {
+      const response = await send('GET', root + '/system', undefined, operator);
+      expect(response.statusCode).toBe(200);
+      expect(response.json().data.maintenance.find((job: { id: string }) => job.id === id)).toMatchObject({
+        kind: 'scheduled_maintenance', maintenanceSummary: resultSummary });
+      expect(response.body).not.toContain('private-scheduler');
+      await ref.update({ 'resultSummary.secret': 'private-scheduler-secret' });
+      const invalid = await send('GET', root + '/system', undefined, operator);
+      expect(invalid.json().data.maintenance.find((job: { id: string }) => job.id === id).maintenanceSummary).toBeNull();
+    } finally { await ref.delete(); }
+  });
+
   it('exposes only a validated repair count and keeps the backup, actor reason and source diff outside the system DTO', async () => {
     const operator = await account(); await grant(operator);
     const id = 'projection-repair-' + randomUUID(), ref = db().doc('maintenanceJobs/' + id);

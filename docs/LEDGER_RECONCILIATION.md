@@ -1,6 +1,6 @@
 # S19 — Đối soát sổ tiền theo từng lượt
 
-Worker `db:reconcile` chạy lại checker hiện có, lưu tiến độ vào `maintenanceJobs/ledger-reconcile-all` hoặc `maintenanceJobs/ledger-reconcile-<tripId>`. Chỉ tài khoản máy chủ tin cậy chạy CLI; không có endpoint công khai để kích hoạt và không chạy tự động trong request của người dùng.
+Worker `db:reconcile` chạy lại checker hiện có, lưu tiến độ vào `maintenanceJobs/ledger-reconcile-all` hoặc `maintenanceJobs/ledger-reconcile-<tripId>`. Chỉ tài khoản máy chủ tin cậy chạy CLI; không chạy tự động trong request của người dùng. [Bảo trì định kỳ](SCHEDULED_MAINTENANCE.md) bổ sung endpoint riêng có scheduler secret, mỗi lượt đối soát tối đa một chuyến và không tự repair.
 
 ## Chạy một lượt
 
@@ -37,4 +37,4 @@ Trong `/admin` → **Hệ thống**, phần bảo trì hiện “Đối soát s�
 
 Emulator có bộ kiểm thử riêng trong named database để tách dữ liệu người phát triển. Đã kiểm dữ liệu thật của checker và fingerprint toàn cây chuyến/user trước-sau, projection hỏng, chạy trùng, crash/reclaim, lease hết hạn, retry có giới hạn, phục hồi lỗi tạm thời, cooldown, phân trang và trường hợp chuyến retry bị xóa. API admin có kiểm thử lọc dữ liệu; hành trình browser operator kiểm phần tổng hợp trong Hệ thống.
 
-CLI hiện chạy một lượt, chưa cấu hình scheduler cloud. Có thể đưa vào trusted runner định kỳ sau khi chốt identity, giới hạn lượt và theo dõi exit code; không thêm vòng lặp vô hạn hay tự repair. Lịch Auth/cleanup, cảnh báo có nơi nhận, backup, restore/RPO/RTO và repair cloud còn mở. Môi trường tiếp tục giữ gói miễn phí hiện tại.
+CLI vẫn chạy một lượt. Cron Hobby được cấu hình hằng ngày qua trusted maintenance endpoint; cooldown 15 phút không phải tần suất tự chạy trên Hobby. Một chu kỳ toàn dự án có thể cần nhiều lượt. Cleanup, cảnh báo có nơi nhận, backup, restore/RPO/RTO và repair cloud còn mở. Môi trường tiếp tục giữ gói miễn phí hiện tại; trạng thái triển khai và lần kích hoạt đã kiểm nằm trong báo cáo phát hành.
