@@ -353,6 +353,13 @@ function AuthenticatedWorkspace({ session, api, hash, onSignOut }: { session: Se
     else content = <p role="status" className="empty">Đang kiểm tra lời mời…</p>;
   } else if (!data) {
     content = selected && overview.loading ? <p className="empty" role="status">Đang tải thông tin chuyến đi…</p>
+      : selected && networkUnavailable ? <div className="form-page">
+        <PageTitle title="Chưa có dữ liệu ngoại tuyến cho chuyến đi" back="#chuyen-di" />
+        <section className="card field-card">
+          <p>Kết nối mạng rồi mở lại chuyến đi để tải dữ liệu mới. Bật Tin cậy thiết bị này trong Tài khoản để lưu dữ liệu dùng khi mất mạng.</p>
+          <button type="button" className="secondary-button" onClick={refresh}>Thử kết nối lại</button>
+        </section>
+      </div>
       : <PageTitle title="Mở một chuyến đi để tiếp tục" back="#chuyen-di" />;
   } else if (offlineCache && !['tong-quan', 'them-khoan-chi', 'so-du'].includes(route)) {
     content = <PageTitle title="Màn hình này cần kết nối mạng" back={tripHref(data, 'tong-quan')} />;

@@ -2,6 +2,18 @@
 
 Ngày khảo sát 18/11/2026 · Phạm vi mã trong workspace, giao diện và API local, Firebase Emulator, bộ thiết kế `GiaoDien` và đặc tả nghiệp vụ.
 
+## Rà soát và ổn định chế độ ngoại tuyến ngày 25/11/2026
+
+Đã bổ sung snapshot riêng tư các trường `sharingMode`, `equalParticipantIds`, `myParticipantId`. Nhóm tự chia đều tiếp tục giữ đúng danh sách chia, số dư và danh tính người đang xem sau khi reload ngoại tuyến; không quay về giao diện chia từng khoản. Sau khi có mạng, form kiểm theo danh sách thành viên hiện tại và chờ người dùng bấm lưu. Bản cache cũ thiếu cách chia của chuyến đang mở được bỏ qua, có hướng dẫn kết nối lại thay vì tự suy đoán cách chia.
+
+Hai hành trình mới kiểm nhóm hai người có chi chung, reload khi mất mạng, xem số dư, soạn nháp, người thứ ba tham gia trong lúc offline, rồi kết nối lại và lưu đúng ba phần; cùng việc từ chối cache cũ và phục hồi khi có mạng. Bộ trình duyệt trên bản static/PWA đạt 28/28, PWA update đạt 5/5; kiểm tiền, ảnh, lời mời và quản trị đều nằm trong lượt này. FE/BE typecheck và build đạt; 179 unit/HTTP và 10 kiểm thử công cụ smoke đạt.
+
+Lượt Emulator toàn bộ có 89/90 ca đạt, ca phân trang cũ thất bại do tạo 32 pending cho cùng cặp người gửi/nhận, trái quy tắc hiện tại. Đã đổi fixture thành 32 cặp riêng với công nợ hợp lệ, giữ kiểm phân trang/timestamp trùng/cursor cũ; chạy lại file phân trang đạt 2/2. Không nới quy tắc chống pending trùng trong runtime.
+
+QR mời nhóm, chia sẻ/tải/sao chép ảnh gửi Zalo và mục hóa đơn luôn hiện đã triển khai và kiểm cloud trong các đợt trước cùng ngày. Bằng chứng và SHA hiện tại được ghi tại [lịch sử triển khai](CICD_DEPLOY.md).
+
+Các cổng còn cần nghiệm thu riêng: Safari iOS/Chrome Android và camera trên thiết bị vật lý, giao thư khôi phục mật khẩu thật, Google operator trên cloud, lịch workers/cảnh báo và backup/restore cloud. Kiểm thử Google Emulator, viewport điện thoại và diễn tập restore local không thay cho các cổng này. Những ghi chú ngày 18–24/11 bên dưới là bằng chứng theo từng thời điểm.
+
 ## Lịch trình khi đổi ngày và nhiều máy cùng sửa ngày 24/11/2026
 
 Ngày đang xem được lưu trong query `day` của link lịch trình; giữ khi tải lại và bỏ qua ngày không hợp lệ. Chuyến chưa định ngày mở hoạt động sớm nhất, có bộ chọn ngày luôn hiển thị để mở ngày chưa có hoạt động hoặc ngày ngoài hàng nút cuộn. Đổi query giữ focus/vị trí cuộn; hoạt động mới từ máy khác không tự đổi ngày mặc định đang xem. Chọn ngày xem không đánh dấu là bản nhập cần giữ khi cập nhật PWA.

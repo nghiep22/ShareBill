@@ -75,12 +75,16 @@ describe.skipIf(!enabled)('paginated read API', () => {
       }
       const trip = await post('/api/v1/trips', { name: 'Phân trang', sharingMode: 'per-expense', ownerName: 'An' }, createKey);
       const tripId = trip.id as string, owner = trip.ownerParticipantId as string;
-      const guest = (await post(`/api/v1/trips/${tripId}/participants`, { displayName: 'Bình' })).id as string;
+      const guests: string[] = [];
+      for (let i = 0; i < 32; i++) {
+        guests.push((await post(`/api/v1/trips/${tripId}/participants`, { displayName: `Khách ${i + 1}` })).id as string);
+      }
+      const guest = guests[0]!;
       const expenseIds: string[] = [];
       for (let i = 0; i < 5; i++) {
         const expense = await post(`/api/v1/trips/${tripId}/expenses`, {
           title: `Món ${i}`, amountMinor: 100, payerParticipantId: owner,
-          splitMethod: 'equal', split: { participantIds: [owner, guest] },
+          splitMethod: 'equal', split: { participantIds: [owner, ...guests] },
           occurredOn: '2026-12-20', category: i % 2 ? 'transport' : 'food', note: null,
         });
         expenseIds.push(expense.id);
@@ -90,7 +94,7 @@ describe.skipIf(!enabled)('paginated read API', () => {
       const settlementIds: string[] = [];
       for (let i = 0; i < 32; i++) {
         const settlement = await post(`/api/v1/trips/${tripId}/settlements`, {
-          fromParticipantId: guest, toParticipantId: owner, amountMinor: 10,
+          fromParticipantId: guests[i], toParticipantId: owner, amountMinor: 10,
           occurredOn: '2026-12-20', note: null, basedOnLedgerVersion: ledgerVersion,
         });
         settlementIds.push(settlement.id);
@@ -163,7 +167,7 @@ describe.skipIf(!enabled)('paginated read API', () => {
       expect(activity.statusCode, activity.body).toBe(200);
       expect(activity.body).not.toContain('internal-secret');
       expect(activity.body).not.toContain('never-return-this');
-      expect((await collect(`/api/v1/trips/${tripId}/activity`, 7)).size).toBe(42);
+      expect((await collect(`/api/v1/trips/${tripId}/activity`, 7)).size).toBe(73);
 
       const operation = await app.inject({ method: 'GET', url: `/api/v1/operations/${createKey}`, headers });
       expect(operation.statusCode, operation.body).toBe(200);

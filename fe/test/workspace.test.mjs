@@ -657,6 +657,145 @@ test('trusted devices recover an offline draft and clear private data on sign ou
   });
 });
 
+test('offline group drafts retain equal sharing and use current membership after reconnecting', async t => {
+  const { context, page, screen, expenses, session, trip } = await fixture(t, 'group-equal');
+  const root = 'trips/' + trip.id;
+  const member = await call('auth/register', null, { method: 'POST', body: {
+    email: randomUUID() + '@example.test', password: 'BrowserFixture-123!', displayName: 'Bình ngoại tuyến',
+  } });
+  const invitation = await call(root + '/invites', session, { method: 'POST', body: {} });
+  await call('invites/accept', member, { method: 'POST', body: { token: invitation.token } });
+  await call(expenses, session, { method: 'POST', body: {
+    title: 'Chi chung trước khi mất mạng', amountMinor: 150000, payerParticipantId: trip.ownerParticipantId,
+    occurredOn: '2026-11-25', category: 'food', splitMethod: 'equal', split: { participantIds: [trip.ownerParticipantId] },
+  } });
+  await page.goto(web + '/#tai-khoan');
+  await page.getByLabel('Tin cậy thiết bị này').check();
+  await page.goto(screen('them-khoan-chi'));
+  await heading(page, 'Thêm khoản chi');
+  await heading(page, 'Chia đều cho cả nhóm');
+  // Wait until the trusted snapshot is available, including privacy-filtered identities.
+  await page.waitForFunction(async () => {
+    const name = (await indexedDB.databases()).find(db => db.name.startsWith('sharebill-private-v1:'))?.name;
+    if (!name) return false;
+    return new Promise(resolve => {
+      const open = indexedDB.open(name);
+      open.onsuccess = () => {
+        const db = open.result, tx = db.transaction('data'), read = tx.objectStore('data').getAll();
+        read.onsuccess = () => resolve(read.result.some(row => row.kind === 'overview' && row.value.trip.equalParticipantIds?.length === 2));
+        tx.oncomplete = () => db.close();
+      };
+    });
+  });
+  if (process.env.SHAREBILL_PWA_TEST === '1') {
+    await page.evaluate(async () => {
+      await navigator.serviceWorker.ready;
+      if (!navigator.serviceWorker.controller) await new Promise(resolve => navigator.serviceWorker.addEventListener('controllerchange', resolve, { once: true }));
+    });
+  }
+  await context.setOffline(true);
+  await page.evaluate(() => window.dispatchEvent(new Event('offline')));
+  if (process.env.SHAREBILL_PWA_TEST === '1') await page.reload();
+  else {
+    await page.evaluate(() => { window.location.hash = 'tai-khoan'; });
+    await heading(page, 'Tài khoản');
+    await page.evaluate(url => { window.location.hash = new URL(url).hash; }, screen('them-khoan-chi'));
+  }
+  await heading(page, 'Thêm khoản chi');
+  await heading(page, 'Chia đều cho cả nhóm');
+  assert.equal(await page.getByRole('group', { name: 'Chia cho ai?', exact: true }).count(), 0);
+  await page.evaluate(url => { window.location.hash = new URL(url).hash; }, screen('so-du'));
+  await heading(page, 'Tổng chi chia đều cho 2 thành viên');
+  await page.locator('.balance-hero').getByText('75.000đ', { exact: true }).waitFor();
+  await page.evaluate(url => { window.location.hash = new URL(url).hash; }, screen('them-khoan-chi'));
+  await heading(page, 'Chia đều cho cả nhóm');
+  await page.getByLabel('Tên khoản chi').fill('Nháp nhóm ngoại tuyến');
+  await page.getByLabel('Số tiền đã trả').fill('100000');
+  assert.equal(await page.getByRole('button', { name: /Lưu khoản chi/ }).isDisabled(), true);
+  const third = await call('auth/register', null, { method: 'POST', body: {
+    email: randomUUID() + '@example.test', password: 'BrowserFixture-123!', displayName: 'Chi vừa tham gia',
+  } });
+  await call('invites/accept', third, { method: 'POST', body: { token: invitation.token } });
+  await context.setOffline(false);
+  await page.evaluate(() => window.dispatchEvent(new Event('online')));
+  await page.getByRole('radio', { name: 'Chi vừa tham gia', exact: true }).waitFor();
+  await page.waitForFunction(() => !Array.from(document.querySelectorAll('button')).find(button => button.textContent.includes('Lưu khoản chi'))?.disabled);
+  assert.equal((await call(expenses, session)).items.length, 1, 'Reconnect never submits a draft automatically');
+  await page.getByRole('button', { name: /Lưu khoản chi/ }).click();
+  await heading(page, 'Nháp nhóm ngoại tuyến');
+  const expenseId = page.url().split('/').at(-1);
+  const saved = await call(expenses + '/' + expenseId, session);
+  assert.equal(saved.amountMinor, 100000);
+  assert.equal(saved.shares.length, 3);
+  assert.deepEqual(saved.shares.map(row => row.amountMinor).sort(), [33333, 33333, 33334]);
+  const overview = await call(root + '/overview', session);
+  assert.equal(overview.trip.sharingMode, 'group-equal');
+  assert.equal(overview.trip.totalExpenseMinor, 250000);
+  assert.equal(overview.balances.reduce((sum, row) => sum + row.netMinor, 0), 0);
+});
+
+test('offline snapshots without a sharing mode require a fresh connection instead of guessing the split', async t => {
+  const { context, page, screen } = await fixture(t, 'group-equal');
+  await page.goto(web + '/#tai-khoan');
+  await page.getByLabel('Tin cậy thiết bị này').check();
+  await page.goto(screen('tong-quan'));
+  await heading(page, 'Tổng quan');
+  await page.waitForFunction(async () => {
+    const name = (await indexedDB.databases()).find(db => db.name.startsWith('sharebill-private-v1:'))?.name;
+    if (!name) return false;
+    return new Promise(resolve => {
+      const open = indexedDB.open(name);
+      open.onsuccess = () => {
+        const db = open.result, tx = db.transaction('data');
+        const read = tx.objectStore('data').getAll();
+        read.onsuccess = () => resolve(read.result.some(row => row.kind === 'overview'));
+        tx.oncomplete = () => db.close();
+      };
+    });
+  });
+  if (process.env.SHAREBILL_PWA_TEST === '1') await page.evaluate(async () => {
+    await navigator.serviceWorker.ready;
+    if (!navigator.serviceWorker.controller) await new Promise(resolve => navigator.serviceWorker.addEventListener('controllerchange', resolve, { once: true }));
+  });
+  await context.setOffline(true);
+  await page.evaluate(() => window.dispatchEvent(new Event('offline')));
+  // Recreate the snapshot format written by app versions before equal-group metadata was saved.
+  await page.evaluate(async () => {
+    const name = (await indexedDB.databases()).find(db => db.name.startsWith('sharebill-private-v1:')).name;
+    await new Promise((resolve, reject) => {
+      const open = indexedDB.open(name);
+      open.onsuccess = () => {
+        const db = open.result, tx = db.transaction('data', 'readwrite'), store = tx.objectStore('data');
+        const cursor = store.openCursor();
+        cursor.onsuccess = () => {
+          const entry = cursor.result;
+          if (!entry) return;
+          if (entry.value.kind === 'overview') {
+            const row = entry.value;
+            delete row.value.trip.sharingMode; delete row.value.trip.equalParticipantIds;
+            entry.update(row);
+          }
+          entry.continue();
+        };
+        tx.oncomplete = () => { db.close(); resolve(); };
+        tx.onabort = () => { db.close(); reject(tx.error); };
+      };
+    });
+  });
+  if (process.env.SHAREBILL_PWA_TEST === '1') await page.reload();
+  else {
+    await page.evaluate(() => { window.location.hash = 'tai-khoan'; });
+    await heading(page, 'Tài khoản');
+    await page.evaluate(url => { window.location.hash = new URL(url).hash; }, screen('tong-quan'));
+  }
+  await heading(page, 'Chưa có dữ liệu ngoại tuyến cho chuyến đi');
+  assert.equal(await page.getByRole('heading', { name: 'Tổng quan', exact: true }).count(), 0);
+  await context.setOffline(false);
+  await page.evaluate(() => window.dispatchEvent(new Event('online')));
+  await heading(page, 'Tổng quan');
+  await page.getByText('1 thành viên', { exact: true }).waitFor();
+});
+
 test('money screens keep equal shares, remaining debt, partial payments and reversals consistent', { timeout: 90000 }, async t => {
   const { page, session, trip, screen } = await fixture(t);
   const root = 'trips/' + trip.id;

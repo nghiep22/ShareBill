@@ -83,11 +83,13 @@ export function clearDeviceData(uid: string, tripId?: string) {
 export function saveTripSnapshot(scope: DeviceScope, value: TripOverview, at: number) {
   // Persist only display fields needed to review balances and draft an expense.
   const { id, name, startDate, endDate, status, ownerUid, moderationStatus, version, ledgerVersion,
-    timezone, participantCount, activeExpenseCount, totalExpenseMinor, pendingSettlementCount } = value.trip;
+    timezone, participantCount, activeExpenseCount, totalExpenseMinor, pendingSettlementCount,
+    myParticipantId, sharingMode, equalParticipantIds } = value.trip;
   return put(scope, 'overview', {
     trip: {
       id, name, startDate, endDate, status, ownerUid, moderationStatus, version, ledgerVersion, timezone,
       participantCount, activeExpenseCount, totalExpenseMinor, pendingSettlementCount, destination: null, note: null,
+      myParticipantId, sharingMode, equalParticipantIds,
     },
     participants: value.participants.map(({ id, displayName, status, linkedUid, version }) =>
       ({ id, displayName, status, linkedUid: linkedUid === scope.uid || linkedUid === ownerUid ? linkedUid : null, version })),
@@ -96,7 +98,12 @@ export function saveTripSnapshot(scope: DeviceScope, value: TripOverview, at: nu
   } satisfies TripOverview, at);
 }
 
-export const getTripSnapshot = (scope: DeviceScope) => get<TripOverview>(scope, 'overview');
+export async function getTripSnapshot(scope: DeviceScope) {
+  const snapshot = await get<TripOverview>(scope, 'overview');
+  // Older app versions omitted the sharing mode. Do not guess it for an open trip.
+  if (snapshot?.value.trip.status === 'active' && snapshot.value.trip.sharingMode === undefined) return;
+  return snapshot;
+}
 export const getExpenseDraft = (scope: DeviceScope) => get<ExpenseDraft>(scope, 'expense-new');
 export const saveExpenseDraft = (scope: DeviceScope, draft: ExpenseDraft) => put(scope, 'expense-new', draft);
 export const clearExpenseDraft = (scope: DeviceScope) =>
