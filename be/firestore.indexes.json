@@ -15,7 +15,9 @@
     { "collectionGroup": "maintenanceJobs", "queryScope": "COLLECTION", "fields": [{ "fieldPath": "status", "order": "ASCENDING" }, { "fieldPath": "availableAt", "order": "ASCENDING" }] },
     { "collectionGroup": "receipts", "queryScope": "COLLECTION_GROUP", "fields": [{ "fieldPath": "status", "order": "ASCENDING" }, { "fieldPath": "expiresAt", "order": "ASCENDING" }] },
     { "collectionGroup": "receipts", "queryScope": "COLLECTION_GROUP", "fields": [{ "fieldPath": "status", "order": "ASCENDING" }, { "fieldPath": "updatedAt", "order": "ASCENDING" }] },
-    { "collectionGroup": "receipts", "queryScope": "COLLECTION_GROUP", "fields": [{ "fieldPath": "status", "order": "ASCENDING" }, { "fieldPath": "processingLeaseUntil", "order": "ASCENDING" }] }
+    { "collectionGroup": "receipts", "queryScope": "COLLECTION_GROUP", "fields": [{ "fieldPath": "status", "order": "ASCENDING" }, { "fieldPath": "processingLeaseUntil", "order": "ASCENDING" }] },
+    { "collectionGroup": "settlements", "queryScope": "COLLECTION", "fields": [{ "fieldPath": "status", "order": "ASCENDING" }, { "fieldPath": "fromParticipantId", "order": "ASCENDING" }] },
+    { "collectionGroup": "settlements", "queryScope": "COLLECTION", "fields": [{ "fieldPath": "status", "order": "ASCENDING" }, { "fieldPath": "toParticipantId", "order": "ASCENDING" }] }
   ],
   "fieldOverrides": [
     { "collectionGroup": "expenses", "fieldPath": "note", "indexes": [] },
@@ -32,6 +34,8 @@
     { "collectionGroup": "operations", "fieldPath": "response", "indexes": [] },
     { "collectionGroup": "keys", "fieldPath": "responseSnapshot", "indexes": [] },
     { "collectionGroup": "supportTickets", "fieldPath": "message", "indexes": [] },
+    { "collectionGroup": "itinerary", "fieldPath": "activities", "indexes": [] },
+    { "collectionGroup": "itinerary", "fieldPath": "suggestions", "indexes": [] },
     { "collectionGroup": "internalNotes", "fieldPath": "message", "indexes": [] }
   ]
 }

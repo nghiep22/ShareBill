@@ -1,9 +1,21 @@
 import type { FastifyReply, FastifyRequest } from 'fastify';
 import { auth, db } from './firebase.js';
 import type { OperationOutcome } from './database/operation.js';
+import { failureCode } from './logging.js';
 
 export class ApiError extends Error {
   constructor(public status: number, public code: string, message: string) { super(message); }
+}
+
+export function tokenVerificationError(cause: unknown, invalidCode: 'UNAUTHENTICATED' | 'INVALID_REFRESH_TOKEN' = 'UNAUTHENTICATED'): ApiError {
+  const code = typeof cause === 'object' && cause !== null && 'code' in cause ? cause.code : undefined;
+  if (code === 'auth/user-disabled') return new ApiError(403, 'ACCOUNT_DISABLED', 'Tài khoản đang tạm khóa.');
+  if (code === 'auth/too-many-requests') return new ApiError(429, 'RATE_LIMITED', 'Thử lại sau ít phút.');
+  if (typeof code === 'string' && ['auth/id-token-expired', 'auth/id-token-revoked', 'auth/invalid-id-token',
+    'auth/argument-error', 'auth/invalid-argument', 'auth/user-not-found'].includes(code)) {
+    return new ApiError(401, invalidCode, 'Phiên đăng nhập không hợp lệ. Vui lòng đăng nhập lại.');
+  }
+  return new ApiError(503, 'AUTH_UNAVAILABLE', 'Không thể kết nối dịch vụ đăng nhập.');
 }
 
 export async function requireUser(request: FastifyRequest): Promise<string> {
@@ -11,7 +23,7 @@ export async function requireUser(request: FastifyRequest): Promise<string> {
   if (!token) throw new ApiError(401, 'UNAUTHENTICATED', 'Vui lòng đăng nhập.');
   let uid: string;
   try { uid = (await auth().verifyIdToken(token, true)).uid; }
-  catch { throw new ApiError(401, 'UNAUTHENTICATED', 'Phiên đăng nhập không hợp lệ.'); }
+  catch (cause) { throw tokenVerificationError(cause); }
   const user = await db().doc(`users/${uid}`).get();
   if (user.exists && user.get('status') === 'disabled') throw new ApiError(403, 'ACCOUNT_DISABLED', 'Tài khoản đang tạm khóa.');
   return uid;
@@ -47,9 +59,21 @@ export function sendOperationResult(reply: FastifyReply, { outcome, replayed }: 
 
 export function sendError(error: unknown, _request: FastifyRequest, reply: FastifyReply): void {
   if (error instanceof ApiError) {
+    if (error.status >= 500) reply.log.error({ event: 'http.request.failed', errorCode: failureCode(error) }, 'request failed');
     reply.status(error.status).send({ error: { code: error.code, message: error.message } });
     return;
   }
-  reply.log.error(error);
+  if (typeof error === 'object' && error !== null &&
+      'code' in error && (error.code === 'FST_ERR_CTP_INVALID_JSON_BODY' || error.code === 'FST_ERR_CTP_EMPTY_JSON_BODY')) {
+    reply.status(400).send({ error: { code: 'INVALID_JSON', message: 'Nội dung JSON không hợp lệ.' } });
+    return;
+  }
+  const statusCode = typeof error === 'object' && error !== null && 'statusCode' in error
+    ? error.statusCode : null;
+  if (typeof statusCode === 'number' && statusCode >= 400 && statusCode < 500) {
+    reply.status(statusCode).send({ error: { code: 'INVALID_REQUEST', message: 'Yêu cầu không hợp lệ.' } });
+    return;
+  }
+  reply.log.error({ event: 'http.request.failed', errorCode: failureCode(error) }, 'request failed');
   reply.status(500).send({ error: { code: 'INTERNAL_ERROR', message: 'Đã có lỗi. Vui lòng thử lại.' } });
 }

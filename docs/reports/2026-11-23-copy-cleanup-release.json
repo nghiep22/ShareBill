@@ -1,0 +1,13 @@
+{
+  "webCommit": "bee1fa4a481f825b21df428f397fbe3762db1bc1",
+  "webDeployment": "dpl_5TrG98p83vHjqMQHK9ge6SnSLyU3",
+  "webUrl": "https://sharebill-nghiep22.vercel.app",
+  "scope": "Remove instructional UI copy from balances, repayment, QR sharing, expenses and member screens; preserve controls, amounts, state, validation and handlers.",
+  "checks": {
+    "webBuildAndTypecheck": true,
+    "browserFlowsPassed": 7,
+    "mobileSharingScreenshotReviewed": true,
+    "canonicalReleaseAndPublishedCopyVerified": true
+  },
+  "testMaintenance": "Existing copy-based assertions now use status labels, allocation controls and state; financial assertions remain intact."
+}

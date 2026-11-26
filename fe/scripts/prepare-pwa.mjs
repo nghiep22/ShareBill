@@ -31,11 +31,34 @@ self.addEventListener('install', event => {
   event.waitUntil(caches.open(CACHE).then(cache => cache.addAll(ASSETS)));
 });
 
+let updateCheck;
+self.addEventListener('message', event => {
+  // Retain the explicit action understood by versions already deployed.
+  if (event.data?.type === 'ACTIVATE_UPDATE') event.waitUntil(self.skipWaiting());
+  if (event.data?.type === 'APPLY_UPDATE_WHEN_SAFE') {
+    updateCheck ??= (async () => {
+      const tabs = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
+      const ready = await Promise.all(tabs.map(tab => new Promise(resolve => {
+        const channel = new MessageChannel();
+        const finish = value => { clearTimeout(timer); channel.port1.close(); resolve(value); };
+        const timer = setTimeout(() => finish(false), 1500);
+        channel.port1.onmessage = event => finish(event.data?.ready === true);
+        tab.postMessage({ type: 'PWA_UPDATE_CHECK' }, [channel.port2]);
+      })));
+      if (ready.every(Boolean)) await self.skipWaiting();
+    })().finally(() => { updateCheck = undefined; });
+    event.waitUntil(updateCheck);
+  }
+});
+
 self.addEventListener('activate', event => {
   event.waitUntil(
-    caches.keys().then(keys => Promise.all(keys
-      .filter(key => key.startsWith('sharebill-shell-') && key !== CACHE)
-      .map(key => caches.delete(key))))
+    caches.keys().then(keys => {
+      // Keep one previous shell for a tab that starts editing during activation.
+      const previous = keys.filter(key => /^sharebill-shell-[a-f0-9]{16}$/.test(key) && key !== CACHE).at(-1);
+      return Promise.all(keys.filter(key => key.startsWith('sharebill-shell-') && key !== CACHE && key !== previous)
+        .map(key => caches.delete(key)));
+    })
       .then(() => self.clients.claim())
   );
 });
@@ -43,8 +66,13 @@ self.addEventListener('activate', event => {
 self.addEventListener('fetch', event => {
   const url = new URL(event.request.url);
   if (event.request.method !== 'GET' || url.origin !== self.location.origin) return;
-  if (event.request.mode === 'navigate' && url.pathname === '/') {
-    event.respondWith(caches.open(CACHE).then(cache => cache.match('/').then(response => response || fetch(event.request))));
+  if (event.request.mode === 'navigate' && (url.pathname === '/demo' || url.pathname === '/demo/')) {
+    event.respondWith(Promise.resolve(Response.redirect(self.location.origin + '/', 302)));
+    return;
+  }
+  const page = url.pathname;
+  if (event.request.mode === 'navigate' && page === '/') {
+    event.respondWith(caches.open(CACHE).then(cache => cache.match(page).then(response => response || fetch(event.request))));
   } else if (shell.has(url.pathname)) {
     event.respondWith(caches.open(CACHE).then(cache => cache.match(url.pathname).then(response => response || fetch(event.request))));
   }

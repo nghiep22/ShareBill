@@ -158,10 +158,12 @@ Hoàn thiện dữ liệu và hợp đồng API trước khi mở rộng nghiệ
 
 **Kiểm tra CSDL và đối soát ledger**
 
-- **Trạng thái** Chưa làm
+- **Trạng thái** Hoàn tất
 - **Phụ thuộc** [S03](#s03)
 - **Kết quả** Thêm checker CLI chỉ đọc để báo lỗi schema, liên kết, quyền owner và sai lệch giữa ledger với projection.
 - **Nghiệm thu** Fixture lỗi báo đúng mã, path và diff. Scan phân trang phát hiện ledger đổi giữa chừng. Xác minh checker chạy xong mà không ghi document.
+- **Đã làm** CLI `db:check` nhận project, UUID chuyến và kích thước trang; quét hồ sơ, chuyến, thành viên, liên kết, receipt, audit, operation và sổ tiền theo trang. Báo lỗi schema/FK/owner/balance, đối soát tổng chi, category, số dư và counters. Đọc lại root sau scan; nếu revision, ledgerVersion hoặc updateTime đổi thì thử lại một lần, sau đó báo `TRIP_CHANGED_DURING_SCAN` mà không công bố diff tạm. Checker chỉ đọc và không tự sửa dữ liệu.
+- **Bằng chứng** `pnpm check:be`, `pnpm test:be`, `pnpm --dir be build` và 9 bài Emulator đạt. Integration test kiểm fixture sạch (CLI exit 0), sáu diff cụ thể (exit 1), tham số sai (exit 2), liên kết thiếu, owner trùng, receipt sai và scan đổi ledger giữa hai trang. Fingerprint document trước/sau checker giống nhau. Chưa chạy checker với dữ liệu cloud; nghiệm thu hiện dựa trên Firebase Emulator.
 
 <details>
 <summary>Các bước và tiêu chí chi tiết</summary>
@@ -175,6 +177,8 @@ Hoàn thiện dữ liệu và hợp đồng API trước khi mở rộng nghiệ
 - **Việc làm** Kiểm schema, owner duy nhất, ba chiều link, balance thiếu, receipt reference; report mã lỗi/path; có scope project/trip và giới hạn trang.
 - **Kiểm thử** Fixture cố ý thiếu link/balance hoặc sai participant; xác nhận checker không ghi document.
 - **Hoàn tất khi** Bản ghi lỗi xuất report cụ thể; scan hoàn tất có summary và exit code cho CI/operator.
+- **Đã làm** `check-integrity.ts` kiểm schema v1, document ID, owner duy nhất, ba chiều membership/participant/link, profile/tripRef, balance và receipt claim. `check-database.ts` xuất JSON `summary` và danh sách issue có code/path/fields/relatedPath; exit 0 sạch, 1 có issue, 2 lỗi tham số/kết nối. CLI giới hạn `--page-size` 1–100 và có thể khoanh một chuyến bằng `--trip`.
+- **Bằng chứng** Emulator fixture thiếu link/balance, owner trùng, participant/receipt sai tạo đúng mã và đường dẫn; fingerprint Firestore trước/sau kiểm tra không đổi. CLI sạch và lỗi cho exit code đúng.
 
 <a id="d11"></a>
 
@@ -185,6 +189,8 @@ Hoàn thiện dữ liệu và hợp đồng API trước khi mở rộng nghiệ
 - **Việc làm** Đọc ledger theo trang; kiểm ledgerVersion và revision trước/sau; tính bằng domain; mismatch chỉ báo, không tự repair.
 - **Kiểm thử** Fixture đúng, projection sai, pending bị tính nhầm và ledger thay đổi trong lúc scan.
 - **Hoàn tất khi** Phát hiện diff đúng; bỏ snapshot đã thay đổi; không chỉnh amount/shares hay balance.
+- **Đã làm** `reconcile.ts` dựng lại số dư và counters từ expense/settlement hợp lệ, không tính pending vào số dư; checker so sánh với balance, tổng chi và category totals, signal. Root được đọc trước/sau scan phân trang, thử lại khi đổi và chỉ trả mã `TRIP_CHANGED_DURING_SCAN` nếu vẫn không ổn định.
+- **Bằng chứng** Emulator kiểm 6 sai lệch với expected/actual, pending settlement không làm đổi tiền, page size 1 và ledger đổi giữa lúc đọc. Khi dữ liệu đổi liên tục, report không chứa diff từ snapshot cũ.
 
 </details>
 
@@ -192,10 +198,12 @@ Hoàn thiện dữ liệu và hợp đồng API trước khi mở rộng nghiệ
 
 **Migration dữ liệu legacy**
 
-- **Trạng thái** Chưa làm
+- **Trạng thái** Hoàn tất trên Firebase Emulator; chưa chạy trên dữ liệu cloud theo kế hoạch local-first.
 - **Phụ thuộc** [S04](#s04)
 - **Kết quả** Xây runner có dry-run và checkpoint. Nâng metadata hồ sơ, chuyến, liên kết, khoản chi, trả nợ, projection, operation và audit.
 - **Nghiệm thu** Kiểm dry-run/apply/rerun và chạy tiếp sau crash. Giữ nguyên lịch sử tiền, key chống trùng và dữ liệu nguồn. Báo trường thiếu căn cứ hoặc projection lệch.
+- **Đã làm** `db:migrate` mặc định dry-run, yêu cầu project và hai Emulator; `--apply` chỉ ghi vào Firestore Emulator. Bảy migration DBM-001–007 chạy lần lượt, checkpoint theo document, lease/checksum/project guard. Metadata thiếu được thêm có kiểm schema; xung đột liên kết, tổng shares và projection lệch là lỗi chặn. Operation không suy được request giữ nguyên và được báo `LEGACY_OPERATION_RETAINED`; audit cũ giữ nguyên, có baseline riêng và `LEGACY_AUDIT_EVENT`. Job có ngoại lệ mang trạng thái `completed_with_exceptions`; báo cáo `completed` chỉ nghĩa là đã quét hết scope, cần đọc `exceptions` và `failed` trước khi coi dữ liệu đạt schema v1.
+- **Kiểm chứng** `pnpm check:be`, bộ test Emulator `migration-users.emulator.test.ts` và `migration-slices.emulator.test.ts`: dry-run không ghi, lease tranh chấp, sai project, ngắt giữa chừng rồi resume, rerun, profile disabled/mất Auth, owner link thiếu, UID/link mâu thuẫn, removed membership, invalid shares, void/confirmed, balance/signal/counter lệch, retry key trước/sau migration, operation thiếu response và audit baseline. CLI dry-run cả collection group đã chạy trên Emulator.
 
 <details>
 <summary>Các bước và tiêu chí chi tiết</summary>
@@ -276,10 +284,12 @@ Hoàn thiện dữ liệu và hợp đồng API trước khi mở rộng nghiệ
 
 **Phân trang và hợp đồng API cho frontend**
 
-- **Trạng thái** Chưa làm
+- **Trạng thái** Hoàn tất trên Firebase Emulator; query cloud kiểm ở S18.
 - **Phụ thuộc** [S05](#s05)
 - **Kết quả** Dùng cursor chung cho chuyến, khoản chi, trả nợ và hoạt động. Bổ sung tra kết quả operation sau timeout và hợp đồng HTTP khác origin.
 - **Nghiệm thu** Kiểm nhiều trang, filter, cursor stale, actor đã mất quyền và key legacy. Preflight cho `If-Match` và lỗi HTTP hoạt động theo hợp đồng. Query cloud được kiểm ở S18.
+- **Đã làm** Cursor HMAC có hạn 24 giờ, khóa theo UID/chuyến/bộ lọc/sort/revision; giới hạn 20 tripRefs hoặc 50 bản ghi tài chính/hoạt động mỗi trang. Trips đọc `tripRefs` active, kiểm membership hiện tại, trả `nextCursor` kể cả trang lọc rỗng. Expense hỗ trợ status, khoảng ngày, một trong category/payer; settlement hỗ trợ status; activity chỉ xuất DTO allowlist. `GET /operations/:key` trả kết quả tối thiểu sau kiểm quyền hiện tại, gồm key legacy. API xuất `ETag`, `X-Request-Id`, `Cache-Control: private, no-store`, CORS allowlist và lỗi JSON ổn định. `CURSOR_SIGNING_SECRET` bắt buộc ngoài Emulator khi cần phân trang.
+- **Kiểm chứng** Unit test ký/tamper/scope/revision; Emulator tạo 23 chuyến với `joinedAt` trùng, trang đầu bị lọc rỗng, membership mất quyền; 32 settlements cùng `createdAt`, expense lọc ngày/danh mục, activity legacy có trường riêng tư, cursor stale sau mutation, tra operation của người khác và sau mất quyền. HTTP test GET/POST/PATCH preflight, origin lạ, header và JSON lỗi. Các composite query mới chưa smoke trên Firestore cloud.
 
 <details>
 <summary>Các bước và tiêu chí chi tiết</summary>

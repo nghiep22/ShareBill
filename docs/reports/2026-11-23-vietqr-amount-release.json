@@ -1,0 +1,24 @@
+{
+  "webCommit": "bb99407528223c6063f6181078bb8c42f9b5d1d0",
+  "webDeployment": "dpl_2gmPhMQTmSTCGeq7eypHszqX6kvf",
+  "webUrl": "https://sharebill-nghiep22.vercel.app",
+  "apiCommit": "11b870a551ba700d0600d093f2ab16c5b5fd898b",
+  "imageStorage": "private-vercel-blob",
+  "checks": {
+    "webBuild": true,
+    "backendTypecheck": true,
+    "vietqrUnitTests": 26,
+    "browserMoneyAndPaymentFlows": true,
+    "downloadedPngIndependentlyDecoded": true,
+    "originalRecipientRetained": true,
+    "oldQrAmountReplacedWithAmountDue": true,
+    "unreadableSourceFallbackAndRetry": true,
+    "liveExistingUploadedQrDecoded": true,
+    "liveDownloadButtonAndAmountVisible": true,
+    "liveLedgerUnmodified": true,
+    "webReleaseCommitAndApiHealth": true,
+    "bankApplicationScanTested": false
+  },
+  "supportedSource": "ASCII NAPAS VietQR account transfer (QRIBFTTA), VND, validated CRC and unambiguous recipient. Other sources retain the original image with manual amount instructions.",
+  "generation": "Local browser decoding and PNG generation; no third-party QR service or additional image upload."
+}

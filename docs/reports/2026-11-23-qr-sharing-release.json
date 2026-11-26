@@ -1,0 +1,21 @@
+{
+  "webCommit": "57c31038c800906231d61700aab3dcf77a294d97",
+  "webDeployment": "dpl_DQJLn9udnzSvnwFWh9VxPXoysqn7",
+  "webUrl": "https://sharebill-nghiep22.vercel.app",
+  "amountSource": "Current validated server settlement suggestions after advances and confirmed transfers; not the original expense share.",
+  "sharing": "One named PNG per payer, bank VietQR with amount, native file sharing with manual PNG download/text copy fallback for Zalo.",
+  "checks": {
+    "webBuild": true,
+    "vietqrUnitTests": 26,
+    "browserFlowsPassed": 4,
+    "sharePngBankAndRemainingAmountIndependentlyDecoded": true,
+    "nativeShareMockReceivedExactDownloadedPng": true,
+    "unsupportedFileSharingFallback": true,
+    "clipboardTextContainsNoAuthOrSignedImageUrls": true,
+    "pendingPairRequiresReview": true,
+    "sharingCreatesNoSettlements": true,
+    "canonicalReleaseCommitAndPublishedAssets": true,
+    "actualZaloGroupDeliveryTested": false
+  },
+  "limits": "Zalo availability in the device share sheet depends on the device. The user selects the destination/group; no external message was sent by the agent. Downloading a PNG and copying its accompanying text remains available."
+}

@@ -1,0 +1,8 @@
+[
+  {
+    "origin": ["http://localhost:3000", "https://sharebill-nghiep22.vercel.app"],
+    "method": ["POST", "GET", "HEAD"],
+    "responseHeader": ["Content-Type", "Content-Length", "Cache-Control", "ETag"],
+    "maxAgeSeconds": 300
+  }
+]

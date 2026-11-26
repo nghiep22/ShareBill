@@ -1,0 +1,34 @@
+{
+  "deployedCommit": "11b870a551ba700d0600d093f2ab16c5b5fd898b",
+  "environment": "staging",
+  "webUrl": "https://sharebill-nghiep22.vercel.app",
+  "apiUrl": "https://sharebill-api-staging.vercel.app",
+  "deployments": {
+    "api": "dpl_DTvsfG1hHQG36Azhr1a9SPZkQ5pZ",
+    "web": "dpl_HCPakXzo4JJEGJgxbe8sUGf6GUgM"
+  },
+  "storage": {
+    "provider": "vercel-blob",
+    "store": "sharebill-private-images",
+    "region": "sin1",
+    "access": "private",
+    "plan": "hobby",
+    "cloudflareR2Activated": false
+  },
+  "releaseChecksPassed": true,
+  "qrPaymentChecks": {
+    "passed": true,
+    "provider": "vercel-blob",
+    "tripId": "ef36e751-f2e5-4548-a0dc-2cdc1312ea2f",
+    "checks": [
+      "private QR upload/finalize/save/view",
+      "pending duplicates blocked",
+      "transfer evidence view",
+      "recipient confirmation settles balances",
+      "browser PUT CORS preflight",
+      "synthetic trip archived"
+    ],
+    "browserQrCardVisible": true
+  },
+  "verifiedAt": "2026-11-20T09:22:17.460Z"
+}

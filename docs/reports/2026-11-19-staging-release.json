@@ -1,0 +1,43 @@
+{
+  "deployedCommit": "5256b3f58d98a81c5384f6262d911af14f01951e",
+  "githubRun": {
+    "id": 44444811607,
+    "headSha": "5256b3f58d98a81c5384f6262d911af14f01951e",
+    "status": "completed",
+    "conclusion": "success",
+    "url": "https://github.com/nghiep22/ShareBill/actions/runs/44444811607",
+    "jobs": [
+      {
+        "name": "backend",
+        "status": "completed",
+        "conclusion": "success"
+      },
+      {
+        "name": "frontend",
+        "status": "completed",
+        "conclusion": "success"
+      }
+    ]
+  },
+  "deployments": [
+    {
+      "service": "api",
+      "id": "dpl_AAhxgefpYhjXS8xZrDEvFpxjetLQ",
+      "url": "https://sharebill-api-staging.vercel.app"
+    },
+    {
+      "service": "web",
+      "id": "dpl_eEzhoQhQC4UFgduU2m8EHy67ATvr",
+      "url": "https://sharebill-nghiep22.vercel.app"
+    }
+  ],
+  "vercelPlan": "hobby",
+  "firebaseProjectId": "sharebill-staging",
+  "firebaseBillingEnabled": false,
+  "remaining": [
+    "Google provider and verified operator journey",
+    "Receipt bucket signing/IAM/CORS/expiry",
+    "Physical-device and usability acceptance",
+    "S19/S20 worker scheduling, backup/restore and rollback rehearsal"
+  ]
+}

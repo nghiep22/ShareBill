@@ -1,0 +1,36 @@
+{
+  "target": "staging",
+  "commit": "5256b3f58d98a81c5384f6262d911af14f01951e",
+  "viewport": {
+    "width": 390,
+    "height": 844
+  },
+  "startedAt": "2026-11-19T02:35:16.296Z",
+  "passed": true,
+  "checks": [
+    {
+      "name": "register-through-mobile-ui",
+      "passed": true
+    },
+    {
+      "name": "create-trip-and-expense-through-ui",
+      "passed": true
+    },
+    {
+      "name": "archive-through-ui",
+      "passed": true
+    },
+    {
+      "name": "sign-out-and-sign-in-through-ui",
+      "passed": true
+    },
+    {
+      "name": "api-money-lifecycle-on-same-release",
+      "passed": true
+    }
+  ],
+  "pageErrors": 0,
+  "failedApiRequests": [],
+  "tripId": "84efe977-d52b-4d6d-b3b8-5fe06f6a1793",
+  "finishedAt": "2026-11-19T02:36:23.902Z"
+}

@@ -8,6 +8,7 @@ export type Balance = {
   sentMinor: number;
   receivedMinor: number;
   netMinor: number;
+  allocatedOwedMinor?: number;
 };
 
 export const MAX_AMOUNT_MINOR = 1_000_000_000_000;
@@ -53,6 +54,12 @@ export function assertAmount(amount: number): void {
 
 export function splitEqual(amount: number, participantIds: string[]): Share[] {
   assertAmount(amount);
+  return splitGroupTotal(amount, participantIds);
+}
+
+/** Aggregate trip totals can exceed the cap of one expense; the remainder is allocated once for the entire group. */
+export function splitGroupTotal(amount: number, participantIds: string[]): Share[] {
+  if (!Number.isSafeInteger(amount) || amount < 0) throw new Error('INVALID_AMOUNT');
   const ids = [...participantIds].sort();
   if (ids.length === 0 || ids.length > 50 || new Set(ids).size !== ids.length) {
     throw new Error('INVALID_PARTICIPANTS');
@@ -65,6 +72,29 @@ export function splitEqual(amount: number, participantIds: string[]): Share[] {
     participantId,
     amountMinor: Number(base + (BigInt(index) < remainder ? 1n : 0n)),
   }));
+}
+
+export function equalGroupBalances(rows: Balance[], total: number, participantIds: string[], paidDeltas = new Map<string, number>(), allocatedDeltas = new Map<string, number>()): Balance[] {
+  const ids = new Set(rows.map(row => row.participantId));
+  if (ids.size !== rows.length || participantIds.some(id => !ids.has(id)) || [...paidDeltas.keys(), ...allocatedDeltas.keys()].some(id => !ids.has(id))) throw new Error('BALANCE_INVARIANT_FAILED');
+  const allocated = new Map(rows.map(row => {
+    const value = (row.allocatedOwedMinor ?? 0) + (allocatedDeltas.get(row.participantId) ?? 0);
+    if (!Number.isSafeInteger(value) || value < 0) throw new Error('BALANCE_INVARIANT_FAILED');
+    return [row.participantId, value];
+  }));
+  const allocatedTotal = [...allocated.values()].reduce((sum, value) => sum + BigInt(value), 0n);
+  if (!Number.isSafeInteger(total) || allocatedTotal > BigInt(total)) throw new Error('BALANCE_INVARIANT_FAILED');
+  const owed = new Map(splitGroupTotal(total - Number(allocatedTotal), participantIds).map(row => [row.participantId, row.amountMinor]));
+  const next = rows.map(row => {
+    const paidMinor = row.paidMinor + (paidDeltas.get(row.participantId) ?? 0), fixed = allocated.get(row.participantId)!;
+    const owedMinor = (owed.get(row.participantId) ?? 0) + fixed;
+    const value = { ...row, ...(fixed || row.allocatedOwedMinor !== undefined ? { allocatedOwedMinor: fixed } : {}),
+      paidMinor, owedMinor, netMinor: paidMinor - owedMinor + row.sentMinor - row.receivedMinor };
+    return applyBalanceDelta(value, { paidMinor: 0, owedMinor: 0, netMinor: 0 });
+  });
+  if (next.reduce((sum, row) => sum + BigInt(row.paidMinor), 0n) !== BigInt(total) ||
+      next.reduce((sum, row) => sum + BigInt(row.sentMinor) - BigInt(row.receivedMinor), 0n) !== 0n) throw new Error('BALANCE_INVARIANT_FAILED');
+  return next;
 }
 
 export function validateExact(amount: number, shares: Share[]): Share[] {
@@ -113,4 +143,23 @@ export function applyBalanceDelta(balance: Balance, delta: { paidMinor: number; 
     throw new Error('BALANCE_INVARIANT_FAILED');
   }
   return next;
+}
+
+export function applyAllocatedDelta(balance: Balance, delta = 0): Balance {
+  const allocatedOwedMinor = (balance.allocatedOwedMinor ?? 0) + delta;
+  if (!Number.isSafeInteger(allocatedOwedMinor) || allocatedOwedMinor < 0 || allocatedOwedMinor > balance.owedMinor) throw new Error('BALANCE_INVARIANT_FAILED');
+  return allocatedOwedMinor || balance.allocatedOwedMinor !== undefined ? { ...balance, allocatedOwedMinor } : balance;
+}
+
+export type ExpenseContribution = { amountMinor: number; payerParticipantId: string; shares: Share[] };
+
+/** Combine both contributions before applying any balance, including overlapping payer/share IDs. */
+export function expenseChangeDelta(previous: ExpenseContribution, next: ExpenseContribution) {
+  const deltas = expenseDelta(previous.amountMinor, previous.payerParticipantId, previous.shares, -1);
+  for (const [id, value] of expenseDelta(next.amountMinor, next.payerParticipantId, next.shares, 1)) {
+    const old = deltas.get(id) ?? { paidMinor: 0, owedMinor: 0, netMinor: 0 };
+    deltas.set(id, { paidMinor: old.paidMinor + value.paidMinor,
+      owedMinor: old.owedMinor + value.owedMinor, netMinor: old.netMinor + value.netMinor });
+  }
+  return deltas;
 }

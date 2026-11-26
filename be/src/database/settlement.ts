@@ -8,6 +8,7 @@ export const settlementInput = z.strictObject({
   occurredOn: z.iso.date(),
   note: z.string().trim().max(1000).nullable().default(null),
   basedOnLedgerVersion: z.number().int().nonnegative().safe(),
+  receiptIds: z.array(z.uuid()).max(3).refine(ids => new Set(ids).size === ids.length).optional(),
 });
 
 export const settlementDocumentSchema = z.strictObject({
@@ -21,6 +22,7 @@ export const settlementDocumentSchema = z.strictObject({
   note: z.string().max(1000).nullable(),
   status: z.enum(['pending', 'confirmed', 'cancelled', 'void']),
   basedOnLedgerVersion: z.number().int().nonnegative().safe(),
+  receiptIds: z.array(z.uuid()).max(3).refine(ids => new Set(ids).size === ids.length).default([]),
   version: z.number().int().min(1).safe(),
   createdBy: z.string().min(1),
   createdAt: z.instanceof(Timestamp),
@@ -63,6 +65,7 @@ export function createSettlementDocument(input: {
     toParticipantId: body.toParticipantId, amountMinor: body.amountMinor, currency: 'VND',
     occurredOn: body.occurredOn, note: body.note, status: 'pending',
     basedOnLedgerVersion: body.basedOnLedgerVersion, version: 1,
+    receiptIds: body.receiptIds ?? [],
     createdBy: actorUid, createdAt: now, updatedAt: now,
     confirmedBy: null, confirmedAt: null, confirmationMode: null,
     cancelledBy: null, cancelledAt: null,

@@ -1,0 +1,60 @@
+{
+  "schemaVersion": 1,
+  "kind": "restore_rehearsal",
+  "target": "isolated-emulators",
+  "passed": true,
+  "runId": "92eca2b9-00e7-4e6a-adf4-2d1c9e16badc",
+  "completedAt": "2026-11-20T02:52:32.506Z",
+  "scope": [
+    "auth",
+    "firestore-default",
+    "storage",
+    "rules",
+    "indexes"
+  ],
+  "backup": {
+    "files": 9,
+    "bytes": 46634,
+    "digest": "d8bbd26e9f01e939fee19500d0e348479c05ed84335ee9ad085926b7c35dcfed"
+  },
+  "configFiles": {
+    "firestore.rules": "7bff2de50c73415a3b12a6783f42ff621b1b04803ffc4e2634e6ba68e5d655f9",
+    "firestore.indexes.json": "2cde3850661092a7676f36b2c6c5168afa15dd2dea30ada3ff097ca8844bc82b",
+    "storage.rules": "e94f45742f17861aa5fcbe41d068a1eb26083869de93139c45f37fa82608082f"
+  },
+  "counts": {
+    "firestoreDocuments": 53,
+    "authUsers": 5,
+    "receiptObjects": 1,
+    "trips": 1
+  },
+  "checks": {
+    "documentInventory": true,
+    "authInventory": true,
+    "passwordLogin": true,
+    "disabledAccount": true,
+    "ledger": true,
+    "memberAccess": true,
+    "outsiderDenied": true,
+    "googleGuard": true,
+    "operationReplay": true,
+    "receiptReference": true,
+    "receiptGeneration": true,
+    "receiptBytes": true,
+    "firestoreRules": true,
+    "storageRules": true,
+    "projectionRepair": true,
+    "googleLogin": true,
+    "adminAccess": true,
+    "internalNotesPrivate": true
+  },
+  "checkerIssues": 0,
+  "lostFixtureWrites": 0,
+  "timing": {
+    "totalMs": 37608,
+    "exportStageMs": 18952,
+    "restoreAndVerificationMs": 18604,
+    "recoveryPointAgeMs": 1432
+  },
+  "limitation": "Synthetic local rehearsal; no production RPO/RTO or cloud backup claim."
+}

@@ -1,0 +1,90 @@
+{
+  "checkedAt": "2026-11-25T07:18:25.540Z",
+  "webUrl": "https://sharebill-nghiep22.vercel.app",
+  "apiUrl": "https://sharebill-api-staging.vercel.app",
+  "commit": "83f321a773f0b239ee97169689217ab25107dcb4",
+  "apiDeployment": "dpl_HHaXBfx1acd3AgQHqSf6JwojLtsv",
+  "webDeployment": "dpl_7tnzSNztx9BBa92z2ivs526KqbgW",
+  "schedule": {
+    "cronUtc": "0 20 * * *",
+    "timeZone": "Asia/Ho_Chi_Minh",
+    "localWindow": "03:00–03:59",
+    "firstAutomaticRunObserved": false
+  },
+  "localTests": {
+    "unitHttp": 188,
+    "adminAndWorkerEmulator": 17,
+    "adminBrowser": 1,
+    "typecheckAndBuild": true
+  },
+  "checks": {
+    "sameReleaseOnWebAndApi": true,
+    "schedulerContractPublished": true,
+    "rejectsUnauthenticatedSpoofedAndWrongScopeRequests": true,
+    "authenticatedWorkerCompleted": true,
+    "repeatDoesNotRunWorkersAgain": true,
+    "syntheticAuthMoneyAndArchiveSmoke": true,
+    "cronEnabledOnProject": true
+  },
+  "scope": "Protected manual worker invocation, aggregate results and ordinary synthetic app smoke. No repair, deletion, backup, operator grant or external messages.",
+  "invocation": {
+    "httpStatus": 200,
+    "status": "succeeded",
+    "summary": {
+      "authScanned": 24,
+      "authQueued": 0,
+      "authProcessed": 0,
+      "authErrors": 0,
+      "ledgerProcessed": 1,
+      "ledgerIssues": 0,
+      "ledgerScanErrors": 0,
+      "ledgerState": "queued"
+    }
+  },
+  "smoke": {
+    "passed": true,
+    "checks": [
+      {
+        "name": "api-release",
+        "passed": true
+      },
+      {
+        "name": "web-release",
+        "passed": true
+      },
+      {
+        "name": "web-admin-shell",
+        "passed": true
+      },
+      {
+        "name": "cors-versioned-commands",
+        "passed": true
+      },
+      {
+        "name": "unauthenticated-guards",
+        "passed": true
+      },
+      {
+        "name": "login-refresh-admin-deny",
+        "passed": true
+      },
+      {
+        "name": "create-isolated-trip",
+        "passed": true
+      },
+      {
+        "name": "expense-replay-and-ledger",
+        "passed": true
+      },
+      {
+        "name": "expense-index-and-cursor",
+        "passed": true
+      },
+      {
+        "name": "settle-and-archive",
+        "passed": true
+      }
+    ],
+    "tripId": "bbf1da6c-a24c-4367-a10e-aeb62c124cbb"
+  }
+}

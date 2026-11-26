@@ -1,0 +1,27 @@
+{
+  "checkedAt": "2026-11-25T03:18:59.417Z",
+  "webUrl": "https://sharebill-nghiep22.vercel.app",
+  "apiUrl": "https://sharebill-api-staging.vercel.app",
+  "webCommit": "85b4c19820c5addc92a2fdff1d0a65a3a4227668",
+  "webDeployment": "dpl_EHcrh3sbbSSVuZRv1oL37pNYivxF",
+  "checks": {
+    "canonicalRelease": true,
+    "emptyInvoiceSectionVisible": true,
+    "invoiceBeforeQrAndResponsive3203901280": true,
+    "realBlobUploadFinalizeAndPreview": true,
+    "receiptAttachedToExistingExpense": true,
+    "financialFieldsPreserved": true,
+    "invoiceOpensAfterReload": true,
+    "noBrowserErrors": true,
+    "syntheticExpenseVoided": true,
+    "syntheticTripArchived": true
+  },
+  "localTests": {
+    "invoiceBrowserJourneys": 2,
+    "typecheck": true,
+    "productionBuild": true
+  },
+  "scope": "Isolated synthetic group expense and generated test invoice. Real Blob upload/finalize/view; no real user trips or external messages modified.",
+  "apiCommit": "f936eaaceed74501033e477015aa747c8ef5f4e3",
+  "tripId": "70e24d90-d648-4ddd-8a2b-79bc98718c05"
+}

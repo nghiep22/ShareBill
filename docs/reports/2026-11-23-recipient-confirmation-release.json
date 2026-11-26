@@ -1,0 +1,27 @@
+{
+  "deployedCommit": "39ba5c8fee654663780b194db526d91c4f9cf1c0",
+  "deployments": {
+    "api": "dpl_EuESAE9MYLcfBZntJN7pNL5ujPAS",
+    "web": "dpl_81Bnk84DyLrhDZ7TbQAEJphv5zZt"
+  },
+  "webUrl": "https://sharebill-nghiep22.vercel.app",
+  "apiUrl": "https://sharebill-api-staging.vercel.app",
+  "behavior": {
+    "ownerReceivingOwnManualEntry": "recipient",
+    "ownerConfirmingForDifferentRecipient": "owner_on_behalf",
+    "memberSelfConfirmationRestrictionPreserved": true,
+    "liveSettlementsConfirmedOrRewritten": false
+  },
+  "checks": {
+    "backendTypecheckAndBuild": true,
+    "frontendBuild": true,
+    "backendEmulatorTestsPassed": 24,
+    "browserFlowsPassed": 2,
+    "recipientRolePersistedInAuditAndReplay": true,
+    "repeatedConfirmationChangesBalancesOnce": true,
+    "proofVisibilityAndRecipientPermissions": true,
+    "bothCanonicalReleaseCommitsMatched": true,
+    "apiHealth": "ok"
+  },
+  "note": "Vercel's function compiler repeats Firestore namespace type warnings also present in the previous API deployment; local backend typecheck/build and the deployed API health check pass."
+}

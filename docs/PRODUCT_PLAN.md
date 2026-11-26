@@ -1,5 +1,7 @@
 # ShareBill — Kế hoạch sản phẩm và kiến trúc
 
+**Bổ sung 20/11/2026:** thành viên tải QR nhận tiền; người chuyển lưu ảnh và báo đã chuyển; người nhận xem bằng chứng và xác nhận trước khi giảm công nợ. Xem [luồng thanh toán](PAYMENTS.md).
+
 Phiên bản đặc tả: 1.0 · Ngày: 16/11/2026 · Trạng thái: đề xuất triển khai.
 
 **Cập nhật cấu trúc:** theo yêu cầu mới, `fe/` và `be/` tách thư mục. Backend đã bắt đầu bằng Fastify/Node.js + Firebase; React frontend/admin sẽ triển khai sau. Sơ đồ Next.js Route Handlers trong phần kiến trúc là thiết kế ban đầu và được thay bằng Fastify API riêng ở implementation. Xem [README](../README.md).
@@ -104,7 +106,7 @@ Giới hạn P0: tối đa50 participants và50 tài khoản từng được th�
 | Hủy hiệu lực settlement confirmed | Có, bắt buộc lý do | Không | Không |
 | Đổi chủ nhóm, archive/reopen | Có | Không | Không |
 
-Tất cả quyền ghi còn phụ thuộc trạng thái chuyến `active`. Giao diện ẩn/disable thao tác không thay thế kiểm tra ở API. Người nhận không được tự xác nhận nếu cùng tài khoản đã tạo đề nghị; owner có thể ghi nhận thay nhưng phải thấy cảnh báo và audit.
+Tất cả quyền ghi còn phụ thuộc trạng thái chuyến `active`. Giao diện ẩn/disable thao tác không thay thế kiểm tra ở API. Member không được tự xác nhận đề nghị do cùng tài khoản tạo. Owner là người nhận thì xác nhận với vai trò `recipient`, kể cả khoản thủ công do chính owner ghi nhận; owner xác nhận cho người nhận khác dùng `owner_on_behalf`, có cảnh báo và audit.
 
 ### 4.2. Những ràng buộc về thành viên
 

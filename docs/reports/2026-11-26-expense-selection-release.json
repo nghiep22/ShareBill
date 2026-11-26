@@ -1,0 +1,151 @@
+{
+  "checkedAt": "2026-11-26T07:38:40.571Z",
+  "commit": "5801c47230e322cdd0fb15f0295fede0437a12e6",
+  "webUrl": "https://sharebill-nghiep22.vercel.app",
+  "apiUrl": "https://sharebill-api-staging.vercel.app",
+  "ciUrl": "https://github.com/nghiep22/ShareBill/actions/runs/45776092830",
+  "checks": {
+    "sameReleaseAndReadOnlySmoke": true,
+    "contractPublished": true,
+    "uiSelectionSavedAndLegacyExpenseNotRewritten": true,
+    "realPrivateQrUploadAndAttach": true,
+    "decodedBillQr350000AndTripQr775000": true,
+    "responsive3203901280": true,
+    "newMemberNotChargedForSelectedExpenses": true,
+    "exactSplitEditPersisted": true,
+    "noBrowserErrors": true,
+    "syntheticAuthMoneyReplaySettlementAndArchive": true,
+    "syntheticExpensesVoidedQrReleasedAndTripArchived": true,
+    "canonicalAliasesServeExpectedDeployments": true,
+    "maintenanceCronEnabledOnCurrentApiDeployment": true,
+    "temporaryVerificationCredentialsRemoved": true
+  },
+  "example": {
+    "groupMembers": 3,
+    "expenseMinor": 700000,
+    "selectedPeople": 2,
+    "billShareMinor": 350000,
+    "wholeTripDebtMinor": 775000
+  },
+  "tests": {
+    "unitHttp": 247,
+    "emulator": 101,
+    "browser": 35,
+    "pwaUpdates": 5,
+    "smokeTools": 10,
+    "isolatedRestoreRehearsal": true
+  },
+  "scope": "Isolated synthetic accounts, trip and expenses. Real private Blob upload/view and QR download/decoding. No real-user trip migration, bank transfer, message, grant or reset email.",
+  "compatibility": "Existing expenses keep their original aggregate group calculation. After selected-scope records exist, retain an API/worker that understands sharingScope and allocatedOwedMinor; use a compatible rollback or forward fix.",
+  "remaining": [
+    "Physical iOS/Android acceptance",
+    "Real Zalo delivery not exercised"
+  ],
+  "apiDeployment": "dpl_9mn81twQBg4V6D3uHi9G31EqkMjB",
+  "webDeployment": "dpl_8XFAua8mP36e85mkLVq7MpfHNEmJ",
+  "tripId": "fb74502c-44f5-45cb-8191-698b7b1fb553",
+  "smoke": {
+    "passed": true,
+    "checks": [
+      {
+        "name": "api-release",
+        "passed": true
+      },
+      {
+        "name": "web-release",
+        "passed": true
+      },
+      {
+        "name": "web-admin-shell",
+        "passed": true
+      },
+      {
+        "name": "cors-versioned-commands",
+        "passed": true
+      },
+      {
+        "name": "unauthenticated-guards",
+        "passed": true
+      },
+      {
+        "name": "login-refresh-admin-deny",
+        "passed": true
+      },
+      {
+        "name": "create-isolated-trip",
+        "passed": true
+      },
+      {
+        "name": "expense-replay-and-ledger",
+        "passed": true
+      },
+      {
+        "name": "expense-index-and-cursor",
+        "passed": true
+      },
+      {
+        "name": "settle-and-archive",
+        "passed": true
+      }
+    ],
+    "tripId": "763d96d5-2887-488b-a845-4b014703b561"
+  },
+  "completedAt": "2026-11-26T07:41:30.203Z",
+  "ci": {
+    "url": "https://github.com/nghiep22/ShareBill/actions/runs/45776092830",
+    "status": "completed",
+    "conclusion": "success",
+    "headSha": "5801c47230e322cdd0fb15f0295fede0437a12e6",
+    "jobs": [
+      {
+        "name": "recovery",
+        "conclusion": "success"
+      },
+      {
+        "name": "backend",
+        "conclusion": "success"
+      },
+      {
+        "name": "frontend",
+        "conclusion": "success"
+      }
+    ],
+    "unitHttp": 247,
+    "emulator": 101,
+    "browser": 35,
+    "pwaUpdates": 5,
+    "smokeTools": 10,
+    "isolatedRestoreRehearsal": true
+  },
+  "candidateChecks": {
+    "api": {
+      "candidateId": "dpl_9mn81twQBg4V6D3uHi9G31EqkMjB",
+      "commit": "5801c47230e322cdd0fb15f0295fede0437a12e6",
+      "releaseAndGuardsPassed": true,
+      "canonicalStillPreviousRelease": true
+    },
+    "web": {
+      "candidateId": "dpl_8XFAua8mP36e85mkLVq7MpfHNEmJ",
+      "commit": "5801c47230e322cdd0fb15f0295fede0437a12e6",
+      "releaseAndGuardsPassed": true,
+      "canonicalStillPreviousRelease": true
+    }
+  },
+  "previousDeployments": {
+    "api": "dpl_GNR93PEky1QqYCnY3nS4KhiXF6JS",
+    "web": "dpl_H7ra3mWsg42zp3uwMH4DWpHtCG6Z",
+    "note": "Historical pointers only. Do not roll the API back to these pre-feature builds after selected-scope data has been written."
+  },
+  "schedule": {
+    "cronUtc": "0 20 * * *",
+    "localWindowVietnam": "03:00–03:59",
+    "automaticRunAfterThisReleaseObserved": false
+  },
+  "verificationNotes": [
+    "Candidate release manifests, private route guards, web shells and safe service-worker update protocol passed before promotion.",
+    "Only synthetic fixtures were written; legacy expense data was compared before/after without migration.",
+    "Both downloaded QR images were decoded to check the bill amount (350000 VND) and whole-trip debt (775000 VND). No bank transfer was made.",
+    "Temporary candidate protection-bypass credentials were revoked. Existing deployment protection stays enabled.",
+    "Cloud browser checks use desktop Chromium at 320/390/1280px; physical devices and real Zalo delivery remain separate acceptance gates."
+  ]
+}

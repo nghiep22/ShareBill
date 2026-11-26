@@ -1,17 +1,21 @@
 import type { FastifyInstance } from 'fastify';
+import { planReceiptAttachments, applyReceiptAttachments } from './services/receipt-attachments.js';
 import { randomUUID } from 'node:crypto';
 import { FieldValue, Timestamp } from 'firebase-admin/firestore';
 import { z } from 'zod';
 import { auth, db } from './firebase.js';
 import { ApiError, operationKey, requireTripAccess, requireUser, sendOperationResult } from './http.js';
 import { tripInput, participantInput, expenseInput } from './schemas.js';
-import { splitEqual, validateExact, expenseDelta, applyBalanceDelta, applyExpenseTotals, type Balance } from './domain/money.js';
+import { splitEqual, validateExact, expenseDelta, applyAllocatedDelta, applyBalanceDelta, applyExpenseTotals, type Balance, type Share } from './domain/money.js';
 import { ensureUserProfileDocument } from './services/user-profile.js';
 import { createTripDocuments } from './database/trip.js';
 import { createParticipantDocuments } from './database/participant.js';
 import { createExpenseDocument } from './database/expense.js';
 import { createAuditEvent } from './database/audit.js';
-import { createOperationDocument, readOperationResult } from './database/operation.js';
+import { createOperationDocument, readOperationResult, readOperationSnapshot } from './database/operation.js';
+import { readTripActor } from './services/trip-access.js';
+import type { releaseIdentity } from './release.js';
+import { allocatedExpenseDelta, isGroupEqual, projectGroup, readGroupLedger, writeGroupBalances } from './services/group-sharing.js';
 
 function parse<T>(schema: { safeParse: (value: unknown) => { success: true; data: T } | { success: false } }, body: unknown): T {
   const result = schema.safeParse(body);
@@ -24,8 +28,11 @@ function params(value: unknown): { tripId: string } {
   if (!result.success) throw new ApiError(404, 'NOT_FOUND', 'Không tìm thấy chuyến đi.');
   return result.data;
 }
-export async function registerRoutes(app: FastifyInstance): Promise<void> {
-  app.get('/health', async () => ({ status: 'ok', service: 'sharebill-be' }));
+export async function registerRoutes(app: FastifyInstance, release: ReturnType<typeof releaseIdentity>): Promise<void> {
+  app.get('/health', async (_request, reply) => {
+    reply.header('Cache-Control', 'no-store');
+    return { status: 'ok', service: 'sharebill-be', release };
+  });
 
   app.post('/api/v1/trips', async (request, reply) => {
     const uid = await requireUser(request);
@@ -39,7 +46,7 @@ export async function registerRoutes(app: FastifyInstance): Promise<void> {
     const store = db();
     const opRef = store.doc(`users/${uid}/operations/${key}`);
     const result = await store.runTransaction(async tx => {
-      const [op, user] = await Promise.all([tx.get(opRef), tx.get(store.doc(`users/${uid}`))]);
+      const [op, user] = await Promise.all([readOperationSnapshot(tx, opRef), tx.get(store.doc(`users/${uid}`))]);
       if (identity.disabled || (user.exists && user.get('status') !== 'active')) {
         throw new ApiError(403, 'ACCOUNT_DISABLED', 'Tài khoản đang tạm khóa.');
       }
@@ -55,8 +62,8 @@ export async function registerRoutes(app: FastifyInstance): Promise<void> {
       const now = Timestamp.now();
       const profile = ensureUserProfileDocument(tx, user, identity, now);
       const initial = createTripDocuments({
-        tripId, participantId, auditEventId, ownerUid: uid, ownerName: body.ownerName,
-        actorDisplayNameSnapshot: profile.displayName, name: body.name, operationKey: key, now,
+        ...body, tripId, participantId, auditEventId, ownerUid: uid,
+        actorDisplayNameSnapshot: profile.displayName, operationKey: key, now,
       });
       tx.create(store.doc(`trips/${tripId}`), initial.trip);
       tx.create(store.doc(`trips/${tripId}/memberships/${uid}`), initial.membership);
@@ -75,15 +82,21 @@ export async function registerRoutes(app: FastifyInstance): Promise<void> {
     return sendOperationResult(reply, result);
   });
 
+  app.get('/api/v1/trips/:tripId/signal', async request => {
+    const uid = await requireUser(request), { tripId } = params(request.params);
+    const store = db(), tripRef = store.doc(`trips/${tripId}`);
+    return store.runTransaction(async tx => {
+      const { trip } = await readTripActor(tx, tripRef, uid);
+      return { data: { revision: trip.get('revision') } };
+    }, { readOnly: true });
+  });
+
   app.get('/api/v1/trips/:tripId/overview', async request => {
     const uid = await requireUser(request);
     const { tripId } = params(request.params);
     const store = db();
     return store.runTransaction(async tx => {
-      const membership = await tx.get(store.doc(`trips/${tripId}/memberships/${uid}`));
-      if (!membership.exists || membership.get('status') !== 'active') throw new ApiError(404, 'NOT_FOUND', 'Không tìm thấy chuyến đi.');
-      const trip = await tx.get(store.doc(`trips/${tripId}`));
-      if (!trip.exists) throw new ApiError(404, 'NOT_FOUND', 'Không tìm thấy chuyến đi.');
+      const { trip } = await readTripActor(tx, store.doc(`trips/${tripId}`), uid);
       const [participants, balances] = await Promise.all([
         tx.get(store.collection(`trips/${tripId}/participants`)),
         tx.get(store.collection(`trips/${tripId}/balances`)),
@@ -110,7 +123,7 @@ export async function registerRoutes(app: FastifyInstance): Promise<void> {
       const opRef = store.doc(`users/${uid}/operations/${key}`);
       const tripRef = store.doc(`trips/${tripId}`);
       const [op, member, trip, user] = await Promise.all([
-        tx.get(opRef), tx.get(store.doc(`trips/${tripId}/memberships/${uid}`)), tx.get(tripRef), tx.get(store.doc(`users/${uid}`)),
+        readOperationSnapshot(tx, opRef), tx.get(store.doc(`trips/${tripId}/memberships/${uid}`)), tx.get(tripRef), tx.get(store.doc(`users/${uid}`)),
       ]);
       requireTripAccess(member, trip);
       if (user.get('status') === 'disabled') throw new ApiError(403, 'ACCOUNT_DISABLED', 'Tài khoản đang tạm khóa.');
@@ -118,6 +131,7 @@ export async function registerRoutes(app: FastifyInstance): Promise<void> {
       if (replay) return { outcome: replay, replayed: true };
       if (member.get('role') !== 'owner') throw new ApiError(403, 'FORBIDDEN', 'Chỉ chủ nhóm có thể thêm người.');
       if (trip.get('status') !== 'active' || trip.get('moderationStatus') !== 'normal') throw new ApiError(409, 'TRIP_NOT_WRITABLE', 'Chuyến đi đang khóa thao tác.');
+      if (isGroupEqual(trip)) throw new ApiError(422, 'GROUP_SHARING_AUTOMATIC', 'Mời tài khoản vào nhóm để tự tham gia chia đều.');
       if (trip.get('participantCount') >= 50) throw new ApiError(422, 'TRIP_LIMIT_REACHED', 'Chuyến đi đã đủ 50 người.');
       const now = Timestamp.now();
       const revision = trip.get('revision') + 1;
@@ -149,36 +163,44 @@ export async function registerRoutes(app: FastifyInstance): Promise<void> {
     const key = operationKey(request);
     const { tripId } = params(request.params);
     const body = parse(expenseInput, request.body);
-    if (body.receiptIds.length) throw new ApiError(422, 'RECEIPTS_UNAVAILABLE', 'Chưa thể đính kèm ảnh hóa đơn.');
-    let shares;
-    try { shares = body.splitMethod === 'equal' ? splitEqual(body.amountMinor, body.split.participantIds) : validateExact(body.amountMinor, body.split.shares); }
+    let requestedShares: Share[];
+    try { requestedShares = body.splitMethod === 'equal' ? splitEqual(body.amountMinor, body.split.participantIds) : validateExact(body.amountMinor, body.split.shares); }
     catch (error) { throw new ApiError(422, error instanceof Error ? error.message : 'INVALID_SPLIT', 'Cách chia tiền chưa hợp lệ.'); }
     // Empty receiptIds was absent from requests before D05; preserve their operation hash.
     const command = { method: request.method, canonicalPath: `/api/v1/trips/${tripId}/expenses`, body,
       legacyBody: { ...body, receiptIds: undefined } };
     const expenseId = randomUUID();
     const auditEventId = randomUUID();
+    const receiptAuditIds = Array.from({ length: 3 }, () => randomUUID());
     const store = db();
     const result = await store.runTransaction(async tx => {
       const opRef = store.doc(`users/${uid}/operations/${key}`);
       const tripRef = store.doc(`trips/${tripId}`);
-      const participantIds = [...new Set([body.payerParticipantId, ...shares.map(x => x.participantId)])];
+      const requestedIds = [...new Set([body.payerParticipantId, ...requestedShares.map(x => x.participantId)])];
       const [op, trip, member, user, ...participantSnaps] = await Promise.all([
-        tx.get(opRef), tx.get(tripRef), tx.get(store.doc(`trips/${tripId}/memberships/${uid}`)), tx.get(store.doc(`users/${uid}`)),
-        ...participantIds.map(id => tx.get(store.doc(`trips/${tripId}/participants/${id}`))),
+        readOperationSnapshot(tx, opRef), tx.get(tripRef), tx.get(store.doc(`trips/${tripId}/memberships/${uid}`)), tx.get(store.doc(`users/${uid}`)),
+        ...requestedIds.map(id => tx.get(store.doc(`trips/${tripId}/participants/${id}`))),
       ]);
       requireTripAccess(member, trip);
       if (user.get('status') === 'disabled') throw new ApiError(403, 'ACCOUNT_DISABLED', 'Tài khoản đang tạm khóa.');
       const replay = readOperationResult(op.data(), command, uid, tripId);
       if (replay) return { outcome: replay, replayed: true };
       if (trip.get('status') !== 'active' || trip.get('moderationStatus') !== 'normal') throw new ApiError(409, 'TRIP_NOT_WRITABLE', 'Chuyến đi đang khóa thao tác.');
+      const group = isGroupEqual(trip) ? await readGroupLedger(tx, trip) : undefined;
+      if (group) {
+        if (!body.sharingScope && body.splitMethod !== 'equal') throw new ApiError(422, 'GROUP_EQUAL_SHARING_REQUIRED', 'Chọn người chia để nhập phần riêng.');
+        if (!group.ids.includes(body.payerParticipantId)) throw new ApiError(422, 'INVALID_PARTICIPANTS', 'Người ứng tiền phải đang ở trong nhóm.');
+        if (body.sharingScope && requestedShares.some(share => !group.ids.includes(share.participantId))) throw new ApiError(422, 'INVALID_PARTICIPANTS', 'Chọn người chia đang ở trong nhóm.');
+      }
+      const shares = group && !body.sharingScope ? splitEqual(body.amountMinor, group.ids) : requestedShares;
+      const participantIds = [...new Set([body.payerParticipantId, ...shares.map(row => row.participantId)])];
       const expenseCount = trip.get('expenseCountAllTime'), activeExpenseCount = trip.get('activeExpenseCount');
       if (!Number.isSafeInteger(expenseCount) || !Number.isSafeInteger(activeExpenseCount) ||
           expenseCount < 0 || activeExpenseCount < 0 || activeExpenseCount > expenseCount) {
         throw new ApiError(409, 'PROJECTION_INVARIANT_FAILED', 'Số đếm chuyến chưa sẵn sàng.');
       }
       if (expenseCount >= 2000) throw new ApiError(422, 'TRIP_LIMIT_REACHED', 'Chuyến đi đã đạt giới hạn khoản chi.');
-      if (participantSnaps.some(p => !p.exists || p.get('status') !== 'active')) throw new ApiError(422, 'INVALID_PARTICIPANTS', 'Có người chưa thuộc chuyến đi hoặc đã ngừng tham gia.');
+      if (!group && participantSnaps.some(p => !p.exists || p.get('status') !== 'active')) throw new ApiError(422, 'INVALID_PARTICIPANTS', 'Có người chưa thuộc chuyến đi hoặc đã ngừng tham gia.');
       let totals;
       try { totals = applyExpenseTotals(trip.get('totalExpenseMinor'), trip.get('categoryTotalsMinor'), body.category, body.amountMinor, 1); }
       catch { throw new ApiError(409, 'PROJECTION_INVARIANT_FAILED', 'Thống kê chuyến chưa sẵn sàng.'); }
@@ -186,21 +208,27 @@ export async function registerRoutes(app: FastifyInstance): Promise<void> {
       const balanceSnaps = await Promise.all([...deltas.keys()].map(id => tx.get(store.doc(`trips/${tripId}/balances/${id}`))));
       if (balanceSnaps.some(snapshot => !snapshot.exists)) throw new ApiError(409, 'PROJECTION_INVARIANT_FAILED', 'Số dư chuyến chưa sẵn sàng.');
       const now = Timestamp.now();
-      const nextBalances = [...deltas].map(([, delta], index) => ({
-        ...applyBalanceDelta(balanceSnaps[index]!.data() as Balance, delta), updatedAt: now,
+      const allocatedDeltas = allocatedExpenseDelta(undefined, { ...body, shares });
+      const nextBalances = group ? projectGroup(group, totals.totalExpenseMinor, group.ids, new Map([[body.payerParticipantId, body.amountMinor]]), allocatedDeltas) : [...deltas].map(([, delta], index) => ({
+        ...applyAllocatedDelta(applyBalanceDelta(balanceSnaps[index]!.data() as Balance, delta), allocatedDeltas.get(balanceSnaps[index]!.id)), updatedAt: now,
       }));
       const revision = trip.get('revision') + 1;
       const ledgerVersion = trip.get('ledgerVersion') + 1;
       if (!Number.isSafeInteger(revision) || !Number.isSafeInteger(ledgerVersion)) {
         throw new ApiError(409, 'PROJECTION_INVARIANT_FAILED', 'Phiên bản chuyến chưa sẵn sàng.');
       }
-      const document = createExpenseDocument({ id: expenseId, body, shares, actorUid: uid, now });
-      const response = { id: expenseId, ...body, currency: 'VND', splitInput: body.split, shares, status: 'active', version: 1 };
+      const effectiveBody = group && !body.sharingScope && body.splitMethod === 'equal' ? { ...body, split: { participantIds: group.ids } } : body;
+      const document = createExpenseDocument({ id: expenseId, body: effectiveBody, shares, actorUid: uid, now });
+      const receiptPlans = await planReceiptAttachments(tx, tripRef, expenseId, uid, body.receiptIds, [], now);
+      const response = { id: expenseId, ...effectiveBody, currency: 'VND', splitInput: effectiveBody.split, shares, status: 'active', version: 1 };
       tx.create(store.doc(`trips/${tripId}/expenses/${expenseId}`), document);
-      nextBalances.forEach(b => tx.set(store.doc(`trips/${tripId}/balances/${b.participantId}`), b));
-      participantSnaps.forEach((snapshot, index) => {
-        if (snapshot?.get('hasLedgerReferences') !== true) {
-          tx.update(store.doc(`trips/${tripId}/participants/${participantIds[index]}`), { hasLedgerReferences: true, updatedAt: now });
+      applyReceiptAttachments(tx, tripRef, receiptPlans, { uid, displayName: user.get('displayName'), key,
+        auditIds: receiptAuditIds, revision, ledgerVersion, now });
+      if (group) writeGroupBalances(tx, trip, nextBalances, now);
+      else nextBalances.forEach(b => tx.set(store.doc(`trips/${tripId}/balances/${b.participantId}`), b));
+      participantIds.forEach((id, index) => {
+        if ((group ? group.participants.get(id)?.hasLedgerReferences : participantSnaps[index]?.get('hasLedgerReferences')) !== true) {
+          tx.update(store.doc(`trips/${tripId}/participants/${id}`), { hasLedgerReferences: true, updatedAt: now });
         }
       });
       tx.update(tripRef, { expenseCountAllTime: expenseCount + 1, activeExpenseCount: activeExpenseCount + 1,
@@ -210,6 +238,7 @@ export async function registerRoutes(app: FastifyInstance): Promise<void> {
         eventId: auditEventId, actorUid: uid, actorDisplayNameSnapshot: user.get('displayName'),
         action: 'expense.created', entityType: 'expense', entityId: expenseId, before: null,
         after: { id: expenseId, amountMinor: body.amountMinor, payerParticipantId: body.payerParticipantId,
+          ...(body.sharingScope && { sharingScope: body.sharingScope }),
           shares, status: 'active', version: 1 }, reason: null,
         revision, ledgerVersion, operationKey: key, createdAt: now,
       }));

@@ -87,6 +87,13 @@ async function checkMemberships(
   participants: Documents, links: Documents, validateProfiles: boolean,
 ) {
   const owners = [...members.values()].filter(member => member.get('role') === 'owner' && member.get('status') === 'active');
+  if (trip.get('sharingMode') === 'group-equal' && trip.get('status') === 'active') {
+    const expected = [...members.values()].filter(member => member.get('status') === 'active').map(member => member.get('participantId')).sort();
+    const stored = trip.get('equalParticipantIds');
+    if (!Array.isArray(stored) || expected.some(id => !id) || JSON.stringify([...stored].sort()) !== JSON.stringify(expected)) {
+      issues.push({ code: 'GROUP_MEMBERSHIP_MISMATCH', path: trip.ref.path, fields: ['equalParticipantIds'] });
+    }
+  }
   if (owners.length !== 1 || owners[0]?.id !== trip.get('ownerUid') ||
       !entityId.safeParse(owners[0]?.get('participantId')).success) {
     issues.push({ code: 'OWNER_INVARIANT_FAILED', path: trip.ref.path, fields: ['ownerUid'] });
@@ -133,17 +140,20 @@ async function checkMemberships(
   }
 }
 
-function checkReceipts(trip: Snapshot, expenses: Documents, receipts: Documents, issues: IntegrityIssue[]) {
-  for (const expense of expenses.values()) {
-    const ids: unknown = expense.get('receiptIds');
+function checkReceipts(trip: Snapshot, expenses: Documents, settlements: Documents, participants: Documents, receipts: Documents, issues: IntegrityIssue[]) {
+  for (const target of [...expenses.values(), ...settlements.values(), ...participants.values()]) {
+    const participant = target.ref.parent.id === 'participants';
+    const attachment = participant ? 'attachedParticipantId' : target.ref.parent.id === 'settlements' ? 'attachedSettlementId' : 'attachedExpenseId';
+    const field = participant ? 'paymentQrReceiptId' : 'receiptIds';
+    const ids: unknown = participant ? [target.get(field)].filter(Boolean) : target.get(field);
     if (!Array.isArray(ids)) continue;
     for (const receiptId of new Set(ids)) {
       if (!entityId.safeParse(receiptId).success) continue;
       const receipt = receipts.get(receiptId);
       const relatedPath = `${trip.ref.path}/receipts/${receiptId}`;
-      if (!receipt) issues.push({ code: 'RECEIPT_MISSING', path: expense.ref.path, relatedPath, fields: ['receiptIds'] });
-      else if (receipt.get('tripId') !== trip.id || receipt.get('status') !== 'attached' || receipt.get('attachedExpenseId') !== expense.id) {
-        issues.push({ code: 'RECEIPT_CLAIM_MISMATCH', path: expense.ref.path, relatedPath, fields: ['receiptIds'] });
+      if (!receipt) issues.push({ code: 'RECEIPT_MISSING', path: target.ref.path, relatedPath, fields: [field] });
+      else if (receipt.get('tripId') !== trip.id || receipt.get('status') !== 'attached' || receipt.get(attachment) !== target.id) {
+        issues.push({ code: 'RECEIPT_CLAIM_MISMATCH', path: target.ref.path, relatedPath, fields: [field] });
       }
     }
   }
@@ -152,10 +162,13 @@ function checkReceipts(trip: Snapshot, expenses: Documents, receipts: Documents,
       issues.push({ code: 'RECEIPT_TRIP_MISMATCH', path: receipt.ref.path, fields: ['tripId'] });
     }
     const expenseId = receipt.get('attachedExpenseId');
-    const refs: unknown = expenses.get(expenseId)?.get('receiptIds');
+    const settlementId = receipt.get('attachedSettlementId'), participantId = receipt.get('attachedParticipantId');
+    const refs: unknown = settlementId ? settlements.get(settlementId)?.get('receiptIds') : participantId ?
+      [participants.get(participantId)?.get('paymentQrReceiptId')] : expenses.get(expenseId)?.get('receiptIds');
     const attached = receipt.get('status') === 'attached';
-    if (attached ? !Array.isArray(refs) || !refs.includes(receipt.id) : expenseId != null) {
-      issues.push({ code: 'RECEIPT_CLAIM_MISMATCH', path: receipt.ref.path, fields: ['attachedExpenseId'] });
+    if (attached ? !Array.isArray(refs) || !refs.includes(receipt.id) : [expenseId, settlementId, participantId].some(id => id != null)) {
+      issues.push({ code: 'RECEIPT_CLAIM_MISMATCH', path: receipt.ref.path,
+        fields: [settlementId ? 'attachedSettlementId' : participantId ? 'attachedParticipantId' : 'attachedExpenseId'] });
     }
   }
 }
@@ -217,7 +230,13 @@ function checkLedger(
     issues.push({ code: 'RECONCILIATION_SKIPPED', path: trip.ref.path });
     return;
   }
-  const result = reconcileLedger(participants.keys(), expenseRows, settlementRows);
+  const equalIds = trip.get('sharingMode') === 'group-equal' ? trip.get('equalParticipantIds') : undefined;
+  if (trip.get('sharingMode') === 'group-equal' && (!Array.isArray(equalIds) || !equalIds.length || equalIds.length > 50 ||
+      new Set(equalIds).size !== equalIds.length || equalIds.some(id => !participants.has(id)))) {
+    issues.push({ code: 'GROUP_SHARING_INVARIANT_FAILED', path: trip.ref.path, fields: ['equalParticipantIds'] });
+    return;
+  }
+  const result = reconcileLedger(participants.keys(), expenseRows, settlementRows, equalIds);
   for (const [field, value] of Object.entries(result.counts)) compareNumber(trip, field, value, issues);
   compareNumber(trip, 'totalExpenseMinor', result.totalExpenseMinor, issues);
   for (const category of EXPENSE_CATEGORIES) {
@@ -226,6 +245,7 @@ function checkLedger(
   for (const [id, expected] of result.balances) {
     const balance = balances.get(id);
     if (balance) for (const field of balanceFields) compareNumber(balance, field, expected[field], issues);
+    if (balance && (balance.get('allocatedOwedMinor') !== undefined || expected.allocatedOwedMinor !== undefined)) compareNumber(balance, 'allocatedOwedMinor', expected.allocatedOwedMinor ?? 0, issues);
   }
 }
 
@@ -279,8 +299,8 @@ async function inspectTrip(store: Store, trip: Snapshot, pageSize: number, valid
   }
 
   await checkMemberships(store, trip, pageSize, issues, members.documents, participants.documents, links.documents, validateProfiles);
-  // An over-limit expense query cannot prove that a receipt's expense is missing.
-  if (expenses.complete) checkReceipts(trip, expenses.documents, receipts.documents, issues);
+  // Over-limit ledger queries cannot prove that a receipt's target is missing.
+  if (expenses.complete && settlements.complete) checkReceipts(trip, expenses.documents, settlements.documents, participants.documents, receipts.documents, issues);
   checkLedger(trip, participants.documents, expenses.documents, settlements.documents, balances.documents,
     expenses.complete && settlements.complete, issues);
   await checkAudit(store, trip, pageSize, issues);

@@ -1,0 +1,15 @@
+# Deploy the monorepo source; keep local state, credentials and reference designs out.
+.git
+**/node_modules
+**/.next
+**/out
+**/dist
+**/.vercel
+**/.maintenance
+**/.sites-preview
+**/.env
+**/.env.*
+**/*service-account*.json
+**/*debug.log
+**/*.tsbuildinfo
+GiaoDien

@@ -1,5 +1,7 @@
 # ShareBill — Đặc tả Frontend
 
+**Bổ sung 20/11/2026:** [Luồng QR và ảnh chuyển khoản](PAYMENTS.md) đã bổ sung vào Số dư, Thành viên và Lịch sử chuyển tiền.
+
 Phiên bản 1.0 · 16/11/2026 · Đọc cùng [Product](PRODUCT_PLAN.md), [Backend](BACKEND.md), [CI/CD](CICD_DEPLOY.md).
 
 **Cập nhật cấu trúc:** frontend React/Next.js và website quản trị sẽ nằm trong `fe/`; API Node.js/Fastify nằm trong `be/`. Các đoạn Route Handler cùng repo ở dưới là phác thảo ban đầu, cần thay bằng API base URL của backend khi triển khai FE. Xem [backend đang chạy](../be/README.md).
