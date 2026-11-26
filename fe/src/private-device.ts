@@ -1,15 +1,9 @@
 import type { TripOverview } from './api-data';
-import type { Category } from './model';
 import { baseUrl } from './api-client';
+import { isExpenseDraft, isTripSnapshot, readPrivateRecord, type DeviceScope, type ExpenseDraft, type PrivateRecord } from './private-record';
 
-export type ExpenseDraft = {
-  fields: { title: string; date: string; category: Category; note: string };
-  amount: string; payer: string; mode: 'equal' | 'exact'; selected: string[];
-  exact: Record<string, string>;
-};
-type PrivateRecord = { uid: string; tripId: string; kind: 'overview' | 'expense-new'; at: number };
-export type DeviceScope = { uid: string; tripId: string };
-const maxAge = 24 * 60 * 60_000;
+export type { DeviceScope, ExpenseDraft } from './private-record';
+const ioTimeout = 5_000;
 const storage = 'data';
 
 export const preferenceKey = (uid: string) => 'sharebill-trusted-device:' + encodeURIComponent(baseUrl()) + ':' + uid;
@@ -24,14 +18,33 @@ export function setTrustedDevice(uid: string, enabled: boolean) {
 
 function openDatabase() {
   return new Promise<IDBDatabase>((resolve, reject) => {
-    const open = indexedDB.open('sharebill-private-v1:' + baseUrl(), 1);
+    let settled = false;
+    const fail = (cause: unknown) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      reject(cause);
+    };
+    const timer = setTimeout(() => fail(new Error('Private storage timed out')), ioTimeout);
+    let open: IDBOpenDBRequest;
+    try { open = indexedDB.open('sharebill-private-v1:' + baseUrl(), 1); }
+    catch (cause) { fail(cause); return; }
     open.onupgradeneeded = () => {
+      if (settled) { open.transaction?.abort(); return; }
       const store = open.result.createObjectStore(storage, { keyPath: ['uid', 'tripId', 'kind'] });
       store.createIndex('account', 'uid');
       store.createIndex('trip', ['uid', 'tripId']);
     };
-    open.onsuccess = () => resolve(open.result);
-    open.onerror = () => reject(open.error);
+    open.onsuccess = () => {
+      const db = open.result;
+      if (settled) { db.close(); return; }
+      settled = true;
+      clearTimeout(timer);
+      db.onversionchange = () => db.close();
+      resolve(db);
+    };
+    open.onerror = () => fail(open.error);
+    open.onblocked = () => fail(new Error('Private storage is blocked'));
   });
 }
 
@@ -40,29 +53,33 @@ async function transaction(mode: IDBTransactionMode, run: (store: IDBObjectStore
   try {
     await new Promise<void>((resolve, reject) => {
       const tx = db.transaction(storage, mode);
-      tx.oncomplete = () => resolve();
-      tx.onabort = () => reject(tx.error);
+      const timer = setTimeout(() => {
+        try { tx.abort(); } catch { /* The transaction may already have finished. */ }
+        reject(new Error('Private storage timed out'));
+      }, ioTimeout);
+      tx.oncomplete = () => { clearTimeout(timer); resolve(); };
+      tx.onabort = () => { clearTimeout(timer); reject(tx.error); };
       try { run(tx.objectStore(storage)); }
-      catch (cause) { tx.abort(); reject(cause); }
+      catch (cause) { clearTimeout(timer); tx.abort(); reject(cause); }
     });
   } finally { db.close(); }
 }
 
-async function get<T>(scope: DeviceScope, kind: PrivateRecord['kind']) {
+async function get<T>(scope: DeviceScope, kind: PrivateRecord<T>['kind'], valid: (value: unknown) => value is T) {
   if (!trustedDevice(scope.uid)) return;
-  let entry: (PrivateRecord & { value: T }) | undefined;
-  await transaction('readonly', store => {
+  let entry: PrivateRecord<T> | undefined;
+  // Validate and discard in one transaction, so another tab's newer save cannot be deleted.
+  await transaction('readwrite', store => {
     const request = store.get([scope.uid, scope.tripId, kind]);
-    request.onsuccess = () => { entry = request.result; };
+    request.onsuccess = () => {
+      entry = readPrivateRecord(request.result, scope, kind, valid);
+      if (request.result !== undefined && !entry) store.delete([scope.uid, scope.tripId, kind]);
+    };
   });
-  if (entry && Date.now() - entry.at >= maxAge) {
-    await transaction('readwrite', store => { store.delete([scope.uid, scope.tripId, kind]); });
-    return;
-  }
   return entry && trustedDevice(scope.uid) ? entry : undefined;
 }
 
-async function put<T>(scope: DeviceScope, kind: PrivateRecord['kind'], value: T, at = Date.now()) {
+async function put<T>(scope: DeviceScope, kind: PrivateRecord<T>['kind'], value: T, at = Date.now()) {
   if (!trustedDevice(scope.uid)) return;
   await transaction('readwrite', store => {
     if (trustedDevice(scope.uid)) store.put({ ...scope, kind, at, value });
@@ -98,13 +115,8 @@ export function saveTripSnapshot(scope: DeviceScope, value: TripOverview, at: nu
   } satisfies TripOverview, at);
 }
 
-export async function getTripSnapshot(scope: DeviceScope) {
-  const snapshot = await get<TripOverview>(scope, 'overview');
-  // Older app versions omitted the sharing mode. Do not guess it for an open trip.
-  if (snapshot?.value.trip.status === 'active' && snapshot.value.trip.sharingMode === undefined) return;
-  return snapshot;
-}
-export const getExpenseDraft = (scope: DeviceScope) => get<ExpenseDraft>(scope, 'expense-new');
+export const getTripSnapshot = (scope: DeviceScope) => get(scope, 'overview', (value): value is TripOverview => isTripSnapshot(value, scope));
+export const getExpenseDraft = (scope: DeviceScope) => get(scope, 'expense-new', isExpenseDraft);
 export const saveExpenseDraft = (scope: DeviceScope, draft: ExpenseDraft) => put(scope, 'expense-new', draft);
 export const clearExpenseDraft = (scope: DeviceScope) =>
   transaction('readwrite', store => { store.delete([scope.uid, scope.tripId, 'expense-new']); });

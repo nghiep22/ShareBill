@@ -26,6 +26,8 @@ Mở ứng dụng khi có mạng để service worker lưu giao diện. Trong T�
 
 Snapshot giữ cách chia đều, danh sách thành viên được chia và danh tính của người đang xem, nên nhóm vẫn hiển thị đúng khi mở lại ngoại tuyến. Khi có mạng, form dùng danh sách thành viên mới nhất trước khi người dùng lưu. Bản cache của phiên bản cũ thiếu cách chia sẽ yêu cầu kết nối lại để tải dữ liệu; app không tự đoán cách chia từ bản cache đó.
 
+App kiểm cấu trúc và tính nhất quán của cache trước khi khôi phục. Bản sai tài khoản/chuyến, hỏng, quá 24 giờ hoặc có mốc lưu ở tương lai được bỏ qua. Mỗi bước mở/truy cập IndexedDB chờ tối đa 5 giây; khi bộ nhớ bị kẹt hoặc hết dung lượng, bản đang nhập vẫn ở tab và có hướng dẫn giữ tab mở. Lỗi dọn nháp sau khi server đã lưu không làm kẹt thao tác lưu khoản chi.
+
 App tự kiểm phiên bản mới mỗi phút khi đang mở và kiểm lại khi có mạng hoặc quay về ứng dụng. Bản mới tự áp dụng và tải lại khi các tab ShareBill không có nội dung đang nhập, giao dịch đang lưu hoặc hộp thoại đang mở; không hiện thông báo yêu cầu cập nhật. Sau khi lưu hoặc rời form, app tự tiếp tục cập nhật. Tab còn chạy phiên bản cũ cần bấm **Cập nhật** một lần hoặc đóng hết tab ShareBill rồi mở lại để nhận cơ chế này. Khi thử trên điện thoại, phục vụ thư mục `fe/out` qua HTTPS. Khi quay lại dev, worker tại `public/sw.js` gỡ worker production cũ sau khi trình duyệt cập nhật worker.
 
 ## Tích hợp backend
@@ -33,6 +35,8 @@ App tự kiểm phiên bản mới mỗi phút khi đang mở và kiểm lại k
 Backend nằm trong `../be`. Hợp đồng API của người dùng và quản trị nằm ở [BACKEND.md](../docs/BACKEND.md) và [ADMIN_WEB.md](../docs/ADMIN_WEB.md).
 
 Giao diện chính gọi REST cho tài khoản, chuyến đi, thành viên, lời mời, chi tiêu, quyết toán, lịch trình, hỗ trợ và lịch sử. Nhóm mới tự chia tổng chi cho các tài khoản đang trong nhóm, kể cả chi phí trước khi họ tham gia; không cần liên kết hay chọn lại từng khoản. Sửa tên/ghi chú của khoản cũ giữ nguyên dữ liệu tiền, kể cả sau khi người ứng rời nhóm. [Quy tắc chia tổng chi](../docs/GROUP_SHARING.md). Phiên đăng nhập được lưu trong `sessionStorage` của tab. Trên localhost, API mặc định dùng cổng 3001. Đặt `NEXT_PUBLIC_SHAREBILL_API_URL` khi build nếu cần chỉ định API khác.
+
+Phản hồi của phiên cũ bị bỏ qua sau khi đăng xuất hoặc đăng nhập lại, kể cả cùng tài khoản. Refresh token trong cùng phiên vẫn giữ các request hợp lệ đang chạy. Giao dịch chưa rõ kết quả giữ khóa trong nhật ký của tài khoản ban đầu để kiểm tra hoặc gửi lại. Nếu trình duyệt chặn lưu trữ, đăng nhập và retry vẫn dùng bộ nhớ trong tab; giữ tab mở tới khi xác định được kết quả.
 
 Trong **Lịch trình**, chủ chuyến thêm, sửa, xóa hoạt động và duyệt đề xuất. Thành viên có quyền truy cập chuyến xem lịch trình và đề xuất điểm đến. Mở **Trợ giúp và báo lỗi** từ **Tài khoản**, hoặc mở **Báo lỗi về chuyến đi** trong cài đặt chuyến để kèm ngữ cảnh. Người gửi tra mã và trạng thái trong **Báo lỗi của tôi**. Operator xử lý tại `/admin`. [Hướng dẫn quản trị](../be/README.md#quản-trị)
 
@@ -44,7 +48,11 @@ Trên điện thoại, thanh dưới mở Tổng quan, Chi tiêu, Số dư và T
 
 ## Kiểm thử trình duyệt và quản trị
 
-`pnpm --dir fe test:browser` có 28 hành trình bằng Playwright với frontend cổng 3000, API 3001 và Emulator 8080/9099, gồm bố cục 320–1280px, điều hướng, Auth, lịch trình, luồng tiền, hóa đơn, QR lời mời/chia sẻ, quản trị và nháp ngoại tuyến. Hai hành trình ngoại tuyến kiểm giữ cách chia nhóm sau reload, lấy lại danh sách thành viên khi có mạng và từ chối suy đoán cách chia từ cache cũ. Cài Chromium bằng `pnpm --dir fe exec playwright install chromium`. Trên Windows có thể đặt `PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH` tới Chrome. Đặt `SHAREBILL_PWA_TEST=1` khi kiểm bản static production để kiểm cả reload offline và smoke S18; đặt cùng `RELEASE_COMMIT` khi build FE, chạy API và chạy bộ test. [Hướng dẫn smoke và cấu hình cloud](../docs/STAGING_SMOKE.md).
+`pnpm --dir fe test:browser` có 33 hành trình bằng Playwright với frontend cổng 3000, API 3001 và Emulator 8080/9099, gồm bố cục 320–1280px, điều hướng, Auth, lịch trình, luồng tiền, hóa đơn, QR lời mời/chia sẻ, quản trị và nháp ngoại tuyến. Hai hành trình ngoại tuyến kiểm giữ cách chia nhóm sau reload, lấy lại danh sách thành viên khi có mạng và từ chối suy đoán cách chia từ cache cũ. Hai hành trình về phiên kiểm đổi tài khoản khi phản hồi cũ chưa tới và gửi lại khoản chi khi trình duyệt chặn lưu trữ, mất phản hồi sau commit. Ba hành trình lưu trữ kiểm cache hỏng/hết hạn, nháp sai cấu trúc và lưu khoản chi khi IndexedDB treo. Cài Chromium bằng `pnpm --dir fe exec playwright install chromium`. Trên Windows có thể đặt `PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH` tới Chrome. Đặt `SHAREBILL_PWA_TEST=1` khi kiểm bản static production để kiểm cả reload offline và smoke S18; đặt cùng `RELEASE_COMMIT` khi build FE, chạy API và chạy bộ test. [Hướng dẫn smoke và cấu hình cloud](../docs/STAGING_SMOKE.md).
+
+`pnpm --dir be exec vitest run test/web-session.test.ts` kiểm riêng 18 tình huống cạnh tranh phiên/refresh/retry của API client; file này cũng được chạy trong `pnpm --dir be test`.
+
+`pnpm --dir be exec vitest run test/private-device.test.ts` kiểm riêng 32 tình huống cache/nháp không hợp lệ, hết hạn, quota, mở database bị chặn và transaction quá hạn; file này cũng được chạy trong bộ unit chung.
 
 Sau khi build, `pnpm --dir fe test:pwa` chạy 5 tình huống đổi phiên bản service worker thực tế: tự tải lại đúng một lần, giữ nội dung đang nhập, không chặn cập nhật sau khi chọn ngày xem, chờ giao dịch/hộp thoại và chờ tab khác đang soạn. Bộ này dùng máy chủ local riêng và được chạy trong CI.
 

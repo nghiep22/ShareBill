@@ -40,8 +40,13 @@ function replaceRoute(route: string) {
 
 function useMutation(hash: string, onCommit?: () => void) {
   const locked = useRef(false);
+  const mounted = useRef(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<{ route: string; message: string; code?: string }>();
+  useEffect(() => {
+    mounted.current = true;
+    return () => { mounted.current = false; };
+  }, []);
   const run: RunMutation = (operation, onSaved) => {
     if (locked.current) return;
     locked.current = true;
@@ -49,9 +54,11 @@ function useMutation(hash: string, onCommit?: () => void) {
     setError(undefined);
     setBusy(true);
     void operation().then(result => {
+      if (!mounted.current) return;
       onCommit?.();
       if (window.location.hash === source) onSaved?.(result);
     }, (cause: unknown) => {
+      if (!mounted.current) return;
       if (cause instanceof ApiError && cause.code === 'PAYMENT_ALREADY_PENDING') onCommit?.();
       if (window.location.hash === source) {
         const message = cause instanceof Error ? cause.message : 'Chưa thực hiện được thao tác.';
@@ -60,7 +67,7 @@ function useMutation(hash: string, onCommit?: () => void) {
       }
     }).finally(() => {
       locked.current = false;
-      setBusy(false);
+      if (mounted.current) setBusy(false);
     });
   };
   return { run, busy, error: error?.route === hash ? error.message : '', code: error?.route === hash ? error.code : undefined,
@@ -245,7 +252,11 @@ function AuthenticatedWorkspace({ session, api, hash, onSignOut }: { session: Se
   useEffect(() => {
     if (!device || !overview.data || overview.error || overview.loading || !overview.loadedAt) return;
     const value = overview.data, at = overview.loadedAt;
-    void saveTripSnapshot(device, value, at).then(() => setCached({ tripId: device.tripId, value, at }), () => setStorageError(true));
+    let active = true;
+    void saveTripSnapshot(device, value, at).then(() => {
+      if (active) setCached({ tripId: device.tripId, value, at });
+    }, () => { if (active) setStorageError(true); });
+    return () => { active = false; };
   }, [device, overview.data, overview.error, overview.loading, overview.loadedAt]);
 
   useEffect(() => {

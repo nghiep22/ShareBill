@@ -2,6 +2,22 @@
 
 Ngày khảo sát 18/11/2026 · Phạm vi mã trong workspace, giao diện và API local, Firebase Emulator, bộ thiết kế `GiaoDien` và đặc tả nghiệp vụ.
 
+## Phục hồi khi bộ nhớ ngoại tuyến lỗi ngày 26/11/2026
+
+Mỗi bước mở IndexedDB hoặc thực hiện transaction chờ tối đa 5 giây. Khi bị chặn, treo hoặc hết dung lượng, form giữ bản nhập trong tab và hướng dẫn giữ tab mở; lỗi xóa nháp sau khi server đã lưu không làm kẹt trạng thái đang lưu. Connection mở muộn được đóng, transaction quá hạn được hủy và connection nhường khi có yêu cầu đổi phiên bản database.
+
+Snapshot và nháp được kiểm cấu trúc, tài khoản/chuyến, loại dữ liệu và mốc lưu trước khi khôi phục. Bỏ bản quá 24 giờ, timestamp không hợp lệ hoặc ở tương lai; snapshot còn phải có ngày/múi giờ hợp lệ, danh sách chia đúng và số tiền nhất quán. Bản nháp được phép chưa nhập đủ nhưng không nhận cấu trúc hỏng. Đọc và xóa cache lỗi trong cùng transaction để không xóa nhầm bản mới từ tab khác. Callback lưu snapshot cũ bị bỏ qua sau khi đổi chuyến hoặc rời màn hình.
+
+Kiểm chứng local: 32 ca unit mới kiểm validation và giới hạn chờ; ba hành trình trình duyệt mới kiểm cache hỏng/hết hạn, nháp hỏng rồi soạn lại và lưu chi tiêu khi IndexedDB treo. Bộ hồi quy gồm 238 unit/HTTP, 33 hành trình trên static/PWA, 5 kiểm thử cập nhật PWA và 10 kiểm thử công cụ smoke. Typecheck/build FE và BE đạt. Chưa triển khai cloud; kiểm thử Chromium trên desktop chưa thay cho Safari iOS/Chrome Android và bộ nhớ thiết bị vật lý.
+
+## Cách ly phiên đăng nhập và khôi phục giao dịch ngày 26/11/2026
+
+Mỗi lần đăng nhập/đăng xuất tạo một mốc phiên riêng, kể cả khi đăng nhập lại cùng tài khoản. Phản hồi đọc, ghi, retry và refresh của phiên cũ bị bỏ qua; lỗi 401 hoặc tài khoản bị khóa đến muộn không làm mới token hoặc đăng xuất phiên mới. Refresh trong cùng phiên vẫn dùng chung một request và giữ các lượt đọc đang chạy. Nếu có nhiều yêu cầu đăng nhập đồng thời, chỉ yêu cầu mới nhất được nhận kết quả.
+
+Giao dịch chưa rõ kết quả giữ khóa chống trùng trong nhật ký của tài khoản ban đầu để tra cứu hoặc gửi lại sau khi đăng nhập lại. Bỏ callback của màn hình đã đóng và không tự nâng cấp cách chia của chuyến từ phản hồi của màn hình đã rời. Khi trình duyệt chặn lưu trữ, phiên và khóa retry vẫn hoạt động trong bộ nhớ của tab; thông báo yêu cầu giữ tab mở vẫn hiển thị.
+
+Kiểm chứng local: 18 ca mới về cạnh tranh phiên trong bộ unit, hai hành trình mới với API/Firebase Emulator kiểm đổi tài khoản khi tổng quan đang tải và mất phản hồi sau khi đã lưu khoản chi trên trình duyệt chặn storage. Lượt kiểm tra cuối gồm 206 unit/HTTP, 30 hành trình trình duyệt trên bản static/PWA, 5 tình huống cập nhật PWA và 10 kiểm thử công cụ smoke. Typecheck và build FE/BE đạt. Đợt này chưa triển khai cloud; các cổng thiết bị vật lý, Google operator, giao thư thật và backup/restore cloud vẫn cần nghiệm thu riêng.
+
 ## Worker bảo trì và lịch Hobby ngày 25/11/2026
 
 Đã bổ sung endpoint máy chủ dùng `CRON_SECRET`, không nhận Firebase token/query scope hoặc HEAD. Một lượt đồng bộ Auth có giới hạn và kiểm một chuyến bằng worker đối soát hiện có. Transaction nhận khóa 5 phút, cooldown 15 phút và kiểm chủ khóa/hạn khóa trước mỗi checkpoint; request trùng không chạy worker, callback cũ sau crash/reclaim không công bố kết quả. Auth/ledger lỗi độc lập, bộ đếm chưa biết giữ null, exception riêng tư không lưu vào job.
@@ -87,7 +103,7 @@ Cập nhật 19/11: đã deploy FE/API staging cùng SHA `5256b3f`, CI frontend/
 | M07 | Giữ ngày và bản nhập lịch trình, phát hiện version đổi và yêu cầu kiểm lại trước khi áp. Nhật ký có link đúng chuyến. | Nghiệm thu nhiều ngày và giới hạn 100 hoạt động/đề xuất trên điện thoại. |
 | M08 | Báo lỗi của người gửi nhận trạng thái từ workflow quản trị. Nội dung ghi chú nội bộ giữ riêng. Có E2E người dùng → operator → người gửi. | Smoke staging. |
 | M09 | Trang /admin, Google sign-in trong bộ nhớ, grant server-only, recent auth, dashboard, tra cứu, quản trị chuyến/tài khoản, ticket, ghi chú phân trang, audit, system và jobs. Worker Auth có lease theo UID, retry, kiểm desired state/version và sweep đối soát. CLI grant mặc định dry-run. | Cấu hình Google provider/domain, cấp operator thật, lịch chạy worker và smoke cloud. |
-| M10 | Opt-in thiết bị tin cậy. IndexedDB tách API/UID/chuyến cho snapshot tối thiểu và nháp thêm khoản chi, hạn đọc 24 giờ. Xóa khi tắt, đăng xuất, tài khoản bị khóa hoặc chuyến mất quyền. Ngoại tuyến chỉ soạn, người dùng kiểm lại và bấm lưu khi có mạng. PWA hỏi trước khi cập nhật. | Safari iOS, Chrome Android, cài từ HTTPS, bàn phím và trình đọc màn hình trên thiết bị thật. Nháp sửa khoản chi và ảnh upload chưa được lưu ngoại tuyến. |
+| M10 | Opt-in thiết bị tin cậy. IndexedDB tách API/UID/chuyến cho snapshot tối thiểu và nháp thêm khoản chi, hạn đọc 24 giờ. Xóa khi tắt, đăng xuất, tài khoản bị khóa hoặc chuyến mất quyền. Kiểm cache trước khi khôi phục; giới hạn chờ khi bộ nhớ bị kẹt. Ngoại tuyến chỉ soạn, người dùng kiểm lại và bấm lưu khi có mạng. PWA tự cập nhật khi các tab không có bản nhập, giao dịch đang lưu hoặc hộp thoại. | Safari iOS, Chrome Android, cài từ HTTPS, bàn phím và trình đọc màn hình trên thiết bị thật. Nháp sửa khoản chi và ảnh upload chưa được lưu ngoại tuyến. |
 | M11 | 29 unit/HTTP, 54 Emulator và 6 Chromium E2E đã đạt trên local. CI có kiểm TypeScript, build, Emulator, browser và tải lại PWA khi offline. OpenAPI có 67 thao tác. | Kết quả thực thi GitHub Actions trên commit đẩy lên và smoke cloud. |
 | M12 | Có runbook, cấu hình và các công cụ checker/migration/cleanup/worker để đưa lên môi trường đã chọn. | Deploy cùng commit, index cloud, lịch workers/backup, diễn tập restore/rollback và nghiệm thu phát hành. |
 

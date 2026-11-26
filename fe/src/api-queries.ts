@@ -22,7 +22,7 @@ export function useApiRead<T>(api: ShareBillApi, path: string | undefined, epoch
     const load = async () => {
       let data = await api.read<T>(path, bodyString ? JSON.parse(bodyString) : undefined);
       const trip = (data as { trip?: { sharingMode?: string; status?: string; moderationStatus?: string } }).trip;
-      if (prepareGroupSharing && trip && trip.sharingMode === undefined && trip.status === 'active' && trip.moderationStatus === 'normal') {
+      if (valid && prepareGroupSharing && trip && trip.sharingMode === undefined && trip.status === 'active' && trip.moderationStatus === 'normal') {
         await api.write(path.replace(/\/overview$/, '/share-equally'), {});
         data = await api.read<T>(path);
       }

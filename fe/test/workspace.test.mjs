@@ -67,6 +67,38 @@ function heading(page, name) {
   return page.getByRole('heading', { name, exact: true }).first().waitFor({ timeout: 10000 });
 }
 
+async function privateRecords(page, rows) {
+  return page.evaluate(async rows => {
+    const name = (await indexedDB.databases()).find(db => db.name.startsWith('sharebill-private-v1:'))?.name;
+    if (!name) return [];
+    return new Promise((resolve, reject) => {
+      const open = indexedDB.open(name);
+      open.onerror = () => reject(open.error);
+      open.onsuccess = () => {
+        const db = open.result, tx = db.transaction('data', rows ? 'readwrite' : 'readonly'), store = tx.objectStore('data');
+        for (const row of rows ?? []) store.put(row);
+        const read = store.getAll();
+        tx.oncomplete = () => { db.close(); resolve(read.result); };
+        tx.onabort = () => { db.close(); reject(tx.error); };
+      };
+    });
+  }, rows);
+}
+
+async function waitForPrivateRecord(page, kind = 'overview', amount) {
+  await page.waitForFunction(async ({ kind, amount }) => {
+    const name = (await indexedDB.databases()).find(db => db.name.startsWith('sharebill-private-v1:'))?.name;
+    if (!name) return false;
+    return new Promise(resolve => {
+      const open = indexedDB.open(name);
+      open.onsuccess = () => {
+        const db = open.result, tx = db.transaction('data'), read = tx.objectStore('data').getAll();
+        tx.oncomplete = () => { db.close(); resolve(read.result.some(row => row.kind === kind && (amount === undefined || row.value.amount === amount))); };
+      };
+    });
+  }, { kind, amount });
+}
+
 test('responsive screens keep primary actions and navigation reachable while scrolling', async t => {
   const { page, trip, session, screen, create } = await fixture(t);
   await call('trips/' + trip.id, session, { method: 'PATCH', version: 1, body: { startDate: '2026-11-18', endDate: '2026-12-02' } });
@@ -423,6 +455,107 @@ test('a temporary refresh outage keeps the session and recovers when the user re
   await heading(page, 'Tổng quan');
   await page.getByRole('heading', { name: 'Đà Lạt E2E', exact: true }).waitFor();
   assert.ok(await page.evaluate(() => JSON.parse(sessionStorage.getItem('sharebill-live-session-v1')).expiresAt > Date.now()));
+});
+
+test('switching accounts ignores an old overview and never upgrades the old trip using the new login', async t => {
+  const { page, context, session, trip, screen } = await fixture(t);
+  const other = await call('auth/register', null, { method: 'POST', body: {
+    email: randomUUID() + '@example.test', password: 'BrowserFixture-123!', displayName: 'Other account',
+  } });
+  const ownTrip = await call('trips', other, { method: 'POST', body: { name: 'Chuyến của tài khoản mới', ownerName: 'Other' } });
+  const oldOverview = await call('trips/' + trip.id + '/overview', session);
+  delete oldOverview.trip.sharingMode;
+  let release, started, delivered;
+  const gate = new Promise(resolve => { release = resolve; });
+  const requested = new Promise(resolve => { started = resolve; });
+  const completed = new Promise(resolve => { delivered = resolve; });
+  let unwantedUpgrades = 0;
+  await context.route('**/api/v1/trips/' + trip.id + '/share-equally', async route => {
+    unwantedUpgrades++;
+    await route.fulfill({ status: 403, contentType: 'application/json', body: JSON.stringify({ error: { code: 'FORBIDDEN' } }) });
+  });
+  await context.route('**/api/v1/trips/' + trip.id + '/overview', async route => {
+    started();
+    await gate;
+    await route.fulfill({ contentType: 'application/json', body: JSON.stringify({ data: oldOverview }) });
+    delivered();
+  });
+  t.after(() => release());
+  await page.goto(screen('tong-quan'));
+  await requested;
+  await page.evaluate(() => { window.location.hash = 'tai-khoan'; });
+  await heading(page, 'Tài khoản');
+  await page.getByRole('button', { name: 'Đăng xuất', exact: true }).click();
+  await heading(page, 'Đăng nhập');
+  await page.getByLabel('Email', { exact: true }).fill(other.user.email);
+  await page.getByLabel('Mật khẩu', { exact: true }).fill('BrowserFixture-123!');
+  await page.getByRole('button', { name: 'Đăng nhập', exact: true }).click();
+  await heading(page, 'Chuyến đi của tôi');
+  await page.getByRole('button').filter({ hasText: 'Chuyến của tài khoản mới' }).click();
+  await heading(page, 'Tổng quan');
+  await page.getByRole('heading', { name: 'Chuyến của tài khoản mới', exact: true }).waitFor();
+  const oldReply = page.waitForResponse(response => response.url().endsWith('/trips/' + trip.id + '/overview'));
+  release();
+  await Promise.all([completed, oldReply.then(response => response.finished())]);
+  // A second UI turn lets callbacks from the delivered reply finish without a timed sleep.
+  await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+  assert.equal(unwantedUpgrades, 0);
+  assert.equal(await page.getByRole('heading', { name: 'Đà Lạt E2E', exact: true }).count(), 0);
+  assert.equal(await page.evaluate(() => JSON.parse(sessionStorage.getItem('sharebill-live-session-v1')).user.uid), other.user.uid);
+  assert.equal((await call('trips/' + ownTrip.id + '/overview', other)).trip.totalExpenseMinor, 0);
+});
+
+test('blocked browser storage still allows login and retries an uncertain expense without duplication', async t => {
+  const email = randomUUID() + '@example.test';
+  const account = await call('auth/register', null, { method: 'POST', body: {
+    email, password: 'BrowserFixture-123!', displayName: 'Storage fixture',
+  } });
+  const trip = await call('trips', account, { method: 'POST', body: { name: 'Thiết bị chặn lưu trữ', ownerName: 'Storage' } });
+  const context = await browser.newContext();
+  t.after(async () => { await context.unrouteAll({ behavior: 'ignoreErrors' }); await context.close(); });
+  await context.addInitScript(() => {
+    for (const name of ['sessionStorage', 'localStorage']) Object.defineProperty(window, name, {
+      configurable: true, get: () => { throw new DOMException('Storage blocked', 'SecurityError'); },
+    });
+  });
+  const page = await context.newPage();
+  const errors = [];
+  page.on('pageerror', error => errors.push(error.message));
+  await page.goto(web + '/#dang-nhap');
+  await page.getByLabel('Email', { exact: true }).fill(email);
+  await page.getByLabel('Mật khẩu', { exact: true }).fill('BrowserFixture-123!');
+  await page.getByRole('button', { name: 'Đăng nhập', exact: true }).click();
+  await heading(page, 'Chuyến đi của tôi');
+  await page.getByRole('button').filter({ hasText: 'Thiết bị chặn lưu trữ' }).click();
+  await heading(page, 'Tổng quan');
+  await page.evaluate(id => { window.location.hash = 'chuyen/' + id + '/them-khoan-chi'; }, trip.id);
+  await heading(page, 'Thêm khoản chi');
+  const keys = [];
+  await context.route('**/api/v1/trips/' + trip.id + '/expenses', async route => {
+    if (route.request().method() !== 'POST') return route.continue();
+    keys.push(route.request().headers()['idempotency-key']);
+    const response = await route.fetch();
+    if (keys.length === 1) await route.abort('failed');
+    else await route.fulfill({ response });
+  });
+  await page.getByLabel('Tên khoản chi', { exact: true }).fill('Khoản chi cần giữ khóa');
+  await page.getByLabel('Số tiền đã trả', { exact: true }).fill('123000');
+  await page.getByRole('button', { name: /Lưu khoản chi/ }).click();
+  await page.getByRole('alert').filter({ hasText: 'Kết nối với máy chủ bị gián đoạn' }).waitFor();
+  await page.getByText('Tab này chỉ theo dõi thao tác trong bộ nhớ. Hãy giữ tab mở khi đang chờ kết quả.', { exact: true }).waitFor();
+  await page.getByRole('button', { name: /Lưu khoản chi/ }).click();
+  await heading(page, 'Khoản chi cần giữ khóa');
+  assert.equal(keys.length, 2);
+  assert.ok(keys[0]);
+  assert.equal(keys[0], keys[1]);
+  const expenses = await call('trips/' + trip.id + '/expenses', account);
+  assert.equal(expenses.items.filter(item => item.title === 'Khoản chi cần giữ khóa').length, 1);
+  assert.equal((await call('trips/' + trip.id + '/overview', account)).trip.totalExpenseMinor, 123000);
+  await page.evaluate(() => { window.location.hash = 'tai-khoan'; });
+  await heading(page, 'Tài khoản');
+  await page.getByRole('button', { name: 'Đăng xuất', exact: true }).click();
+  await heading(page, 'Đăng nhập');
+  assert.deepEqual(errors, []);
 });
 
 test('authentication has no demo entry point and PWA retires cached preview pages', async t => {
@@ -794,6 +927,106 @@ test('offline snapshots without a sharing mode require a fresh connection instea
   await page.evaluate(() => window.dispatchEvent(new Event('online')));
   await heading(page, 'Tổng quan');
   await page.getByText('1 thành viên', { exact: true }).waitFor();
+});
+
+test('corrupt or expired private snapshots are discarded and recover after reconnecting', async t => {
+  const { page, context, screen } = await fixture(t, 'group-equal');
+  const errors = [];
+  page.on('pageerror', error => errors.push(error.message));
+  await page.goto(web + '/#tai-khoan');
+  await page.getByLabel('Tin cậy thiết bị này').check();
+  await page.goto(screen('tong-quan'));
+  await heading(page, 'Tổng quan');
+  await waitForPrivateRecord(page);
+  const original = (await privateRecords(page)).find(row => row.kind === 'overview');
+  assert.ok(original);
+  if (process.env.SHAREBILL_PWA_TEST === '1') await page.evaluate(async () => {
+    await navigator.serviceWorker.ready;
+    if (!navigator.serviceWorker.controller) await new Promise(resolve => navigator.serviceWorker.addEventListener('controllerchange', resolve, { once: true }));
+  });
+  await context.setOffline(true);
+  await page.evaluate(() => window.dispatchEvent(new Event('offline')));
+  for (const corruption of ['malformed', 'expired', 'future', 'inconsistent-money']) {
+    const row = structuredClone(original);
+    if (corruption === 'malformed') row.value.participants = null;
+    if (corruption === 'expired') row.at = Date.now() - 24 * 60 * 60_000;
+    if (corruption === 'future') row.at = Date.now() + 24 * 60 * 60_000;
+    if (corruption === 'inconsistent-money') row.value.balances[0].netMinor = 999;
+    await privateRecords(page, [row]);
+    if (process.env.SHAREBILL_PWA_TEST === '1') await page.reload();
+    else {
+      await page.evaluate(() => { window.location.hash = 'tai-khoan'; });
+      await heading(page, 'Tài khoản');
+      await page.evaluate(url => { window.location.hash = new URL(url).hash; }, screen('tong-quan'));
+    }
+    await heading(page, 'Chưa có dữ liệu ngoại tuyến cho chuyến đi');
+    assert.equal((await privateRecords(page)).some(row => row.kind === 'overview'), false, corruption + ' cache must be discarded');
+  }
+  await context.setOffline(false);
+  await page.evaluate(() => window.dispatchEvent(new Event('online')));
+  await heading(page, 'Tổng quan');
+  await waitForPrivateRecord(page);
+  assert.deepEqual(errors, []);
+});
+
+test('a corrupt saved draft cannot break the expense form or prevent a new draft', async t => {
+  const { page, screen, session, trip } = await fixture(t, 'group-equal');
+  const errors = [];
+  page.on('pageerror', error => errors.push(error.message));
+  await page.goto(web + '/#tai-khoan');
+  await page.getByLabel('Tin cậy thiết bị này').check();
+  await page.goto(screen('tong-quan'));
+  await heading(page, 'Tổng quan');
+  await waitForPrivateRecord(page);
+  await privateRecords(page, [{ uid: session.user.uid, tripId: trip.id, kind: 'expense-new', at: Date.now(), value: { fields: null } }]);
+  await page.goto(screen('them-khoan-chi'));
+  await heading(page, 'Thêm khoản chi');
+  // The invalid read is removed before the user starts a replacement draft.
+  await page.waitForFunction(async () => {
+    const name = (await indexedDB.databases()).find(db => db.name.startsWith('sharebill-private-v1:'))?.name;
+    if (!name) return false;
+    return new Promise(resolve => {
+      const open = indexedDB.open(name);
+      open.onsuccess = () => {
+        const db = open.result, tx = db.transaction('data'), read = tx.objectStore('data').getAll();
+        tx.oncomplete = () => { db.close(); resolve(!read.result.some(row => row.kind === 'expense-new')); };
+      };
+    });
+  });
+  assert.equal(await page.getByRole('button', { name: 'Tiếp tục bản nháp', exact: true }).count(), 0);
+  await page.getByLabel('Tên khoản chi', { exact: true }).fill('Bản nháp mới hợp lệ');
+  await page.getByLabel('Số tiền đã trả', { exact: true }).fill('50000');
+  await waitForPrivateRecord(page, 'expense-new', '50000');
+  await page.evaluate(() => { window.location.hash = 'tai-khoan'; });
+  await heading(page, 'Tài khoản');
+  await page.evaluate(url => { window.location.hash = new URL(url).hash; }, screen('them-khoan-chi'));
+  await heading(page, 'Bản nháp trên thiết bị');
+  await page.getByRole('button', { name: 'Tiếp tục bản nháp', exact: true }).click();
+  assert.equal(await page.getByLabel('Tên khoản chi', { exact: true }).inputValue(), 'Bản nháp mới hợp lệ');
+  assert.equal(await page.getByLabel('Số tiền đã trả', { exact: true }).inputValue(), '50000');
+  assert.deepEqual(errors, []);
+});
+
+test('a stalled private store warns about drafts but never traps a saved expense in the saving state', async t => {
+  const { page, screen, session, expenses } = await fixture(t, 'group-equal');
+  const errors = [];
+  page.on('pageerror', error => errors.push(error.message));
+  await page.goto(web + '/#tai-khoan');
+  await page.getByLabel('Tin cậy thiết bị này').check();
+  await page.evaluate(() => {
+    Object.defineProperty(window, 'indexedDB', { configurable: true, value: { open: () => ({}) } });
+  });
+  await page.evaluate(url => { window.location.hash = new URL(url).hash; }, screen('them-khoan-chi'));
+  await heading(page, 'Thêm khoản chi');
+  await page.getByLabel('Tên khoản chi', { exact: true }).fill('Lưu khi bộ nhớ bị kẹt');
+  await page.getByLabel('Số tiền đã trả', { exact: true }).fill('75000');
+  await page.getByText('Thiết bị chưa lưu hoặc đọc được bản nháp. Bản nhập vẫn ở tab này; hãy giữ tab mở tới khi lưu khoản chi thành công.', { exact: true }).waitFor({ timeout: 10000 });
+  await page.getByRole('button', { name: /Lưu khoản chi/ }).click();
+  await heading(page, 'Lưu khi bộ nhớ bị kẹt');
+  const saved = (await call(expenses, session)).items;
+  assert.equal(saved.length, 1);
+  assert.equal(saved[0].amountMinor, 75000);
+  assert.deepEqual(errors, []);
 });
 
 test('money screens keep equal shares, remaining debt, partial payments and reversals consistent', { timeout: 90000 }, async t => {

@@ -261,7 +261,7 @@ export function ExpenseForm({ data, expense: latest, update, receiptActions, dis
         }}>Xóa bản nháp</button>
       </div>
     </section>}
-    {device && draftError && <p className="inline-note error" role="status">Thiết bị chưa lưu hoặc đọc được bản nháp.</p>}
+    {device && draftError && <p className="inline-note error" role="status">Thiết bị chưa lưu hoặc đọc được bản nháp. Bản nhập vẫn ở tab này; hãy giữ tab mở tới khi lưu khoản chi thành công.</p>}
     {conflict && latest && <section className="card field-card" aria-label="Xung đột khoản chi">
       <h2>Bản trên máy chủ đã thay đổi</h2>
       <p>Bản nhập vẫn ở bên dưới. Hãy chọn dữ liệu để tiếp tục, rồi kiểm tra trước khi lưu.</p>

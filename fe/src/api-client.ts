@@ -62,6 +62,8 @@ export type CompletedOperation = { status: 'completed'; tripId: string | null; r
 
 export class ShareBillApi {
   private current: Session | null = null;
+  private sessionEpoch = 0;
+  private signInAttempt = 0;
   private refreshing?: Promise<Session>;
   private commandKeys = new Map<string, string>();
   private operations: PendingOperation[] = [];
@@ -77,13 +79,20 @@ export class ShareBillApi {
   }
 
   setSession(session: Session | null) {
-    if (this.current?.user.uid !== session?.user.uid) {
-      this.commandKeys.clear();
-      this.refreshing = undefined;
-      this.operations = session ? readPending(pendingStorageKey(baseUrl(), session.user.uid)) : [];
-      this.journalPersistent = true;
-      this.notifyPending();
-    }
+    this.sessionEpoch++;
+    this.commandKeys.clear();
+    this.refreshing = undefined;
+    this.operations = session ? readPending(pendingStorageKey(baseUrl(), session.user.uid)) : [];
+    this.journalPersistent = true;
+    this.updateSession(session);
+    this.notifyPending();
+  }
+
+  private assertSession(epoch: number) {
+    if (epoch !== this.sessionEpoch) throw new ApiError('Phiên đăng nhập đã thay đổi.', 401, 'SESSION_CHANGED');
+  }
+
+  private updateSession(session: Session | null) {
     this.current = session;
     this.onSession(session);
     try {
@@ -125,25 +134,32 @@ export class ShareBillApi {
   }
 
   async signIn(email: string, password: string, displayName?: string) {
+    const epoch = this.sessionEpoch;
+    const attempt = ++this.signInAttempt;
     const tokens = await request<Tokens>(displayName ? '/auth/register' : '/auth/login', {
       method: 'POST', body: { email, password, ...(displayName && { displayName }) },
     });
+    this.assertSession(epoch);
+    if (attempt !== this.signInAttempt) throw new ApiError('Phiên đăng nhập đã thay đổi.', 401, 'SESSION_CHANGED');
     this.setSession(sessionFrom(tokens));
   }
 
   private async token(force = false, sentToken?: string) {
     const session = this.current;
+    const epoch = this.sessionEpoch;
     if (!session) throw new ApiError('Vui lòng đăng nhập lại.', 401);
     if (force ? sentToken !== session.accessToken : session.expiresAt > Date.now() + 60_000) return session.accessToken;
     if (!this.refreshing) {
       const refresh = request<Tokens>('/auth/refresh', { method: 'POST', body: { refreshToken: session.refreshToken } })
         .then(result => {
-          if (this.current !== session) throw new ApiError('Phiên đăng nhập đã thay đổi.', 401);
+          this.assertSession(epoch);
           const next = sessionFrom(result);
-          this.setSession(next);
+          // Refresh credentials within this login; it must not invalidate other in-flight reads.
+          this.updateSession(next);
           return next;
         })
         .catch((cause: unknown) => {
+          this.assertSession(epoch);
           if (cause instanceof ApiError && (cause.status === 401 || cause.status === 403)) this.expire(session, cause);
           throw cause;
         })
@@ -169,22 +185,29 @@ export class ShareBillApi {
   }
 
   private async authorized<T>(path: string, options: RequestOptions): Promise<T> {
-    const uid = this.current?.user.uid;
+    const epoch = this.sessionEpoch;
     const token = await this.token();
+    this.assertSession(epoch);
     const session = this.current;
-    if (session?.user.uid !== uid) throw new ApiError('Phiên đăng nhập đã thay đổi.', 401);
     try {
-      return await request<T>(path, { ...options, token });
+      const result = await request<T>(path, { ...options, token });
+      this.assertSession(epoch);
+      return result;
     } catch (cause) {
-      if (!(cause instanceof ApiError) || !session || this.current?.user.uid !== uid) throw cause;
+      this.assertSession(epoch);
+      if (!(cause instanceof ApiError) || !session) throw cause;
       if (cause.code === 'ACCOUNT_DISABLED') this.expire(session, cause);
       if (cause.status !== 401) throw cause;
       const refreshedToken = await this.token(true, token);
+      this.assertSession(epoch);
       const refreshed = this.current;
-      if (!refreshed || refreshed.user.uid !== uid) throw cause;
+      if (!refreshed) throw cause;
       try {
-        return await request<T>(path, { ...options, token: refreshedToken });
+        const result = await request<T>(path, { ...options, token: refreshedToken });
+        this.assertSession(epoch);
+        return result;
       } catch (retry) {
+        this.assertSession(epoch);
         if (retry instanceof ApiError && (retry.status === 401 || retry.code === 'ACCOUNT_DISABLED')) this.expire(refreshed, retry);
         throw retry;
       }
@@ -194,10 +217,11 @@ export class ShareBillApi {
   async write<T>(path: string, body: object, options: { method?: 'POST' | 'PATCH'; version?: number; key?: string } = {}): Promise<T> {
     const method = options.method ?? 'POST';
     const requestData = [method, path, options.version, body];
+    const epoch = this.sessionEpoch;
     const uid = this.current?.user.uid;
     if (!uid) throw new ApiError('Vui lòng đăng nhập lại.', 401);
     const fingerprint = options.key ? undefined : await requestFingerprint(requestData);
-    if (this.current?.user.uid !== uid) throw new ApiError('Phiên đăng nhập đã thay đổi.', 401);
+    this.assertSession(epoch);
     const signature = fingerprint ?? JSON.stringify(requestData);
     const previous = fingerprint && this.operations.find(entry => entry.fingerprint === fingerprint);
     const key = options.key ?? (previous ? previous.key : undefined) ?? this.commandKeys.get(signature) ?? operationId();
@@ -213,10 +237,11 @@ export class ShareBillApi {
     };
     try {
       const result = await this.authorized<T>(path, { method, body, key, version: options.version });
+      this.assertSession(epoch);
       forget();
       return result;
     } catch (cause) {
-      if (cause instanceof ApiError && cause.status >= 400 && cause.status < 500 && ![408, 429].includes(cause.status) &&
+      if (cause instanceof ApiError && cause.code !== 'SESSION_CHANGED' && cause.status >= 400 && cause.status < 500 && ![408, 429].includes(cause.status) &&
           !(previous && [401, 403, 404].includes(cause.status)) && cause.code !== 'PROCESSING_IN_PROGRESS') forget();
       throw cause;
     }
@@ -227,8 +252,8 @@ export function operationId() {
   // randomUUID requires a secure context; getRandomValues also works on local LAN previews.
   if (typeof crypto.randomUUID === 'function') return crypto.randomUUID();
   const bytes = crypto.getRandomValues(new Uint8Array(16));
-  bytes[6] = (bytes[6] & 15) | 64;
-  bytes[8] = (bytes[8] & 63) | 128;
+  bytes[6] = (bytes[6]! & 15) | 64;
+  bytes[8] = (bytes[8]! & 63) | 128;
   const id = Array.from(bytes, byte => byte.toString(16).padStart(2, '0')).join('');
   return [id.slice(0, 8), id.slice(8, 12), id.slice(12, 16), id.slice(16, 20), id.slice(20)].join('-');
 }
