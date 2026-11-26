@@ -11,11 +11,11 @@ import { settlementDocumentSchema, type SettlementDocument } from './database/se
 import { balanceSchema, tripSchema } from './database/integrity-schemas.js';
 import { createAuditEvent } from './database/audit.js';
 import { createOperationDocument, readOperationResult, readOperationSnapshot } from './database/operation.js';
-import { applyBalanceDelta, applyExpenseTotals, expenseChangeDelta } from './domain/money.js';
+import { applyAllocatedDelta, applyBalanceDelta, applyExpenseTotals, expenseChangeDelta } from './domain/money.js';
 import { applySettlement } from './domain/settlement.js';
 import { expenseEditAudit, planExpenseEdit } from './services/expense-edit.js';
 import { increment, readTripActor, requireOwner, requireWritable } from './services/trip-access.js';
-import { isGroupEqual, projectGroup, readGroupLedger, readGroupMemberships, writeGroupBalances } from './services/group-sharing.js';
+import { allocatedExpenseDelta, isGroupEqual, projectGroup, readGroupLedger, readGroupMemberships, writeGroupBalances } from './services/group-sharing.js';
 
 const tripParams = z.strictObject({ tripId: z.uuid() });
 const entityParams = z.strictObject({ tripId: z.uuid(), id: z.uuid() });
@@ -75,11 +75,13 @@ export async function registerLedgerRoutes(app: FastifyInstance) {
       if (!parsed.success || parsed.data.id !== id) throw new ApiError(409, 'EXPENSE_INVARIANT_FAILED', 'Khoản chi cần được kiểm tra dữ liệu trước khi sửa.');
       const previous = parsed.data;
       const group = isGroupEqual(trip) ? await readGroupLedger(tx, trip) : undefined;
-      if (group && input.splitMethod === 'exact') throw new ApiError(422, 'GROUP_EQUAL_SHARING_REQUIRED', 'Nhóm tự chia đều tổng chi cho các thành viên.');
+      if (group && previous.sharingScope === 'selected' && input.split && !input.sharingScope) throw new ApiError(409, 'EXPENSE_SELECTION_REQUIRED', 'Khoản này có người chia riêng. Tải lại ứng dụng trước khi sửa số tiền hoặc người chia.');
+      const selectedScope = input.sharingScope === 'selected' || previous.sharingScope === 'selected';
+      if (group && !selectedScope && input.splitMethod === 'exact') throw new ApiError(422, 'GROUP_EQUAL_SHARING_REQUIRED', 'Chọn người chia để nhập phần riêng.');
       if (group && input.payerParticipantId && !group.ids.includes(input.payerParticipantId) && input.payerParticipantId !== previous.payerParticipantId) {
         throw new ApiError(422, 'INVALID_PARTICIPANTS', 'Người ứng tiền phải đang ở trong nhóm.');
       }
-      const effectiveInput = group && input.amountMinor !== undefined ? { ...input, splitMethod: 'equal' as const, split: { participantIds: group.ids } } : input;
+      const effectiveInput = group && !selectedScope && input.amountMinor !== undefined ? { ...input, splitMethod: 'equal' as const, split: { participantIds: group.ids } } : input;
       const plan = planExpenseEdit(previous, effectiveInput);
       const now = Timestamp.now(), revision = increment(trip.get('revision'));
       const ledgerVersion = count(trip, 'ledgerVersion') + (plan.financialChanged ? 1 : 0);
@@ -87,14 +89,20 @@ export async function registerLedgerRoutes(app: FastifyInstance) {
       const next = expenseDocumentSchema.safeParse({ ...previous, ...changes });
       if (!next.success) throw new ApiError(422, 'VALIDATION_ERROR', 'Khoản chi chưa hợp lệ.');
       const newIds = [...new Set([next.data.payerParticipantId, ...next.data.shares.map(share => share.participantId)])];
+      if (group && selectedScope && plan.hasFinancialBlock && next.data.shares.some(current => !group.ids.includes(current.participantId) &&
+          !(previous.sharingScope === 'selected' && previous.shares.some(share => share.participantId === current.participantId && share.amountMinor === current.amountMinor)))) {
+        throw new ApiError(422, 'INVALID_PARTICIPANTS', 'Chọn người chia đang ở trong nhóm.');
+      }
       const participants = plan.hasFinancialBlock ? await Promise.all(newIds.map(personId =>
         tx.get(tripRef.collection('participants').doc(personId)))) : [];
       if (participants.some(doc => !doc.exists || doc.get('status') !== 'active' &&
-          !(group && doc.id === previous.payerParticipantId && doc.id === next.data.payerParticipantId))) {
+          !(group && doc.id === previous.payerParticipantId && doc.id === next.data.payerParticipantId) &&
+          !(group && previous.sharingScope === 'selected' && previous.shares.some(share => share.participantId === doc.id && next.data.shares.some(current => current.participantId === doc.id && current.amountMinor === share.amountMinor))))) {
         throw new ApiError(422, 'INVALID_PARTICIPANTS', 'Có người không thuộc chuyến hoặc đã ngừng chia.');
       }
       const deltas: ReturnType<typeof expenseChangeDelta> = plan.financialChanged ? expenseChangeDelta(previous, next.data) : new Map();
       const balances = group ? [] : await Promise.all([...deltas.keys()].map(personId => tx.get(tripRef.collection('balances').doc(personId))));
+      const allocatedDeltas = allocatedExpenseDelta(previous, next.data);
       let nextBalances, totals;
       try {
         if (previous.amountMinor !== next.data.amountMinor || previous.category !== next.data.category) {
@@ -103,8 +111,8 @@ export async function registerLedgerRoutes(app: FastifyInstance) {
         }
         const paid = new Map([[previous.payerParticipantId, -previous.amountMinor]]);
         paid.set(next.data.payerParticipantId, (paid.get(next.data.payerParticipantId) ?? 0) + next.data.amountMinor);
-        nextBalances = group && plan.financialChanged ? projectGroup(group, totals?.totalExpenseMinor ?? trip.get('totalExpenseMinor'), group.ids, paid) :
-          balances.map(doc => ({ ...applyBalanceDelta(balance(doc), deltas.get(doc.id)!), updatedAt: now }));
+        nextBalances = group && plan.financialChanged ? projectGroup(group, totals?.totalExpenseMinor ?? trip.get('totalExpenseMinor'), group.ids, paid, allocatedDeltas) :
+          balances.map(doc => ({ ...applyAllocatedDelta(applyBalanceDelta(balance(doc), deltas.get(doc.id)!), allocatedDeltas.get(doc.id)), updatedAt: now }));
       } catch { return invariant(); }
       const receiptPlans = input.receiptIds ? await planReceiptAttachments(tx, tripRef, id, uid, input.receiptIds, previous.receiptIds, now) : [];
       tx.update(expenseRef, changes);

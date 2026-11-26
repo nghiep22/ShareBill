@@ -1,5 +1,7 @@
 # S18 — Kiểm cấu hình và smoke bản triển khai
 
+**Cập nhật 26/11/2026:** FE/API hiện phục vụ cùng SHA `113926d6dbcba9e242d7d78a0e79fc98fdd47115`. [Báo cáo phiên/ngoại tuyến](reports/2026-11-26-session-offline-reliability-release.json) ghi CI đạt, kiểm candidate trước promote, smoke tiền/Auth và kiểm browser trên domain thật với tài khoản/chuyến synthetic. Các ca mới kiểm phản hồi phiên cũ, cache hỏng, IndexedDB treo và retry khi storage bị chặn. Không đổi Rules/indexes hoặc dữ liệu người dùng thật. Các bằng chứng 19/11 bên dưới được giữ theo thời điểm kiểm.
+
 Ngày 19/11/2026. FE và API đã triển khai lên domain staging cùng SHA `5256b3f58d98a81c5384f6262d911af14f01951e`, sau khi [GitHub Actions đạt](https://github.com/nghiep22/ShareBill/actions/runs/44444811607). Vercel Hobby, Firebase billing chưa bật. Bản này chưa đạt mọi cổng phát hành.
 
 ## Bằng chứng staging ngày 19/11

@@ -60,6 +60,7 @@ export const expenseInput = z.discriminatedUnion('splitMethod', [
     amountMinor: money,
     payerParticipantId: id,
     splitMethod: z.literal('equal'),
+    sharingScope: z.literal('selected').optional(),
     split: z.strictObject({ participantIds: z.array(id).min(1).max(50) }),
     occurredOn: z.iso.date(),
     category: z.enum(['food', 'transport', 'stay', 'tickets', 'shopping', 'other']),
@@ -71,6 +72,7 @@ export const expenseInput = z.discriminatedUnion('splitMethod', [
     amountMinor: money,
     payerParticipantId: id,
     splitMethod: z.literal('exact'),
+    sharingScope: z.literal('selected').optional(),
     split: z.strictObject({ shares: z.array(z.strictObject({ participantId: id, amountMinor: z.number().int().min(0) })).min(1).max(50) }),
     occurredOn: z.iso.date(),
     category: z.enum(['food', 'transport', 'stay', 'tickets', 'shopping', 'other']),
@@ -80,6 +82,7 @@ export const expenseInput = z.discriminatedUnion('splitMethod', [
 ]);
 
 export const expenseUpdateInput = z.strictObject({
+  sharingScope: z.literal('selected').optional(),
   title: z.string().trim().min(1).max(120).optional(),
   note: z.string().trim().max(1000).nullable().optional(),
   occurredOn: z.iso.date().optional(),
@@ -96,6 +99,7 @@ export const expenseUpdateInput = z.strictObject({
 }).superRefine((value, context) => {
   if (!Object.keys(value).length) context.addIssue({ code: 'custom', message: 'empty patch' });
   const block = [value.amountMinor, value.payerParticipantId, value.splitMethod, value.split];
+  if (value.sharingScope && value.split === undefined) context.addIssue({ code: 'custom', message: 'send the entire financial block', path: ['split'] });
   if (block.some(field => field !== undefined) && block.some(field => field === undefined)) {
     context.addIssue({ code: 'custom', message: 'send the entire financial block', path: ['split'] });
   }

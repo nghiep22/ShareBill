@@ -1,0 +1,151 @@
+{
+  "checkedAt": "2026-11-26T06:53:16.040Z",
+  "commit": "113926d6dbcba9e242d7d78a0e79fc98fdd47115",
+  "webUrl": "https://sharebill-nghiep22.vercel.app",
+  "apiUrl": "https://sharebill-api-staging.vercel.app",
+  "checks": {
+    "canonicalReleaseCorsAndAuthGuards": true,
+    "lateOldSessionReplyCannotAffectNewAccount": true,
+    "responsive3203901280": true,
+    "corruptOfflineSnapshotDiscardedAndRecovered": true,
+    "stalledStorageCannotTrapCommittedExpense": true,
+    "blockedStorageLoginAndUncertainRetryCreateOneExpense": true,
+    "noBrowserErrors": true,
+    "syntheticAuthMoneyReplaySettlementAndArchive": true,
+    "canonicalAliasesServeExpectedDeployments": true,
+    "maintenanceCronEnabledOnCurrentApiDeployment": true,
+    "temporaryVerificationCredentialsRemoved": true
+  },
+  "fixtures": [
+    {
+      "tripId": "bf17c9ad-1960-4cf8-bfac-1b2a478e2577",
+      "archived": true
+    },
+    {
+      "tripId": "28451c29-f850-4b21-9312-92d0a60c7389",
+      "archived": true
+    },
+    {
+      "tripId": "5856285c-aba9-45ff-a7c2-10539faa6598",
+      "archived": true
+    }
+  ],
+  "ciUrl": "https://github.com/nghiep22/ShareBill/actions/runs/45770790589",
+  "localTests": {
+    "unitHttp": 238,
+    "browserJourneys": 33,
+    "pwaUpdates": 5,
+    "smokeTools": 10,
+    "typecheckAndBuild": true
+  },
+  "rollback": {
+    "api": "dpl_HHaXBfx1acd3AgQHqSf6JwojLtsv",
+    "web": "dpl_7tnzSNztx9BBa92z2ivs526KqbgW"
+  },
+  "scope": "Synthetic accounts and isolated trips against the real staging API. Chromium simulates network/storage failures; no real-user records, email delivery, messages, grants or financial formula changes.",
+  "remaining": [
+    "Physical iOS/Android and camera acceptance",
+    "Cloud Google operator",
+    "Real password reset inbox delivery",
+    "Cloud backup/restore acceptance"
+  ],
+  "apiDeployment": "dpl_GNR93PEky1QqYCnY3nS4KhiXF6JS",
+  "webDeployment": "dpl_H7ra3mWsg42zp3uwMH4DWpHtCG6Z",
+  "smoke": {
+    "passed": true,
+    "checks": [
+      {
+        "name": "api-release",
+        "passed": true
+      },
+      {
+        "name": "web-release",
+        "passed": true
+      },
+      {
+        "name": "web-admin-shell",
+        "passed": true
+      },
+      {
+        "name": "cors-versioned-commands",
+        "passed": true
+      },
+      {
+        "name": "unauthenticated-guards",
+        "passed": true
+      },
+      {
+        "name": "login-refresh-admin-deny",
+        "passed": true
+      },
+      {
+        "name": "create-isolated-trip",
+        "passed": true
+      },
+      {
+        "name": "expense-replay-and-ledger",
+        "passed": true
+      },
+      {
+        "name": "expense-index-and-cursor",
+        "passed": true
+      },
+      {
+        "name": "settle-and-archive",
+        "passed": true
+      }
+    ],
+    "tripId": "72c72659-769b-4a4d-b548-c907d8a84e5c"
+  },
+  "ci": {
+    "url": "https://github.com/nghiep22/ShareBill/actions/runs/45770790589",
+    "status": "completed",
+    "conclusion": "success",
+    "headSha": "113926d6dbcba9e242d7d78a0e79fc98fdd47115",
+    "jobs": [
+      {
+        "name": "backend",
+        "conclusion": "success"
+      },
+      {
+        "name": "frontend",
+        "conclusion": "success"
+      },
+      {
+        "name": "recovery",
+        "conclusion": "success"
+      }
+    ],
+    "unitHttp": 238,
+    "emulator": 98,
+    "browser": 33,
+    "pwaUpdates": 5,
+    "smokeTools": 10,
+    "isolatedRestoreRehearsalPassed": true
+  },
+  "candidateChecks": {
+    "api": {
+      "candidateId": "dpl_GNR93PEky1QqYCnY3nS4KhiXF6JS",
+      "commit": "113926d6dbcba9e242d7d78a0e79fc98fdd47115",
+      "releaseAndGuardsPassed": true,
+      "canonicalStillPreviousRelease": true
+    },
+    "web": {
+      "candidateId": "dpl_H7ra3mWsg42zp3uwMH4DWpHtCG6Z",
+      "commit": "113926d6dbcba9e242d7d78a0e79fc98fdd47115",
+      "releaseAndGuardsPassed": true,
+      "canonicalStillPreviousRelease": true
+    }
+  },
+  "schedule": {
+    "cronUtc": "0 20 * * *",
+    "localWindowVietnam": "03:00–03:59",
+    "automaticRunAfterThisReleaseObserved": false
+  },
+  "verificationNotes": [
+    "The first CI attempt exposed an old test that matched the cancellation filter button before the payment finished. The test now waits for the transaction card and verifies no pending payment; all checks passed in the next run. Runtime settlement rules are unchanged.",
+    "Temporary protection-bypass credentials created by Vercel CLI for candidate checks were revoked. Existing deployment protection stays enabled.",
+    "Cloud browser checks use the real staging API with simulated network/storage failures. They do not replace physical device acceptance."
+  ],
+  "completedAt": "2026-11-26T06:56:20.980Z"
+}

@@ -46,6 +46,69 @@ describe.skipIf(!enabled)('automatic equal group sharing', () => {
     return { owner, trip, root, overview, expense, join, clean };
   }
 
+  it('keeps legacy allocations and selected expense shares separate across joins, edits and voids', async () => {
+    const f = await fixture(), b = await register('Bình'), c = await register('Chi'), d = await register('Dũng');
+    const pb = (await f.join(b)).result.participantId; await f.join(c);
+    const legacy = await f.expense(300000), legacyBefore = (await db().doc(f.root + '/expenses/' + legacy.id).get()).data();
+    const body = { title: 'Vé chỉ hai người', category: 'other', amountMinor: 700000, payerParticipantId: f.trip.ownerParticipantId,
+      sharingScope: 'selected', occurredOn: '2026-11-26', splitMethod: 'equal', split: { participantIds: [f.trip.ownerParticipantId, pb] } };
+    const key = randomUUID(), selected = await ok(f.root + '/expenses', f.owner, body, undefined, 'POST', key);
+    expect(await ok(f.root + '/expenses', f.owner, body, undefined, 'POST', key)).toEqual(selected);
+    let data = await f.overview();
+    expect(data.trip.totalExpenseMinor).toBe(1000000);
+    expect(data.balances.find((row: any) => row.participantId === pb)).toMatchObject({ owedMinor: 450000, allocatedOwedMinor: 350000 });
+    const pd = (await f.join(d)).result.participantId;
+    data = await f.overview();
+    expect(data.balances.find((row: any) => row.participantId === pb).owedMinor).toBe(425000);
+    expect(data.balances.find((row: any) => row.participantId === pd).owedMinor).toBe(75000);
+    const oldClient = await send(f.root + '/expenses/' + selected.id, f.owner, { ...body, title: undefined, category: undefined,
+      occurredOn: undefined, sharingScope: undefined }, 1, 'PATCH');
+    expect(oldClient.statusCode).toBe(409); expect(oldClient.json().error.code).toBe('EXPENSE_SELECTION_REQUIRED');
+    const ledger = data.trip.ledgerVersion;
+    await ok(f.root + '/expenses/' + selected.id, f.owner, { title: 'Đổi tên giữ người chia' }, 1, 'PATCH');
+    expect((await f.overview()).trip.ledgerVersion).toBe(ledger);
+    await ok(f.root + '/expenses/' + selected.id, f.owner, { amountMinor: 600000, payerParticipantId: f.trip.ownerParticipantId,
+      sharingScope: 'selected', splitMethod: 'exact', split: { shares: [{ participantId: pb, amountMinor: 600000 }] } }, 2, 'PATCH');
+    data = await f.overview();
+    expect(data.balances.find((row: any) => row.participantId === pb).owedMinor).toBe(675000);
+    expect((await db().doc(f.root + '/expenses/' + legacy.id).get()).data()).toEqual(legacyBefore);
+    await f.clean();
+    await ok(f.root + '/expenses/' + selected.id + '/void', f.owner, { reason: 'Hủy khoản chọn riêng' }, 3);
+    data = await f.overview();
+    expect(data.balances.every((row: any) => row.owedMinor === 75000 && (row.allocatedOwedMinor ?? 0) === 0)).toBe(true);
+    await f.clean();
+  }, 30000);
+
+  it('keeps a selected participant liable after removal and rejects invalid selections', async () => {
+    const f = await fixture(), b = await register('Bình'), c = await register('Chi');
+    const pb = (await f.join(b)).result.participantId; await f.join(c);
+    const body = { title: 'Chia riêng', category: 'other', amountMinor: 700000, payerParticipantId: f.trip.ownerParticipantId,
+      sharingScope: 'selected', occurredOn: '2026-11-26', splitMethod: 'equal', split: { participantIds: [f.trip.ownerParticipantId, pb] } };
+    const expense = await ok(f.root + '/expenses', f.owner, body);
+    await ok(f.root + '/memberships/' + b.user.uid + '/remove', f.owner, { reason: 'Rời nhóm' }, 1);
+    let data = await f.overview();
+    expect(data.balances.find((row: any) => row.participantId === pb)).toMatchObject({ owedMinor: 350000, netMinor: -350000 });
+    expect((await send(f.root + '/expenses', f.owner, body)).statusCode).toBe(422);
+    expect((await send(f.root + '/expenses', f.owner, { ...body, split: { participantIds: [randomUUID()] } })).statusCode).toBe(422);
+    await ok(f.root + '/memberships/' + b.user.uid + '/restore', f.owner, { reason: 'Trở lại' }, 2);
+    data = await f.overview(); expect(data.balances.find((row: any) => row.participantId === pb).owedMinor).toBe(350000);
+    await ok(f.root + '/expenses/' + expense.id + '/void', f.owner, { reason: 'Hủy' }, 1);
+    expect((await f.overview()).balances.every((row: any) => row.netMinor === 0 && row.owedMinor === 0)).toBe(true);
+    await f.clean();
+  });
+
+  it('serializes a selected expense with a join without charging the new member', async () => {
+    const f = await fixture(), b = await register('Bình');
+    const invite = await ok(f.root + '/invites', f.owner, {});
+    await Promise.all([ok('invites/accept', b, { token: invite.token }), ok(f.root + '/expenses', f.owner, { title: 'Chỉ chủ nhóm', category: 'other',
+      amountMinor: 100001, payerParticipantId: f.trip.ownerParticipantId, sharingScope: 'selected', occurredOn: '2026-11-26',
+      splitMethod: 'equal', split: { participantIds: [f.trip.ownerParticipantId] } })]);
+    const data = await f.overview();
+    expect(data.balances.find((row: any) => row.participantId !== f.trip.ownerParticipantId).owedMinor).toBe(0);
+    expect(data.balances.find((row: any) => row.participantId === f.trip.ownerParticipantId).owedMinor).toBe(100001);
+    await f.clean();
+  });
+
   it('joining automatically links identity and redistributes all previous costs, including idempotent retries', async () => {
     const f = await fixture(), aaa = await register('aaa');
     await f.expense(2100000);

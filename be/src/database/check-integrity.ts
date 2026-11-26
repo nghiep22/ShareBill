@@ -245,6 +245,7 @@ function checkLedger(
   for (const [id, expected] of result.balances) {
     const balance = balances.get(id);
     if (balance) for (const field of balanceFields) compareNumber(balance, field, expected[field], issues);
+    if (balance && (balance.get('allocatedOwedMinor') !== undefined || expected.allocatedOwedMinor !== undefined)) compareNumber(balance, 'allocatedOwedMinor', expected.allocatedOwedMinor ?? 0, issues);
   }
 }
 

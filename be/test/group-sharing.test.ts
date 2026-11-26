@@ -30,4 +30,18 @@ describe('equal trip total sharing', () => {
     expect(() => equalGroupBalances([zeroBalance('a')], 10, ['a'])).toThrow();
     expect(() => equalGroupBalances([zeroBalance('a')], 0, ['a'], new Map([['a', -1]]))).toThrow();
   });
+  it('keeps selected shares fixed and divides only the legacy total when people join or leave', () => {
+    const initial = equalGroupBalances(['a', 'b', 'c'].map(zeroBalance), 801, ['a', 'b', 'c'], new Map([['a', 801]]), new Map([['a', 350], ['b', 350]]));
+    expect(initial.map(row => row.owedMinor)).toEqual([384, 384, 33]);
+    const joined = equalGroupBalances([...initial, zeroBalance('d')], 801, ['a', 'b', 'c', 'd']);
+    expect(joined.map(row => row.owedMinor)).toEqual([376, 375, 25, 25]);
+    const removed = equalGroupBalances(joined, 801, ['a', 'c', 'd']);
+    expect(removed.map(row => row.owedMinor)).toEqual([384, 350, 34, 33]);
+    expect(removed.reduce((sum, row) => sum + row.netMinor, 0)).toBe(0);
+  });
+  it('rejects selected shares exceeding the total or an over-reversed allocation', () => {
+    const rows = [{ ...zeroBalance('a'), paidMinor: 10 }];
+    expect(() => equalGroupBalances(rows, 10, ['a'], new Map(), new Map([['a', 11]]))).toThrow();
+    expect(() => equalGroupBalances(rows, 10, ['a'], new Map(), new Map([['a', -1]]))).toThrow();
+  });
 });

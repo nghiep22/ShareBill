@@ -1,5 +1,7 @@
 # QR nhận tiền và ảnh chuyển khoản
 
+**26/11/2026:** QR trong **Chi tiết khoản chi** dùng phần chia của chính khoản đó; QR ở **Số dư** dùng công nợ còn lại toàn chuyến. QR theo khoản chưa trừ các lượt đã chuyển, có hướng dẫn kiểm Số dư trước khi trả. [Chọn người, số tiền từng phần và ví dụ](EXPENSE_SHARING.md).
+
 Luồng nằm trong **Số dư & quyết toán** và **Lịch sử chuyển tiền**. QR nhận tiền cũng có thể cập nhật từ **Thành viên & phân quyền**.
 
 1. Mỗi tài khoản đã liên kết thành viên tải ảnh QR ngân hàng của mình lên, xem lại rồi bấm **Lưu QR nhận tiền**. QR được quản lý riêng trong từng nhóm; chỉ chính tài khoản đó được sửa.

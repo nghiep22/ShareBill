@@ -40,8 +40,16 @@ export async function readGroupLedger(tx: Transaction, trip: DocumentSnapshot) {
 }
 export type GroupLedger = Awaited<ReturnType<typeof readGroupLedger>>;
 
-export function projectGroup(state: GroupLedger, total: number, ids = state.ids, paidDeltas = new Map<string, number>()) {
-  try { return equalGroupBalances(state.rows, total, ids, paidDeltas); } catch { return invariant(); }
+export function projectGroup(state: GroupLedger, total: number, ids = state.ids, paidDeltas = new Map<string, number>(), allocatedDeltas = new Map<string, number>()) {
+  try { return equalGroupBalances(state.rows, total, ids, paidDeltas, allocatedDeltas); } catch { return invariant(); }
+}
+
+export function allocatedExpenseDelta(previous?: { sharingScope?: string; shares: { participantId: string; amountMinor: number }[] }, next?: { sharingScope?: string; shares: { participantId: string; amountMinor: number }[] }) {
+  const result = new Map<string, number>();
+  for (const [expense, sign] of [[previous, -1], [next, 1]] as const) if (expense?.sharingScope === 'selected') {
+    for (const share of expense.shares) result.set(share.participantId, (result.get(share.participantId) ?? 0) + sign * share.amountMinor);
+  }
+  return result;
 }
 export function writeGroupBalances(tx: Transaction, trip: DocumentSnapshot, rows: Balance[], now: Timestamp) {
   for (const row of rows) tx.set(trip.ref.collection('balances').doc(row.participantId), { schemaVersion: 1, ...row, updatedAt: now });

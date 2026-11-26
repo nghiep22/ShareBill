@@ -20,6 +20,7 @@ export type Memberships = { memberships: Membership[]; participants: Participant
 export type TripOverview = { trip: TripDto; participants: ParticipantDto[]; balances: BalanceLine[]; revision?: number };
 export type TransferDto = { fromParticipantId: string; toParticipantId: string; amountMinor: number };
 export type ExpenseDto = {
+  sharingScope?: 'selected';
   id: string; title: string; amountMinor: number; payerParticipantId: string; occurredOn: string;
   category: Category; status: 'active' | 'void'; version: number; note: string | null;
   voidReason: string | null; createdBy: string; updatedBy: string; splitMethod: 'equal' | 'exact';
@@ -77,6 +78,7 @@ export const expenseFrom = (item: ExpenseDto): Expense => ({
   category: Object.hasOwn(categories, item.category) ? item.category : 'other',
   note: item.note ?? '', shares: Object.fromEntries(item.shares.map(share => [share.participantId, share.amountMinor])),
   mode: item.splitMethod, voided: item.status === 'void', voidReason: item.voidReason ?? undefined, version: item.version,
+  sharingScope: item.sharingScope,
   receipts: item.receiptIds?.map((id, index) => ({ id, name: 'Hóa đơn ' + (index + 1) })), createdBy: item.createdBy,
   editedBy: item.version > 1 ? item.updatedBy : undefined,
 });
@@ -129,11 +131,13 @@ export const tripBody = (trip: Trip) => ({
 function expenseBody(expense: Expense, previous?: Expense) {
   const items = Object.entries(expense.shares).sort(([a], [b]) => a.localeCompare(b));
   const financial = {
+    ...(expense.sharingScope && { sharingScope: expense.sharingScope }),
     amountMinor: expense.amount, payerParticipantId: expense.payer, splitMethod: expense.mode,
     split: expense.mode === 'equal' ? { participantIds: items.map(([id]) => id) } :
       { shares: items.map(([participantId, amountMinor]) => ({ participantId, amountMinor })) },
   };
   const financialChanged = !previous || expense.amount !== previous.amount || expense.payer !== previous.payer ||
+    expense.sharingScope !== previous.sharingScope ||
     expense.mode !== previous.mode || items.length !== Object.keys(previous.shares).length ||
     items.some(([id, share]) => previous.shares[id] !== share);
   const receiptIds = expense.receipts?.map(receipt => receipt.id) ?? [];

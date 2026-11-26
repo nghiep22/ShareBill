@@ -18,6 +18,7 @@ export function planExpenseEdit(previous: ExpenseDocument, input: z.infer<typeof
   const patch = { ...fields, ...(split ? { splitInput: split, shares } : {}) };
   const next = { ...previous, ...patch };
   const financialChanged = previous.amountMinor !== next.amountMinor || previous.payerParticipantId !== next.payerParticipantId ||
+    previous.sharingScope !== next.sharingScope ||
     previous.shares.length !== next.shares.length || previous.shares.some((share, i) =>
       share.participantId !== next.shares[i]?.participantId || share.amountMinor !== next.shares[i]?.amountMinor);
   return { patch, next, financialChanged, hasFinancialBlock: split !== undefined };
@@ -26,5 +27,6 @@ export function planExpenseEdit(previous: ExpenseDocument, input: z.infer<typeof
 export function expenseEditAudit(data: ExpenseDocument) {
   return { id: data.id, title: data.title, note: data.note, occurredOn: data.occurredOn, category: data.category,
     amountMinor: data.amountMinor, payerParticipantId: data.payerParticipantId, shares: data.shares,
+    ...(data.sharingScope && { sharingScope: data.sharingScope }),
     splitMethod: data.splitMethod, splitInput: data.splitInput, receiptIds: data.receiptIds, status: data.status, version: data.version };
 }

@@ -1,5 +1,7 @@
 # Tự chia đều tổng chi của nhóm
 
+**Cập nhật 26/11/2026:** khoản mới trên giao diện chọn người chia riêng và giữ danh sách đó khi thành viên thay đổi. Chi tiết/QR dùng phần của từng khoản; Số dư dùng công nợ toàn chuyến. Các khoản cũ giữ cơ chế tự chia tổng dưới đây, không chuyển hàng loạt. [Hợp đồng mới và ví dụ](EXPENSE_SHARING.md).
+
 Nhóm mới dùng `sharingMode=group-equal`. Mỗi tài khoản có membership đang active là một người chia tiền. Khi nhận lời mời, server tạo người tham gia và liên kết cùng transaction; không phải thêm tên hay liên kết thủ công.
 
 `Phải chịu = tổng chi chưa hủy / số tài khoản trong nhóm`. Chia phần lẻ VND một lần trên tổng chi theo thứ tự participant ID cố định; chênh lệch tối đa 1đ. Tổng nhiều khoản có thể vượt giới hạn một khoản chi, vẫn phải nằm trong số nguyên an toàn. `Số dư = đã ứng − phải chịu + đã chuyển − đã nhận`. Chỉ tính chuyển tiền đã xác nhận còn hiệu lực.

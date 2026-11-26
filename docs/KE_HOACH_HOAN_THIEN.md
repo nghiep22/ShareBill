@@ -2,13 +2,25 @@
 
 Ngày khảo sát 18/11/2026 · Phạm vi mã trong workspace, giao diện và API local, Firebase Emulator, bộ thiết kế `GiaoDien` và đặc tả nghiệp vụ.
 
+## Chọn người theo khoản và sửa QR ngày 26/11/2026
+
+Theo yêu cầu mới, khoản chi mới trong nhóm chọn người tham gia, chia đều hoặc nhập từng phần. Danh sách và số tiền được lưu cùng sổ tiền; thêm/gỡ thành viên không chia lại khoản đã chọn người. Các khoản cũ giữ cách tính cũ theo lựa chọn của người dùng, không migration hàng loạt. Chi tiết luôn hiện mỗi người chịu bao nhiêu; QR tại khoản chi dùng phần của chính khoản đó. QR tại Số dư vẫn dùng công nợ toàn chuyến. Hộp thoại theo khoản ghi rõ chưa trừ lượt chuyển đã xác nhận.
+
+Đã kiểm ví dụ nhóm ba người, vé 700.000đ chỉ chọn hai người: Bình chịu và có QR 350.000đ, dù số dư cả chuyến là 775.000đ; người không được chọn không xuất hiện trong phần chia/QR. Đã kiểm sửa sang phần riêng, thành viên thứ tư không bị tính vào chi đã chọn, reload ngoại tuyến, người rời nhóm trong lúc soạn, giữ khoản cũ, replay, metadata/edit/void và join đồng thời. Unit hiện có 247 ca; file group Emulator đạt 12 ca. Bộ browser cập nhật 35 hành trình. Kết quả CI/cloud của bản phát hành sẽ bổ sung sau khi deploy. [Hợp đồng và ví dụ](EXPENSE_SHARING.md).
+
+## Phát hành phiên và ngoại tuyến ngày 26/11/2026
+
+FE và API đã deploy cùng SHA `113926d6dbcba9e242d7d78a0e79fc98fdd47115` lên domain [ShareBill](https://sharebill-nghiep22.vercel.app/). [CI](https://github.com/nghiep22/ShareBill/actions/runs/45770790589) đạt 238 unit/HTTP, 98 Emulator, 33 hành trình browser, 5 PWA, 10 smoke và diễn tập restore cách ly. Trên domain thật đã kiểm đổi tài khoản với phản hồi cũ đến muộn, cache hỏng khi offline rồi reconnect, lưu khi IndexedDB treo, đăng nhập khi storage bị chặn và retry sau mất phản hồi chỉ tạo một khoản chi. Luồng Auth/tiền/replay/quyết toán/chốt và bố cục 320/390/1280px đạt; không có lỗi JavaScript.
+
+Các khoản chi thử đã hủy và ba chuyến browser synthetic đã chốt; chuyến của smoke tiền cũng đã chốt. Hai domain phục vụ đúng deployment mới, cron bảo trì vẫn bật trên API hiện hành; thông tin bypass tạm dùng kiểm candidate đã thu hồi. [Bằng chứng, phạm vi và rollback](reports/2026-11-26-session-offline-reliability-release.json). Còn nghiệm thu thiết bị vật lý, Google operator, giao thư thật, lịch tự chạy sau bản mới và backup/restore cloud.
+
 ## Phục hồi khi bộ nhớ ngoại tuyến lỗi ngày 26/11/2026
 
 Mỗi bước mở IndexedDB hoặc thực hiện transaction chờ tối đa 5 giây. Khi bị chặn, treo hoặc hết dung lượng, form giữ bản nhập trong tab và hướng dẫn giữ tab mở; lỗi xóa nháp sau khi server đã lưu không làm kẹt trạng thái đang lưu. Connection mở muộn được đóng, transaction quá hạn được hủy và connection nhường khi có yêu cầu đổi phiên bản database.
 
 Snapshot và nháp được kiểm cấu trúc, tài khoản/chuyến, loại dữ liệu và mốc lưu trước khi khôi phục. Bỏ bản quá 24 giờ, timestamp không hợp lệ hoặc ở tương lai; snapshot còn phải có ngày/múi giờ hợp lệ, danh sách chia đúng và số tiền nhất quán. Bản nháp được phép chưa nhập đủ nhưng không nhận cấu trúc hỏng. Đọc và xóa cache lỗi trong cùng transaction để không xóa nhầm bản mới từ tab khác. Callback lưu snapshot cũ bị bỏ qua sau khi đổi chuyến hoặc rời màn hình.
 
-Kiểm chứng local: 32 ca unit mới kiểm validation và giới hạn chờ; ba hành trình trình duyệt mới kiểm cache hỏng/hết hạn, nháp hỏng rồi soạn lại và lưu chi tiêu khi IndexedDB treo. Bộ hồi quy gồm 238 unit/HTTP, 33 hành trình trên static/PWA, 5 kiểm thử cập nhật PWA và 10 kiểm thử công cụ smoke. Typecheck/build FE và BE đạt. Chưa triển khai cloud; kiểm thử Chromium trên desktop chưa thay cho Safari iOS/Chrome Android và bộ nhớ thiết bị vật lý.
+Kiểm chứng local: 32 ca unit mới kiểm validation và giới hạn chờ; ba hành trình trình duyệt mới kiểm cache hỏng/hết hạn, nháp hỏng rồi soạn lại và lưu chi tiêu khi IndexedDB treo. Bộ hồi quy gồm 238 unit/HTTP, 33 hành trình trên static/PWA, 5 kiểm thử cập nhật PWA và 10 kiểm thử công cụ smoke. Typecheck/build FE và BE đạt. Đã bổ sung kiểm chứng cloud trong mục phát hành ở trên; Chromium trên desktop chưa thay cho Safari iOS/Chrome Android và bộ nhớ thiết bị vật lý.
 
 CI phát hiện bước hủy chuyển tiền trong fixture cũ có thể nhận nhầm nút lọc **Đã hủy** trước khi giao dịch hoàn tất. Bài kiểm thử đã đổi sang chờ nhãn trạng thái trên thẻ chuyển tiền và kiểm danh sách pending rỗng trước khi mở sửa khoản chi. Không đổi quy tắc hay runtime quyết toán.
 
@@ -18,7 +30,7 @@ Mỗi lần đăng nhập/đăng xuất tạo một mốc phiên riêng, kể c�
 
 Giao dịch chưa rõ kết quả giữ khóa chống trùng trong nhật ký của tài khoản ban đầu để tra cứu hoặc gửi lại sau khi đăng nhập lại. Bỏ callback của màn hình đã đóng và không tự nâng cấp cách chia của chuyến từ phản hồi của màn hình đã rời. Khi trình duyệt chặn lưu trữ, phiên và khóa retry vẫn hoạt động trong bộ nhớ của tab; thông báo yêu cầu giữ tab mở vẫn hiển thị.
 
-Kiểm chứng local: 18 ca mới về cạnh tranh phiên trong bộ unit, hai hành trình mới với API/Firebase Emulator kiểm đổi tài khoản khi tổng quan đang tải và mất phản hồi sau khi đã lưu khoản chi trên trình duyệt chặn storage. Lượt kiểm tra cuối gồm 206 unit/HTTP, 30 hành trình trình duyệt trên bản static/PWA, 5 tình huống cập nhật PWA và 10 kiểm thử công cụ smoke. Typecheck và build FE/BE đạt. Đợt này chưa triển khai cloud; các cổng thiết bị vật lý, Google operator, giao thư thật và backup/restore cloud vẫn cần nghiệm thu riêng.
+Kiểm chứng local ban đầu: 18 ca mới về cạnh tranh phiên trong bộ unit, hai hành trình mới với API/Firebase Emulator kiểm đổi tài khoản khi tổng quan đang tải và mất phản hồi sau khi đã lưu khoản chi trên trình duyệt chặn storage. Lượt đó gồm 206 unit/HTTP, 30 hành trình trình duyệt trên bản static/PWA, 5 tình huống cập nhật PWA và 10 kiểm thử công cụ smoke. Typecheck và build FE/BE đạt. Sau khi bổ sung hoàn thiện bộ nhớ, đã deploy và kiểm cloud cùng đợt phát hành ở trên; các cổng thiết bị vật lý, Google operator, giao thư thật và backup/restore cloud vẫn cần nghiệm thu riêng.
 
 ## Worker bảo trì và lịch Hobby ngày 25/11/2026
 

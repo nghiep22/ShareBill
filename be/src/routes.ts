@@ -6,7 +6,7 @@ import { z } from 'zod';
 import { auth, db } from './firebase.js';
 import { ApiError, operationKey, requireTripAccess, requireUser, sendOperationResult } from './http.js';
 import { tripInput, participantInput, expenseInput } from './schemas.js';
-import { splitEqual, validateExact, expenseDelta, applyBalanceDelta, applyExpenseTotals, type Balance, type Share } from './domain/money.js';
+import { splitEqual, validateExact, expenseDelta, applyAllocatedDelta, applyBalanceDelta, applyExpenseTotals, type Balance, type Share } from './domain/money.js';
 import { ensureUserProfileDocument } from './services/user-profile.js';
 import { createTripDocuments } from './database/trip.js';
 import { createParticipantDocuments } from './database/participant.js';
@@ -15,7 +15,7 @@ import { createAuditEvent } from './database/audit.js';
 import { createOperationDocument, readOperationResult, readOperationSnapshot } from './database/operation.js';
 import { readTripActor } from './services/trip-access.js';
 import type { releaseIdentity } from './release.js';
-import { isGroupEqual, projectGroup, readGroupLedger, writeGroupBalances } from './services/group-sharing.js';
+import { allocatedExpenseDelta, isGroupEqual, projectGroup, readGroupLedger, writeGroupBalances } from './services/group-sharing.js';
 
 function parse<T>(schema: { safeParse: (value: unknown) => { success: true; data: T } | { success: false } }, body: unknown): T {
   const result = schema.safeParse(body);
@@ -188,10 +188,11 @@ export async function registerRoutes(app: FastifyInstance, release: ReturnType<t
       if (trip.get('status') !== 'active' || trip.get('moderationStatus') !== 'normal') throw new ApiError(409, 'TRIP_NOT_WRITABLE', 'Chuyến đi đang khóa thao tác.');
       const group = isGroupEqual(trip) ? await readGroupLedger(tx, trip) : undefined;
       if (group) {
-        if (body.splitMethod !== 'equal') throw new ApiError(422, 'GROUP_EQUAL_SHARING_REQUIRED', 'Nhóm tự chia đều tổng chi cho các thành viên.');
+        if (!body.sharingScope && body.splitMethod !== 'equal') throw new ApiError(422, 'GROUP_EQUAL_SHARING_REQUIRED', 'Chọn người chia để nhập phần riêng.');
         if (!group.ids.includes(body.payerParticipantId)) throw new ApiError(422, 'INVALID_PARTICIPANTS', 'Người ứng tiền phải đang ở trong nhóm.');
+        if (body.sharingScope && requestedShares.some(share => !group.ids.includes(share.participantId))) throw new ApiError(422, 'INVALID_PARTICIPANTS', 'Chọn người chia đang ở trong nhóm.');
       }
-      const shares = group ? splitEqual(body.amountMinor, group.ids) : requestedShares;
+      const shares = group && !body.sharingScope ? splitEqual(body.amountMinor, group.ids) : requestedShares;
       const participantIds = [...new Set([body.payerParticipantId, ...shares.map(row => row.participantId)])];
       const expenseCount = trip.get('expenseCountAllTime'), activeExpenseCount = trip.get('activeExpenseCount');
       if (!Number.isSafeInteger(expenseCount) || !Number.isSafeInteger(activeExpenseCount) ||
@@ -207,15 +208,16 @@ export async function registerRoutes(app: FastifyInstance, release: ReturnType<t
       const balanceSnaps = await Promise.all([...deltas.keys()].map(id => tx.get(store.doc(`trips/${tripId}/balances/${id}`))));
       if (balanceSnaps.some(snapshot => !snapshot.exists)) throw new ApiError(409, 'PROJECTION_INVARIANT_FAILED', 'Số dư chuyến chưa sẵn sàng.');
       const now = Timestamp.now();
-      const nextBalances = group ? projectGroup(group, totals.totalExpenseMinor, group.ids, new Map([[body.payerParticipantId, body.amountMinor]])) : [...deltas].map(([, delta], index) => ({
-        ...applyBalanceDelta(balanceSnaps[index]!.data() as Balance, delta), updatedAt: now,
+      const allocatedDeltas = allocatedExpenseDelta(undefined, { ...body, shares });
+      const nextBalances = group ? projectGroup(group, totals.totalExpenseMinor, group.ids, new Map([[body.payerParticipantId, body.amountMinor]]), allocatedDeltas) : [...deltas].map(([, delta], index) => ({
+        ...applyAllocatedDelta(applyBalanceDelta(balanceSnaps[index]!.data() as Balance, delta), allocatedDeltas.get(balanceSnaps[index]!.id)), updatedAt: now,
       }));
       const revision = trip.get('revision') + 1;
       const ledgerVersion = trip.get('ledgerVersion') + 1;
       if (!Number.isSafeInteger(revision) || !Number.isSafeInteger(ledgerVersion)) {
         throw new ApiError(409, 'PROJECTION_INVARIANT_FAILED', 'Phiên bản chuyến chưa sẵn sàng.');
       }
-      const effectiveBody = group && body.splitMethod === 'equal' ? { ...body, split: { participantIds: group.ids } } : body;
+      const effectiveBody = group && !body.sharingScope && body.splitMethod === 'equal' ? { ...body, split: { participantIds: group.ids } } : body;
       const document = createExpenseDocument({ id: expenseId, body: effectiveBody, shares, actorUid: uid, now });
       const receiptPlans = await planReceiptAttachments(tx, tripRef, expenseId, uid, body.receiptIds, [], now);
       const response = { id: expenseId, ...effectiveBody, currency: 'VND', splitInput: effectiveBody.split, shares, status: 'active', version: 1 };
@@ -236,6 +238,7 @@ export async function registerRoutes(app: FastifyInstance, release: ReturnType<t
         eventId: auditEventId, actorUid: uid, actorDisplayNameSnapshot: user.get('displayName'),
         action: 'expense.created', entityType: 'expense', entityId: expenseId, before: null,
         after: { id: expenseId, amountMinor: body.amountMinor, payerParticipantId: body.payerParticipantId,
+          ...(body.sharingScope && { sharingScope: body.sharingScope }),
           shares, status: 'active', version: 1 }, reason: null,
         revision, ledgerVersion, operationKey: key, createdAt: now,
       }));

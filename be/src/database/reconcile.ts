@@ -21,6 +21,10 @@ export function reconcileLedger(participantIds: Iterable<string>, expenses: Ledg
     for (const [id, delta] of expenseDelta(expense.amountMinor, expense.payerParticipantId, expense.shares, 1)) {
       balances.set(id, applyBalanceDelta(balances.get(id)!, delta));
     }
+    if (expense.sharingScope === 'selected') for (const share of expense.shares) {
+      const row = balances.get(share.participantId)!;
+      balances.set(share.participantId, { ...row, allocatedOwedMinor: (row.allocatedOwedMinor ?? 0) + share.amountMinor });
+    }
   }
   for (const settlement of settlements) {
     if (settlement.status === 'pending') pendingSettlementCount++;

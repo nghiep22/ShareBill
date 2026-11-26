@@ -1,5 +1,7 @@
 # ShareBill — Đặc tả Backend
 
+**26/11/2026:** bổ sung `expense.sharingScope=selected` và `balance.allocatedOwedMinor` để khoản mới giữ đúng người được chọn, đồng thời giữ cách tính các khoản cũ. Create/edit/void, đổi thành viên, checker/reconcile/repair và offline cùng dùng hợp đồng tại [Chia theo khoản](EXPENSE_SHARING.md).
+
 **Bổ sung 20/11/2026:** [QR nhận tiền và ảnh chuyển khoản](PAYMENTS.md) mô tả API QR, đính kèm bằng chứng giao dịch và quyền xác nhận của người nhận.
 
 Phiên bản 1.0 · 16/11/2026 · Phương án chính: Next.js API trên Vercel + Firebase.

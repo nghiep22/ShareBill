@@ -13,6 +13,7 @@ import { maximumMoney as maximum, parseMoney } from './money-input';
 import { clearExpenseDraft, getExpenseDraft, saveExpenseDraft, type DeviceScope, type ExpenseDraft } from './private-device';
 import { PaymentImage } from './payments';
 import { ShareRepaymentQrs } from './share-repayments';
+import { expenseShares } from './expense-sharing';
 
 const receiptTypes = ['image/jpeg', 'image/png', 'image/webp'];
 
@@ -51,13 +52,16 @@ export function ExpenseForm({ data, expense: latest, update, receiptActions, dis
   const back = expense ? tripHref(data, 'khoan-chi', expense.id) : tripHref(data, 'chi-tieu');
   const me = viewerOf(data);
   const groupEqual = data.remote?.sharingMode === 'group-equal';
+  const [customSplit, setCustomSplit] = useState(!groupEqual || !expense || expense.sharingScope === 'selected');
+  const automatic = groupEqual && !customSplit;
   const active = sharingMembers(data);
-  const eligible = data.members.filter(member => groupEqual ? active.some(person => person.id === member.id) || expense?.payer === member.id : !member.inactive || expense?.payer === member.id || member.id in (expense?.shares ?? {}));
   const [amount, setAmount] = useState(expense ? String(expense.amount) : '');
   const [payer, setPayer] = useState(expense?.payer ?? (active.some(member => member.id === me) ? me : ''));
   const [selectedMode, setMode] = useState(expense?.mode ?? 'equal');
-  const mode = groupEqual ? 'equal' : selectedMode;
+  const mode = automatic ? 'equal' : selectedMode;
   const [selected, setSelected] = useState<string[]>(expense ? Object.keys(expense.shares) : active.map(member => member.id));
+  const eligible = data.members.filter(member => (groupEqual ? active.some(person => person.id === member.id) : !member.inactive) ||
+    selected.includes(member.id) || expense?.payer === member.id || member.id in (expense?.shares ?? {}));
   const [exact, setExact] = useState<Record<string, string>>(
     Object.fromEntries(Object.entries(expense?.shares ?? {}).map(([id, share]) => [id, String(share)])),
   );
@@ -76,10 +80,10 @@ export function ExpenseForm({ data, expense: latest, update, receiptActions, dis
   const [savedDraft, setSavedDraft] = useState<{ value: ExpenseDraft; at: number }>();
   const [draftError, setDraftError] = useState(false);
   const firstForm = useRef<ExpenseDraft>({ fields, amount, payer, mode, selected, exact });
-  const ids = (groupEqual ? active : eligible.filter(member => selected.includes(member.id))).map(member => member.id);
+  const ids = (automatic ? active : eligible.filter(member => selected.includes(member.id))).map(member => member.id);
   if (data.remote) ids.sort();
   const total = Number(amount);
-  const originalSplit = !groupEqual && expense && total === expense.amount && mode === expense.mode &&
+  const originalSplit = !automatic && expense && total === expense.amount && mode === expense.mode &&
     ids.length === Object.keys(expense.shares).length && ids.every(id => id in expense.shares);
   const shares = mode === 'exact' ? Object.fromEntries(ids.map(id => [id, Number(exact[id] ?? 0)])) :
     originalSplit ? expense.shares : splitEqually(total, ids);
@@ -118,7 +122,8 @@ export function ExpenseForm({ data, expense: latest, update, receiptActions, dis
       category: keepChanges && fields.category !== start.category ? fields.category : server.category,
       note: keepChanges && fields.note !== start.note ? fields.note : server.note,
     });
-    const changedShares = groupEqual ? total !== expense.amount || payer !== expense.payer :
+    const changedShares = automatic ? total !== expense.amount || payer !== expense.payer :
+      groupEqual && expense.sharingScope !== 'selected' ||
       !originalSplit || payer !== expense.payer || Object.entries(shares).some(([id, share]) => expense.shares[id] !== share);
     if (!keepChanges || !changedShares) {
       setAmount(String(latest.amount));
@@ -126,6 +131,7 @@ export function ExpenseForm({ data, expense: latest, update, receiptActions, dis
       setMode(latest.mode);
       setSelected(Object.keys(latest.shares));
       setExact(Object.fromEntries(Object.entries(latest.shares).map(([id, share]) => [id, String(share)])));
+      setCustomSplit(!groupEqual || latest.sharingScope === 'selected');
     }
     const originalIds = new Set(expense.receipts?.map(item => item.id));
     const localIds = new Set(receipts.map(item => item.id));
@@ -213,10 +219,11 @@ export function ExpenseForm({ data, expense: latest, update, receiptActions, dis
       setError('Kiểm tra tên, người trả, số tiền và phần chia. Tổng phần chia cần khớp số tiền đã trả.');
       return;
     }
-    const sameSplit = expense && (groupEqual ? total === expense.amount && payer === expense.payer :
+    const sameSplit = expense && (automatic ? total === expense.amount && payer === expense.payer :
       originalSplit && payer === expense.payer && ids.every(id => shares[id] === expense.shares[id]));
-    const validPeople = groupEqual ? payer === expense?.payer || active.some(member => member.id === payer) :
-      sameSplit || [payer, ...selected].every(id => active.some(member => member.id === id));
+    const validPeople = automatic ? payer === expense?.payer || active.some(member => member.id === payer) :
+      sameSplit || [payer, ...selected].every(id => active.some(member => member.id === id) ||
+        expense && (id === payer && id === expense.payer || shares[id] === expense.shares[id] && id in expense.shares));
     if (!validPeople) {
       setError('Chọn người trả và người chia đang hoạt động để thay đổi số tiền hoặc cách chia.');
       return;
@@ -224,8 +231,9 @@ export function ExpenseForm({ data, expense: latest, update, receiptActions, dis
 
     const item: Expense = {
       id: expense?.id ?? newId(), title, payer, amount: total,
-      mode: groupEqual && sameSplit ? expense.mode : mode,
-      shares: groupEqual && sameSplit ? expense.shares : shares, receipts,
+      mode: automatic && sameSplit ? expense.mode : mode,
+      shares: automatic && sameSplit ? expense.shares : shares, receipts,
+      ...(groupEqual && !automatic && { sharingScope: 'selected' as const }),
       date: fields.date, category: fields.category, note: fields.note.trim(),
       createdBy: expense ? (expense.createdBy ?? ownerOf(data)) : me, editedBy: expense ? me : undefined,
     };
@@ -291,14 +299,16 @@ export function ExpenseForm({ data, expense: latest, update, receiptActions, dis
       <fieldset className="card field-card">
         <legend>Ai đã trả tiền?</legend>
         <div className="payer-options">
-          {eligible.filter(member => !member.inactive || member.id === expense?.payer).map(member => <label className="payer-option" key={member.id}>
+          {eligible.filter(member => active.some(person => person.id === member.id) || member.id === expense?.payer).map(member => <label className="payer-option" key={member.id}>
             <input type="radio" name="payer" value={member.id} checked={payer === member.id} onChange={() => setPayer(member.id)} />
-            <Avatar member={member} /><span>{nameOf(data, member.id)}{member.id === me ? ' (bạn)' : ''}{member.inactive ? ' · Ngừng dùng' : ''}</span>
+            <Avatar member={member} /><span>{nameOf(data, member.id)}{member.id === me ? ' (bạn)' : ''}{!active.some(person => person.id === member.id) ? groupEqual ? ' · Đã rời nhóm' : ' · Ngừng dùng' : ''}</span>
           </label>)}
         </div>
       </fieldset>
-      {groupEqual ? <section className="card field-card" aria-label="Chia đều tự động">
-        <h2>Chia đều cho cả nhóm</h2>
+      {automatic ? <section className="card field-card" aria-label="Chia đều tự động">
+        <h2>Khoản cũ chia đều cho cả nhóm</h2>
+        <p>Giữ cách chia cũ khi chỉ sửa nội dung. Chọn người riêng sẽ cập nhật phần chia và công nợ của khoản này.</p>
+        <button type="button" className="secondary-button" onClick={() => { setSelected(active.map(member => member.id)); setMode('equal'); setCustomSplit(true); }}>Chọn người cho khoản này</button>
         <a className="text-button" href={tripHref(data, 'so-du')}>Xem số tiền của từng người</a>
       </section> : <fieldset className="card field-card">
         <legend>Chia cho ai?</legend>
@@ -317,7 +327,7 @@ export function ExpenseForm({ data, expense: latest, update, receiptActions, dis
           {eligible.map(member => <div className="split-row" aria-label={'Phần chia dự kiến của ' + nameOf(data, member.id)} key={member.id}>
             <label><input type="checkbox" checked={selected.includes(member.id)} onChange={e =>
               setSelected(e.target.checked ? [...selected, member.id] : selected.filter(id => id !== member.id))
-            } /><Avatar member={member} /> {nameOf(data, member.id)}{member.inactive && <small>Ngừng dùng</small>}</label>
+            } /><Avatar member={member} /> {nameOf(data, member.id)}{!active.some(person => person.id === member.id) && <small>{groupEqual ? 'Đã rời nhóm' : 'Ngừng dùng'}</small>}</label>
             {selected.includes(member.id) && (mode === 'equal'
               ? <strong><span className="split-caption">Phải chịu </span><Amount value={shares[member.id]} /></strong>
               : <input className="split-input" aria-label={'Phần chia của ' + nameOf(data, member.id)} aria-invalid={invalid.includes(member.id)} inputMode="numeric" placeholder="0"
@@ -382,6 +392,7 @@ export function ExpenseDetail({ data, expense, update, receiptActions }: { data:
   const [image, setImage] = useState<Receipt | null>(null);
   const [error, setError] = useState('');
   const receipts = expense.receipts ?? [];
+  const shares = expenseShares(data, expense);
   function voidExpense(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const reason = String(new FormData(event.currentTarget).get('reason')).trim();
@@ -412,19 +423,16 @@ export function ExpenseDetail({ data, expense, update, receiptActions }: { data:
         <ImagePlus size={18} aria-hidden /> {receipts.length ? 'Quản lý ảnh hóa đơn' : 'Thêm ảnh hóa đơn'}
       </a>}
     </section>
-    {!expense.voided && <ShareRepaymentQrs data={data} actions={receiptActions} context={'Bill: ' + expense.title} />}
+    {!expense.voided && <ShareRepaymentQrs data={data} expense={expense} actions={receiptActions} context={'Khoản chi: ' + expense.title} />}
     <section>
-      {data.remote?.sharingMode === 'group-equal' ? <>
-        <div className="section-heading"><h2>Chi chung của nhóm</h2><span className="tag">Tự chia đều</span></div>
-        <a className="text-button" href={tripHref(data, 'so-du')}>Xem số tiền còn cần trả / được nhận</a>
-      </> : <>
       <div className="section-heading"><h2>Mỗi người phải chịu</h2><span className="tag">{expense.mode === 'equal' ? 'Chia đều' : 'Theo số tiền'}</span></div>
-      <div className="card rows">{data.members.filter(member => member.id in expense.shares).map(member =>
+      {!shares && <p className="inline-note error" role="alert">Chưa đủ dữ liệu phần chia. Tải lại khoản chi để kiểm tra.</p>}
+      <div className="card rows">{data.members.filter(member => shares && Object.hasOwn(shares, member.id)).map(member =>
         <div key={member.id} className="list-row" aria-label={'Phần phải chịu của ' + nameOf(data, member.id)}><Avatar member={member} /><span className="row-text"><strong>{nameOf(data, member.id)}{member.id === viewerOf(data) && ' (bạn)'}</strong><span>{member.id === expense.payer ? 'Người đã ứng tiền' : 'Phần được chia'}</span></span>
-          <strong className="row-end"><Amount value={expense.shares[member.id]} /></strong></div>
+          <strong className="row-end"><Amount value={shares![member.id]} /></strong></div>
       )}</div>
+      {data.remote?.sharingMode === 'group-equal' && expense.sharingScope !== 'selected' && <p className="inline-note">Khoản cũ vẫn chia đều cho các thành viên đang được tính trong nhóm. Phần lẻ của các khoản cũ được cân bằng trên tổng chi.</p>}
       <a className="text-button" href={tripHref(data, 'so-du')}>Xem số tiền còn cần trả / được nhận</a>
-      </>}
     </section>
     {canEditExpense(data, expense) && <div className="button-pair">
       <a className="secondary-button" href={tripHref(data, 'sua-khoan-chi', expense.id)}><Pencil size={17} aria-hidden /> Sửa khoản chi</a>

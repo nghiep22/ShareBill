@@ -121,13 +121,14 @@ async function readState(tx: Transaction, store: Firestore, tripId: string) {
   add(trip, rootPatch);
   for (const [id, row] of expected.balances) {
     const doc = balances.docs.find(doc => doc.id === id) ?? await tx.get(tripRef.collection('balances').doc(id));
-    add(doc, { schemaVersion: 1, ...row });
+    const projection = { schemaVersion: 1, ...row, ...(doc.get('allocatedOwedMinor') !== undefined && row.allocatedOwedMinor === undefined && { allocatedOwedMinor: 0 }) };
+    add(doc, projection);
     // Timestamp/type errors in a projection can be repaired without trusting its financial values.
     if (doc.exists && !balanceSchema.safeParse(doc.data()).success) {
       const change = changes.find(change => change.path === doc.ref.path);
       const before = encode(doc.data()) as Record<string, unknown>;
       if (change) change.before = before;
-      else changes.push({ path: doc.ref.path, before, after: { schemaVersion: 1, ...row } });
+      else changes.push({ path: doc.ref.path, before, after: projection });
     }
   }
   for (const person of people.docs) if (referenced.has(person.id) && !person.get('hasLedgerReferences')) add(person, { hasLedgerReferences: true });

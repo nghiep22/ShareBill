@@ -8,6 +8,7 @@ export type Balance = {
   sentMinor: number;
   receivedMinor: number;
   netMinor: number;
+  allocatedOwedMinor?: number;
 };
 
 export const MAX_AMOUNT_MINOR = 1_000_000_000_000;
@@ -73,13 +74,22 @@ export function splitGroupTotal(amount: number, participantIds: string[]): Share
   }));
 }
 
-export function equalGroupBalances(rows: Balance[], total: number, participantIds: string[], paidDeltas = new Map<string, number>()): Balance[] {
+export function equalGroupBalances(rows: Balance[], total: number, participantIds: string[], paidDeltas = new Map<string, number>(), allocatedDeltas = new Map<string, number>()): Balance[] {
   const ids = new Set(rows.map(row => row.participantId));
-  if (ids.size !== rows.length || participantIds.some(id => !ids.has(id)) || [...paidDeltas.keys()].some(id => !ids.has(id))) throw new Error('BALANCE_INVARIANT_FAILED');
-  const owed = new Map(splitGroupTotal(total, participantIds).map(row => [row.participantId, row.amountMinor]));
+  if (ids.size !== rows.length || participantIds.some(id => !ids.has(id)) || [...paidDeltas.keys(), ...allocatedDeltas.keys()].some(id => !ids.has(id))) throw new Error('BALANCE_INVARIANT_FAILED');
+  const allocated = new Map(rows.map(row => {
+    const value = (row.allocatedOwedMinor ?? 0) + (allocatedDeltas.get(row.participantId) ?? 0);
+    if (!Number.isSafeInteger(value) || value < 0) throw new Error('BALANCE_INVARIANT_FAILED');
+    return [row.participantId, value];
+  }));
+  const allocatedTotal = [...allocated.values()].reduce((sum, value) => sum + BigInt(value), 0n);
+  if (!Number.isSafeInteger(total) || allocatedTotal > BigInt(total)) throw new Error('BALANCE_INVARIANT_FAILED');
+  const owed = new Map(splitGroupTotal(total - Number(allocatedTotal), participantIds).map(row => [row.participantId, row.amountMinor]));
   const next = rows.map(row => {
-    const paidMinor = row.paidMinor + (paidDeltas.get(row.participantId) ?? 0), owedMinor = owed.get(row.participantId) ?? 0;
-    const value = { ...row, paidMinor, owedMinor, netMinor: paidMinor - owedMinor + row.sentMinor - row.receivedMinor };
+    const paidMinor = row.paidMinor + (paidDeltas.get(row.participantId) ?? 0), fixed = allocated.get(row.participantId)!;
+    const owedMinor = (owed.get(row.participantId) ?? 0) + fixed;
+    const value = { ...row, ...(fixed || row.allocatedOwedMinor !== undefined ? { allocatedOwedMinor: fixed } : {}),
+      paidMinor, owedMinor, netMinor: paidMinor - owedMinor + row.sentMinor - row.receivedMinor };
     return applyBalanceDelta(value, { paidMinor: 0, owedMinor: 0, netMinor: 0 });
   });
   if (next.reduce((sum, row) => sum + BigInt(row.paidMinor), 0n) !== BigInt(total) ||
@@ -133,6 +143,12 @@ export function applyBalanceDelta(balance: Balance, delta: { paidMinor: number; 
     throw new Error('BALANCE_INVARIANT_FAILED');
   }
   return next;
+}
+
+export function applyAllocatedDelta(balance: Balance, delta = 0): Balance {
+  const allocatedOwedMinor = (balance.allocatedOwedMinor ?? 0) + delta;
+  if (!Number.isSafeInteger(allocatedOwedMinor) || allocatedOwedMinor < 0 || allocatedOwedMinor > balance.owedMinor) throw new Error('BALANCE_INVARIANT_FAILED');
+  return allocatedOwedMinor || balance.allocatedOwedMinor !== undefined ? { ...balance, allocatedOwedMinor } : balance;
 }
 
 export type ExpenseContribution = { amountMinor: number; payerParticipantId: string; shares: Share[] };

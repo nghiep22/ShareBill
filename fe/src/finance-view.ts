@@ -30,9 +30,14 @@ export function financialSnapshot(data: Demo) {
   if (remote.sharingMode === 'group-equal') {
     const group = remote.equalParticipantIds;
     if (!Array.isArray(group) || !group.length || group.length > 50 || new Set(group).size !== group.length || group.some(id => !ids.has(id))) return unavailable;
-    const sorted = [...group].sort(), total = BigInt(remote.total), count = BigInt(sorted.length);
+    const rows = Object.values(lines);
+    if (rows.some(row => !Number.isSafeInteger(row.allocatedOwedMinor ?? 0) || (row.allocatedOwedMinor ?? 0) < 0)) return unavailable;
+    const allocated = rows.reduce((sum, row) => sum + BigInt(row.allocatedOwedMinor ?? 0), BigInt(0));
+    const total = BigInt(remote.total) - allocated;
+    if (total < BigInt(0)) return unavailable;
+    const sorted = [...group].sort(), count = BigInt(sorted.length);
     const expected = new Map(sorted.map((id, index) => [id, Number(total / count + (BigInt(index) < total % count ? BigInt(1) : BigInt(0)))]));
-    if (Object.values(lines).some(row => row.owedMinor !== (expected.get(row.participantId) ?? 0))) return unavailable;
+    if (rows.some(row => row.owedMinor !== (expected.get(row.participantId) ?? 0) + (row.allocatedOwedMinor ?? 0))) return unavailable;
   }
   return { complete: true, lines, net: Object.fromEntries(Object.values(lines).map(row => [row.participantId, row.netMinor])),
     balanced: Object.values(lines).every(row => row.netMinor === 0) && remote.pendingCount === 0 };

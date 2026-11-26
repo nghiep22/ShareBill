@@ -78,7 +78,7 @@ export function JoinPreview({ preview, onJoin }: { preview: InvitePreview; onJoi
       <span className="tile-icon"><UserPlus size={21} aria-hidden /></span><h2>{preview.trip.name}</h2>
       {preview.alreadyMember ? <p>Bạn đã là thành viên của chuyến đi này.</p> : <>
         <p>{preview.inviter.displayName ?? 'Chủ chuyến'} đã mời bạn tham gia chuyến đi.</p>
-        {preview.trip.sharingMode !== 'per-expense' && <p className="inline-note">Vào nhóm là tự chia đều tổng chi, gồm cả các khoản đã có trước khi bạn tham gia. Tiền bạn ứng sẽ được trừ khi tính số cần trả.</p>}
+        {preview.trip.sharingMode !== 'per-expense' && <p className="inline-note">Khoản chi mới chỉ tính cho những người được chọn. Các khoản cũ chia đều cho cả nhóm có thể được tính lại khi bạn tham gia. Tiền bạn ứng và đã chuyển vẫn được giữ.</p>}
         <p>Hết hạn {dateTime.format(new Date(preview.expiresAt))}</p>
       </>}
       <button className="primary-button" onClick={onJoin}>{preview.alreadyMember ? 'Mở chuyến đi' : 'Tham gia chuyến đi'}</button>
@@ -123,7 +123,7 @@ export function MemberAccounts({ data, accounts, tripId, api, run }: {
       {accounts.map(account => <div className="list-row member-row" key={account.uid}>
         <Avatar member={account.participantId ? memberFor(data, account.participantId) : { id: account.uid, tone: 1, name: label(account) }} />
         <div className="row-text"><strong>{label(account)}{ownUid === account.uid && ' (bạn)'}</strong>
-          <span>{account.status === 'removed' ? 'Đã gỡ quyền' : account.role === 'owner' ? 'Chủ chuyến' : 'Thành viên'} · {data.remote?.sharingMode === 'group-equal' ? data.trip.closed ? 'Giữ phần chia lúc chốt' : account.status === 'active' ? 'Tự chia đều tổng chi' : 'Không còn tính vào số người chia' : account.participantId ? 'Chia tiền với tên ' + nameOf(data, account.participantId) : 'Chưa liên kết người chia tiền'}</span>
+          <span>{account.status === 'removed' ? 'Đã gỡ quyền' : account.role === 'owner' ? 'Chủ chuyến' : 'Thành viên'} · {data.remote?.sharingMode === 'group-equal' ? data.trip.closed ? 'Giữ phần chia lúc chốt' : account.status === 'active' ? 'Có thể chọn khi chia khoản chi' : 'Giữ các phần chia đã ghi' : account.participantId ? 'Chia tiền với tên ' + nameOf(data, account.participantId) : 'Chưa liên kết người chia tiền'}</span>
         </div>
         {owner && account.role !== 'owner' && <button className="icon-button member-settings" aria-label={'Quản lý tài khoản ' + label(account)} onClick={() => setChosen({ ...account, tripVersion: version })}><Settings2 size={18} aria-hidden /></button>}
       </div>)}
@@ -147,9 +147,9 @@ export function MemberAccounts({ data, accounts, tripId, api, run }: {
         </select></label>}
         {action === 'remove' && <p>{data.remote?.sharingMode === 'group-equal' ? data.trip.closed
           ? 'Tài khoản sẽ mất quyền mở chuyến. Phần chia và số dư lúc chốt được giữ nguyên; mở lại chuyến sẽ chia lại cho các tài khoản còn trong nhóm.'
-          : 'Tài khoản sẽ mất quyền mở chuyến và không còn chịu phần tổng chi. Tổng chi sẽ chia lại cho những người còn trong nhóm. Tiền đã ứng, đã chuyển và đã nhận vẫn được giữ, nên công nợ có thể thay đổi.'
+          : 'Tài khoản sẽ mất quyền mở chuyến. Các phần chia đã chọn cho người này được giữ; các khoản cũ chia đều sẽ tính lại cho người còn trong nhóm. Tiền đã ứng, đã chuyển và đã nhận vẫn được giữ, nên công nợ có thể thay đổi.'
           : 'Tài khoản sẽ mất quyền mở chuyến. Khoản chi và số dư đã ghi vẫn được giữ.'}</p>}
-        {action === 'restore' && data.remote?.sharingMode === 'group-equal' && <p>Tài khoản sẽ vào lại nhóm và cùng chia toàn bộ tổng chi, kể cả chi phí trước đó. Tiền đã ứng và các khoản chuyển đã xác nhận vẫn được giữ; công nợ sẽ được tính lại.</p>}
+        {action === 'restore' && data.remote?.sharingMode === 'group-equal' && <p>Tài khoản sẽ vào lại nhóm và có thể được chọn cho khoản chi mới. Các phần chia đã chọn được giữ; các khoản cũ chia đều sẽ tính lại cho thành viên trong nhóm. Tiền đã ứng và các khoản chuyển đã xác nhận vẫn được giữ.</p>}
         {action === 'transfer' && <p>Thành viên này sẽ quản lý chuyến đi. Bạn sẽ chuyển thành thành viên.</p>}
         <label>Lý do<input name="reason" required maxLength={300} /></label>
         {error && <p className="error" role="alert">{error}</p>}

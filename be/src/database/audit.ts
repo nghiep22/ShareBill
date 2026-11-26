@@ -19,6 +19,7 @@ const shareSnapshot = z.strictObject({ participantId: z.uuid(), amountMinor: z.n
 const expenseSnapshot = z.strictObject({
   id: z.uuid(), amountMinor: z.number().int().min(1).safe(), payerParticipantId: z.uuid(),
   shares: z.array(shareSnapshot).min(1).max(50),
+  sharingScope: z.literal('selected').optional(),
   status: z.enum(['active', 'void']), version: z.number().int().min(1).safe(),
 });
 const expenseEditSnapshot = expenseSnapshot.extend({

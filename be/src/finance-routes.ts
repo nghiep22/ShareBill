@@ -1,11 +1,11 @@
 import type { FastifyInstance } from 'fastify';
-import { isGroupEqual, projectGroup, readGroupLedger, writeGroupBalances } from './services/group-sharing.js';
+import { allocatedExpenseDelta, isGroupEqual, projectGroup, readGroupLedger, writeGroupBalances } from './services/group-sharing.js';
 import { randomUUID } from 'node:crypto';
 import { FieldValue, Timestamp } from 'firebase-admin/firestore';
 import { z } from 'zod';
 import { db } from './firebase.js';
 import { ApiError, operationKey, requireTripAccess, requireUser, requireVersion, sendOperationResult } from './http.js';
-import { expenseDelta, applyBalanceDelta, applyExpenseTotals, type Balance, type Share, type ExpenseCategory } from './domain/money.js';
+import { expenseDelta, applyAllocatedDelta, applyBalanceDelta, applyExpenseTotals, type Balance, type Share, type ExpenseCategory } from './domain/money.js';
 import { suggestSettlements, applySettlement } from './domain/settlement.js';
 import { settlementInput, settlementDocumentSchema, createSettlementDocument, confirmationChanges } from './database/settlement.js';
 import { createAuditEvent } from './database/audit.js';
@@ -212,6 +212,7 @@ export async function registerFinanceRoutes(app: FastifyInstance): Promise<void>
       }
       const amount = expense.get('amountMinor') as number, payer = expense.get('payerParticipantId') as string, shares = expense.get('shares') as Share[];
       const beforeAudit = { id, amountMinor: amount, payerParticipantId: payer, shares,
+        ...(expense.get('sharingScope') === 'selected' && { sharingScope: 'selected' as const }),
         status: 'active', version: expectedVersion };
       let totals;
       try { totals = applyExpenseTotals(trip.get('totalExpenseMinor'), trip.get('categoryTotalsMinor'),
@@ -219,7 +220,7 @@ export async function registerFinanceRoutes(app: FastifyInstance): Promise<void>
       catch { throw new ApiError(409, 'PROJECTION_INVARIANT_FAILED', 'Thống kê chuyến chưa sẵn sàng.'); }
       const deltas = expenseDelta(amount, payer, shares, -1);
       const group = isGroupEqual(trip) ? await readGroupLedger(tx, trip) : undefined;
-      const groupBalances = group ? projectGroup(group, totals.totalExpenseMinor, group.ids, new Map([[payer, -amount]])) : undefined;
+      const groupBalances = group ? projectGroup(group, totals.totalExpenseMinor, group.ids, new Map([[payer, -amount]]), allocatedExpenseDelta({ sharingScope: expense.get('sharingScope'), shares })) : undefined;
       const snaps = group ? [] : await Promise.all([...deltas.keys()].map(pid => tx.get(store.doc(`trips/${tripId}/balances/${pid}`))));
       const balances = balancesFrom(snaps);
       const now = Timestamp.now(), revision = trip.get('revision') + 1, ledgerVersion = trip.get('ledgerVersion') + 1;
@@ -229,7 +230,7 @@ export async function registerFinanceRoutes(app: FastifyInstance): Promise<void>
       const response = { id, status: 'void', version: expectedVersion + 1 };
       if (groupBalances) writeGroupBalances(tx, trip, groupBalances, now);
       else [...deltas].forEach(([pid, delta], index) => tx.set(store.doc(`trips/${tripId}/balances/${pid}`),
-        { ...applyBalanceDelta(balances[index]!, delta), updatedAt: now }));
+        { ...applyAllocatedDelta(applyBalanceDelta(balances[index]!, delta), allocatedExpenseDelta({ sharingScope: expense.get('sharingScope'), shares }).get(pid)), updatedAt: now }));
       tx.update(expenseRef, { status: 'void', version: expectedVersion + 1, voidReason: body.reason, voidedBy: uid, voidedAt: now, updatedBy: uid, updatedAt: now });
       tx.update(tripRef, { activeExpenseCount: activeExpenseCount - 1, ...totals, revision, ledgerVersion, updatedAt: now });
       tx.update(store.doc(`trips/${tripId}/signals/current`), { revision, ledgerVersion, updatedAt: now });

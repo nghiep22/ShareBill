@@ -18,6 +18,7 @@ export const expenseDocumentSchema = z.strictObject({
   currency: z.literal('VND'),
   payerParticipantId: z.uuid(),
   splitMethod: z.enum(['equal', 'exact']),
+  sharingScope: z.literal('selected').optional(),
   splitInput: splitInputSchema,
   shares: z.array(shareSchema).min(1).max(50),
   occurredOn: z.iso.date(),
@@ -74,6 +75,7 @@ export function createExpenseDocument(input: {
   return expenseDocumentSchema.parse({
     schemaVersion: 1, id, title: body.title, note: body.note, amountMinor: body.amountMinor,
     currency: 'VND', payerParticipantId: body.payerParticipantId, splitMethod: body.splitMethod,
+    ...(body.sharingScope && { sharingScope: body.sharingScope }),
     splitInput: body.split, shares, occurredOn: body.occurredOn, category: body.category,
     receiptIds: body.receiptIds, status: 'active', version: 1,
     createdBy: actorUid, updatedBy: actorUid, createdAt: now, updatedAt: now,

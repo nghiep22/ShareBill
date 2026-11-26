@@ -23,6 +23,7 @@ export type Expense = {
   note: string;
   shares: Record<string, number>;
   mode: 'equal' | 'exact';
+  sharingScope?: 'selected';
   voided?: boolean;
   voidReason?: string;
   receipts?: Receipt[];
@@ -44,7 +45,7 @@ export type Idea = { id: string; title: string; by: string; author?: string; dec
 export type InviteLink = { token: string; expiresAt: number; limit: number; uses: number; revoked?: boolean };
 export type Activity = { id: string; at: string; title: string; detail: string; actor: string; actorName?: string; href?: string };
 export type Trip = { name: string; place: string; start: string; end: string; closed: boolean; note?: string; cover?: boolean; timezone?: string };
-export type BalanceLine = { participantId: string; paidMinor: number; owedMinor: number; sentMinor: number; receivedMinor: number; netMinor: number };
+export type BalanceLine = { participantId: string; paidMinor: number; owedMinor: number; sentMinor: number; receivedMinor: number; netMinor: number; allocatedOwedMinor?: number };
 export type RemoteSnapshot = {
   sharingMode?: 'group-equal' | 'per-expense';
   equalParticipantIds?: string[];

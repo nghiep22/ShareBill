@@ -110,8 +110,8 @@ export function saveTripSnapshot(scope: DeviceScope, value: TripOverview, at: nu
     },
     participants: value.participants.map(({ id, displayName, status, linkedUid, version }) =>
       ({ id, displayName, status, linkedUid: linkedUid === scope.uid || linkedUid === ownerUid ? linkedUid : null, version })),
-    balances: value.balances.map(({ participantId, paidMinor, owedMinor, sentMinor, receivedMinor, netMinor }) =>
-      ({ participantId, paidMinor, owedMinor, sentMinor, receivedMinor, netMinor })),
+    balances: value.balances.map(({ participantId, paidMinor, owedMinor, sentMinor, receivedMinor, netMinor, allocatedOwedMinor }) =>
+      ({ participantId, paidMinor, owedMinor, sentMinor, receivedMinor, netMinor, ...(allocatedOwedMinor !== undefined && { allocatedOwedMinor }) })),
   } satisfies TripOverview, at);
 }
 

@@ -806,7 +806,7 @@ test('offline group drafts retain equal sharing and use current membership after
   await page.getByLabel('Tin cậy thiết bị này').check();
   await page.goto(screen('them-khoan-chi'));
   await heading(page, 'Thêm khoản chi');
-  await heading(page, 'Chia đều cho cả nhóm');
+  await page.getByRole('group', { name: 'Chia cho ai?', exact: true }).waitFor();
   // Wait until the trusted snapshot is available, including privacy-filtered identities.
   await page.waitForFunction(async () => {
     const name = (await indexedDB.databases()).find(db => db.name.startsWith('sharebill-private-v1:'))?.name;
@@ -835,13 +835,13 @@ test('offline group drafts retain equal sharing and use current membership after
     await page.evaluate(url => { window.location.hash = new URL(url).hash; }, screen('them-khoan-chi'));
   }
   await heading(page, 'Thêm khoản chi');
-  await heading(page, 'Chia đều cho cả nhóm');
-  assert.equal(await page.getByRole('group', { name: 'Chia cho ai?', exact: true }).count(), 0);
+  await page.getByRole('group', { name: 'Chia cho ai?', exact: true }).waitFor();
+  assert.equal(await page.getByRole('group', { name: 'Chia cho ai?', exact: true }).count(), 1);
   await page.evaluate(url => { window.location.hash = new URL(url).hash; }, screen('so-du'));
   await heading(page, 'Tổng chi chia đều cho 2 thành viên');
   await page.locator('.balance-hero').getByText('75.000đ', { exact: true }).waitFor();
   await page.evaluate(url => { window.location.hash = new URL(url).hash; }, screen('them-khoan-chi'));
-  await heading(page, 'Chia đều cho cả nhóm');
+  await page.getByRole('group', { name: 'Chia cho ai?', exact: true }).waitFor();
   await page.getByLabel('Tên khoản chi').fill('Nháp nhóm ngoại tuyến');
   await page.getByLabel('Số tiền đã trả').fill('100000');
   assert.equal(await page.getByRole('button', { name: /Lưu khoản chi/ }).isDisabled(), true);
@@ -852,6 +852,9 @@ test('offline group drafts retain equal sharing and use current membership after
   await context.setOffline(false);
   await page.evaluate(() => window.dispatchEvent(new Event('online')));
   await page.getByRole('radio', { name: 'Chi vừa tham gia', exact: true }).waitFor();
+  const thirdShare = page.getByLabel('Phần chia dự kiến của Chi vừa tham gia', { exact: true }).getByRole('checkbox');
+  assert.equal(await thirdShare.isChecked(), false, 'New members are not silently added to a draft split');
+  await thirdShare.check();
   await page.waitForFunction(() => !Array.from(document.querySelectorAll('button')).find(button => button.textContent.includes('Lưu khoản chi'))?.disabled);
   assert.equal((await call(expenses, session)).items.length, 1, 'Reconnect never submits a draft automatically');
   await page.getByRole('button', { name: /Lưu khoản chi/ }).click();
@@ -1298,19 +1301,87 @@ test('linked users with zero assigned costs are distinguished from settled users
   assert.equal(await memberPage.evaluate(() => document.documentElement.scrollWidth > innerWidth), false);
 });
 
-test('joining a group automatically shares old and new totals without linking or choosing expense participants', { timeout: 90000 }, async t => {
+test('group expenses select their own people and bill QR uses 350000 instead of total debt 775000', { timeout: 90000 }, async t => {
+  const { page, context, session, trip, screen, expenses } = await fixture(t, 'group-equal');
+  const root = 'trips/' + trip.id;
+  const invite = await call(root + '/invites', session, { method: 'POST', body: {} });
+  const join = async name => {
+    const account = await call('auth/register', null, { method: 'POST', body: { email: randomUUID() + '@example.test', password: 'BrowserFixture-123!', displayName: name } });
+    const joined = await call('invites/accept', account, { method: 'POST', body: { token: invite.token } });
+    return joined.participantId;
+  };
+  const binh = await join('Bình'), chi = await join('Chi');
+  await page.goto(screen('them-khoan-chi')); await heading(page, 'Thêm khoản chi');
+  await page.getByLabel('Tên khoản chi').fill('Vé hai người'); await page.getByLabel('Số tiền đã trả').fill('700000');
+  await page.getByLabel('Phần chia dự kiến của Chi', { exact: true }).getByRole('checkbox').uncheck();
+  await page.getByRole('button', { name: /Lưu khoản chi/ }).click(); await heading(page, 'Vé hai người');
+  const bill = (await call(expenses, session)).items[0];
+  assert.equal(bill.sharingScope, 'selected'); assert.equal(bill.shares.length, 2);
+  assert.equal(bill.shares.some(row => row.participantId === chi), false);
+  await page.getByLabel('Phần phải chịu của Bình', { exact: true }).getByText('350.000đ', { exact: true }).waitFor();
+  assert.equal(await page.getByLabel('Phần phải chịu của Chi', { exact: true }).count(), 0);
+  await call(expenses, session, { method: 'POST', body: { title: 'Khoản khác', amountMinor: 850000, sharingScope: 'selected',
+    payerParticipantId: trip.ownerParticipantId, occurredOn: '2026-11-26', category: 'other', splitMethod: 'equal', split: { participantIds: [trip.ownerParticipantId, binh] } } });
+  await page.goto(screen('khoan-chi/' + bill.id)); await heading(page, 'Vé hai người');
+  await page.getByRole('button', { name: 'Chia sẻ QR qua Zalo', exact: true }).click();
+  const dialog = page.getByRole('dialog', { name: 'QR theo khoản chi', exact: true });
+  await dialog.getByRole('region', { name: 'Khoản cần trả của Bình', exact: true }).getByText('350.000đ', { exact: true }).waitFor();
+  assert.equal(await dialog.getByText('775.000đ', { exact: true }).count(), 0);
+  assert.equal(await dialog.getByRole('button', { name: 'Tạo QR cho Chi', exact: true }).count(), 0);
+  await dialog.getByRole('button', { name: 'Tạo QR cho Bình', exact: true }).click();
+  await dialog.locator('.share-chosen').getByText('350.000đ', { exact: true }).waitFor();
+  await dialog.getByRole('button', { name: 'Đóng', exact: true }).click();
+  await page.goto(web + '/#tai-khoan'); await page.getByLabel('Tin cậy thiết bị này').check();
+  await page.goto(screen('so-du')); await heading(page, 'Phần chia theo từng khoản');
+  await page.getByRole('region', { name: 'Số dư của Bình', exact: true }).getByText('775.000đ', { exact: true }).first().waitFor();
+  await waitForPrivateRecord(page);
+  if (process.env.SHAREBILL_PWA_TEST === '1') {
+    await page.evaluate(async () => { await navigator.serviceWorker.ready; if (!navigator.serviceWorker.controller) await new Promise(resolve => navigator.serviceWorker.addEventListener('controllerchange', resolve, { once: true })); });
+    await context.setOffline(true); await page.reload(); await heading(page, 'Phần chia theo từng khoản');
+    await page.getByRole('region', { name: 'Số dư của Bình', exact: true }).getByText('775.000đ', { exact: true }).first().waitFor();
+    await context.setOffline(false); await page.evaluate(() => window.dispatchEvent(new Event('online')));
+  }
+  await page.goto(screen('sua-khoan-chi/' + bill.id)); await heading(page, 'Sửa khoản chi');
+  await page.getByRole('button', { name: 'Nhập từng phần', exact: true }).click();
+  await page.getByLabel('Phần chia dự kiến của An', { exact: true }).getByRole('checkbox').uncheck();
+  await page.getByLabel('Phần chia của Bình', { exact: true }).fill('700000');
+  await page.getByRole('button', { name: /Lưu khoản chi/ }).click(); await heading(page, 'Vé hai người');
+  assert.deepEqual((await call(expenses + '/' + bill.id, session)).shares, [{ participantId: binh, amountMinor: 700000 }]);
+  const dung = await join('Dũng');
+  const overview = await call(root + '/overview', session);
+  assert.equal(overview.balances.find(row => row.participantId === dung).owedMinor, 0);
+  assert.equal(overview.balances.find(row => row.participantId === binh).owedMinor, 1125000);
+});
+
+test('a removed person remains visible in a new draft until explicitly deselected', async t => {
+  const { page, session, trip, screen, expenses } = await fixture(t, 'group-equal');
+  const member = await call('auth/register', null, { method: 'POST', body: { email: randomUUID() + '@example.test', password: 'BrowserFixture-123!', displayName: 'Bình rời nhóm' } });
+  const root = 'trips/' + trip.id, invite = await call(root + '/invites', session, { method: 'POST', body: {} });
+  await call('invites/accept', member, { method: 'POST', body: { token: invite.token } });
+  await page.goto(screen('them-khoan-chi')); await heading(page, 'Thêm khoản chi');
+  await page.getByLabel('Tên khoản chi').fill('Nháp đổi thành viên'); await page.getByLabel('Số tiền đã trả').fill('90000');
+  await call(root + '/memberships/' + member.user.uid + '/remove', session, { method: 'POST', version: 1, body: { reason: 'Rời nhóm trước khi lưu' } });
+  await page.evaluate(() => document.dispatchEvent(new Event('visibilitychange')));
+  const person = page.getByLabel('Phần chia dự kiến của Bình rời nhóm', { exact: true });
+  await person.getByText('Đã rời nhóm', { exact: true }).waitFor();
+  assert.equal(await person.getByRole('checkbox').isChecked(), true);
+  await page.getByRole('button', { name: /Lưu khoản chi/ }).click();
+  await page.getByText('Chọn người trả và người chia đang hoạt động để thay đổi số tiền hoặc cách chia.', { exact: true }).waitFor();
+  assert.equal((await call(expenses, session)).items.length, 0);
+  await person.getByRole('checkbox').click();
+  await person.waitFor({ state: 'hidden' });
+  await page.getByRole('button', { name: /Lưu khoản chi/ }).click(); await heading(page, 'Nháp đổi thành viên');
+  assert.deepEqual((await call(expenses, session)).items[0].shares, [{ participantId: trip.ownerParticipantId, amountMinor: 90000 }]);
+});
+
+test('joining keeps legacy sharing and links people for selection in new expenses', { timeout: 90000 }, async t => {
   const { page, session, trip, screen } = await fixture(t, null);
   const root = 'trips/' + trip.id;
-  await page.goto(screen('them-khoan-chi'));
-  await heading(page, 'Thêm khoản chi');
-  await page.getByLabel('Tên khoản chi').fill('Chi chung trước khi aaa vào');
-  await page.getByLabel('Số tiền đã trả').fill('2.100.000');
-  await page.getByRole('heading', { name: 'Chia đều cho cả nhóm', exact: true }).waitFor();
-  assert.equal(await page.getByRole('button', { name: 'Chọn tất cả', exact: true }).count(), 0);
-  assert.equal(await page.getByRole('button', { name: 'Nhập từng phần', exact: true }).count(), 0);
-  await page.getByRole('button', { name: /Lưu khoản chi/ }).click();
+  const legacy = await call(root + '/expenses', session, { method: 'POST', body: { title: 'Chi chung trước khi aaa vào', amountMinor: 2100000,
+    payerParticipantId: trip.ownerParticipantId, occurredOn: '2026-11-26', category: 'other', splitMethod: 'equal', split: { participantIds: [trip.ownerParticipantId] } } });
+  await page.goto(screen('khoan-chi/' + legacy.id));
   await heading(page, 'Chi chung trước khi aaa vào');
-  await heading(page, 'Chi chung của nhóm');
+  await heading(page, 'Mỗi người phải chịu');
   const member = await call('auth/register', null, { method: 'POST', body: {
     email: randomUUID() + '@example.test', password: 'BrowserFixture-123!', displayName: 'aaa',
   } });
@@ -1320,7 +1391,7 @@ test('joining a group automatically shares old and new totals without linking or
   await context.addInitScript(session => sessionStorage.setItem('sharebill-live-session-v1', JSON.stringify(session)), { ...member, expiresAt: Date.now() + member.expiresIn * 1000 });
   const memberPage = await context.newPage();
   await memberPage.goto(web + '/#tham-gia/' + invite.token);
-  await memberPage.getByText(/Vào nhóm là tự chia đều tổng chi/).waitFor();
+  await memberPage.getByText(/Khoản chi mới chỉ tính cho những người được chọn/).waitFor();
   await memberPage.getByRole('button', { name: 'Tham gia chuyến đi', exact: true }).click();
   await heading(memberPage, 'Tổng quan');
   await memberPage.goto(screen('so-du'));
@@ -1370,10 +1441,10 @@ test('group expense edits preserve financial history after a payer leaves and re
   await page.getByRole('button', { name: 'Quản lý tài khoản Bình', exact: true }).click();
   await page.getByRole('button', { name: 'Gỡ quyền truy cập', exact: true }).click();
   let dialog = page.getByRole('dialog');
-  await dialog.getByText(/Tổng chi sẽ chia lại cho những người còn trong nhóm/).waitFor();
+  await dialog.getByText(/Các phần chia đã chọn cho người này được giữ/).waitFor();
   await dialog.getByLabel('Lý do').fill('Bình rời nhóm');
   await dialog.getByRole('button', { name: 'Xác nhận', exact: true }).click();
-  await page.getByText('Đã gỡ quyền · Không còn tính vào số người chia', { exact: true }).waitFor();
+  await page.getByText('Đã gỡ quyền · Giữ các phần chia đã ghi', { exact: true }).waitFor();
   const before = await call(root + '/overview', session);
   await page.goto(screen('sua-khoan-chi/' + expense.id));
   await heading(page, 'Sửa khoản chi');
@@ -1396,10 +1467,10 @@ test('group expense edits preserve financial history after a payer leaves and re
   await page.getByRole('button', { name: 'Quản lý tài khoản Bình', exact: true }).click();
   await page.getByRole('button', { name: 'Khôi phục quyền truy cập', exact: true }).click();
   dialog = page.getByRole('dialog');
-  await dialog.getByText(/cùng chia toàn bộ tổng chi/).waitFor();
+  await dialog.getByText(/Các phần chia đã chọn được giữ/).waitFor();
   await dialog.getByLabel('Lý do').fill('Bình vào lại');
   await dialog.getByRole('button', { name: 'Xác nhận', exact: true }).click();
-  await page.getByText('Thành viên · Tự chia đều tổng chi', { exact: true }).waitFor();
+  await page.getByText('Thành viên · Có thể chọn khi chia khoản chi', { exact: true }).waitFor();
   const restored = await call(root + '/overview', session);
   assert.ok(restored.balances.every(row => row.owedMinor === 150000));
   assert.equal(restored.balances.find(row => row.participantId === joined.participantId).netMinor, 150000);
@@ -1756,14 +1827,14 @@ test('shares named bank QR images using remaining debt with native sharing and Z
   await page.goto(screen('khoan-chi/' + bill.id));
   await heading(page, 'Ăn tối chia nhóm');
   await page.getByRole('button', { name: 'Chia sẻ QR qua Zalo', exact: true }).click();
-  let dialog = page.getByRole('dialog', { name: 'QR trả tiền cho từng người', exact: true });
+  let dialog = page.getByRole('dialog', { name: 'QR theo khoản chi', exact: true });
   const waiting = dialog.getByRole('region', { name: 'Khoản cần trả của Chi', exact: true });
   await waiting.getByRole('link', { name: 'Xem khoản đang chờ', exact: true }).waitFor();
   assert.equal(await waiting.getByRole('button', { name: 'Tạo QR cho Chi', exact: true }).count(), 0);
   await dialog.getByRole('button', { name: 'Tạo QR cho Bình', exact: true }).click();
   const download = dialog.getByRole('link', { name: 'Tải ảnh gửi Zalo', exact: true });
   await download.waitFor();
-  assert.match(await download.getAttribute('download'), /Binh-100000\.png$/);
+  assert.match(await download.getAttribute('download'), /Binh-150000\.png$/);
   const [file] = await Promise.all([page.waitForEvent('download'), download.click()]);
   const bytes = await readFile(await file.path());
   const sharp = createRequire(new URL('../../be/package.json', import.meta.url))('sharp');
@@ -1772,14 +1843,14 @@ test('shares named bank QR images using remaining debt with native sharing and Z
   const decoded = jsQR(new Uint8ClampedArray(pixels.data), pixels.info.width, pixels.info.height);
   assert.equal(pixels.info.width, 900); assert.equal(pixels.info.height, 1400);
   assert.ok(decoded?.data.includes('00069704410115660704060000129'));
-  assert.ok(decoded.data.includes('5406100000'), 'Uses 100000 remaining after Bình paid/advanced, rather than the original 150000 bill share');
+  assert.ok(decoded.data.includes('5406150000'), 'Expense QR uses this bill share of 150000');
   await dialog.getByRole('button', { name: 'Chia sẻ ảnh', exact: true }).click();
   await dialog.getByText('Đã mở chia sẻ ảnh.', { exact: false }).waitFor();
   const shared = await page.evaluate(() => window.__sharedQr);
   assert.equal(shared.type, 'image/png');
   assert.equal(shared.hash, createHash('sha256').update(bytes).digest('hex'));
-  assert.match(shared.text, /Bình chuyển 100\.000đ cho An/);
-  assert.match(shared.text, /Bill: Ăn tối chia nhóm/);
+  assert.match(shared.text, /Bình chuyển 150\.000đ cho An/);
+  assert.match(shared.text, /Khoản chi: Ăn tối chia nhóm/);
   assert.ok(!/token=|signature=|Bearer /.test(shared.text));
   await dialog.getByRole('button', { name: 'Sao chép nội dung gửi nhóm', exact: true }).click();
   assert.equal(await page.evaluate(() => window.__copiedQrText), shared.text);
@@ -1796,6 +1867,7 @@ test('shares named bank QR images using remaining debt with native sharing and Z
   await page.goto(screen('so-du'));
   await page.getByRole('button', { name: 'Chia sẻ QR qua Zalo', exact: true }).click();
   await page.getByRole('dialog').getByRole('button', { name: 'Tạo QR cho Bình', exact: true }).waitFor();
+  await page.getByRole('dialog').getByRole('region', { name: 'Khoản cần trả của Bình', exact: true }).getByText('100.000đ', { exact: true }).waitFor();
 });
 
 test('two accounts upload QR and transfer evidence, confirm repayment and archive a balanced trip', async t => {

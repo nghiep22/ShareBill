@@ -1,5 +1,7 @@
 # ShareBill — Thiết kế và kế hoạch hoàn thiện cơ sở dữ liệu
 
+**26/11/2026:** thêm field tùy chọn `expenses.sharingScope=selected` và `balances.allocatedOwedMinor`. Các khoản cũ không bị viết lại; checker/reconcile/repair cùng hiểu phần cố định của từng khoản. [Hợp đồng, công thức và tương thích phiên bản API](EXPENSE_SHARING.md#hợp-đồng-dữ-liệu).
+
 **Bổ sung 20/11/2026:** QR thành viên, ảnh chuyển khoản và ràng buộc liên kết ảnh đã triển khai theo [hợp đồng thanh toán](PAYMENTS.md#hợp-đồng-api-và-dữ-liệu).
 
 Phiên bản thiết kế 1.0 · 16/11/2026 · Backend Node.js/Fastify, Firebase Authentication, Cloud Firestore Standard edition.

@@ -200,11 +200,14 @@ export function Balances({ data, update, loading, disabled, receiptActions }: { 
   const pending = data.remote?.pendingCount ?? data.settlements.filter(item => settlementStatus(item) === 'pending').length;
   const allSettled = finance.balanced;
   const groupEqual = data.remote?.sharingMode === 'group-equal';
+  const allocatedTotal = Object.values(finance.lines).reduce((sum, row) => sum + (row.allocatedOwedMinor ?? 0), 0);
+  const hasSelected = groupEqual && allocatedTotal > 0;
   const group = sharingMembers(data);
   const visibleMembers = data.members.filter(member => !groupEqual || group.some(person => person.id === member.id) ||
-    finance.lines[member.id] && [finance.lines[member.id].paidMinor, finance.lines[member.id].sentMinor, finance.lines[member.id].receivedMinor].some(value => value > 0));
-  const singleParticipant = complete && (groupEqual ? group.length : data.members.length) === 1 && data.remote!.total > 0;
-  const withoutCosts = new Set(!groupEqual && complete && data.remote!.total > 0 ? data.members.filter(member => {
+    finance.lines[member.id] && [finance.lines[member.id].paidMinor, finance.lines[member.id].owedMinor, finance.lines[member.id].sentMinor, finance.lines[member.id].receivedMinor].some(value => value > 0));
+  const singleParticipant = complete && (groupEqual ? group.length : data.members.length) === 1 && data.remote!.total > 0 &&
+    visibleMembers.every(member => member.id === (groupEqual ? group : data.members)[0].id);
+  const withoutCosts = new Set((!groupEqual || hasSelected) && complete && data.remote!.total > 0 ? data.members.filter(member => {
     const row = finance.lines[member.id];
     return !member.inactive && [row.owedMinor, row.paidMinor, row.sentMinor, row.receivedMinor].every(value => value === 0);
   }).map(member => member.id) : []);
@@ -289,8 +292,11 @@ export function Balances({ data, update, loading, disabled, receiptActions }: { 
       </div>)}</div>
     </section>
     {groupEqual && complete && <section className="card field-card" aria-label="Cách chia đều của nhóm">
-      <h2>Tổng chi chia đều cho {group.length} thành viên</h2>
-      <p><Amount value={data.remote!.total} /> ÷ {group.length} người. Mỗi người chịu <strong><Amount value={Number(BigInt(data.remote!.total) / BigInt(group.length))} />{data.remote!.total % group.length > 0 && <> – <Amount value={Number(BigInt(data.remote!.total) / BigInt(group.length)) + 1} /></>}</strong>.</p>
+      <h2>{hasSelected ? 'Phần chia theo từng khoản' : <>Tổng chi chia đều cho {group.length} thành viên</>}</h2>
+      {hasSelected ? <>
+        <p>Mỗi người chịu tổng các phần đã chọn trong từng khoản chi.</p>
+        {data.remote!.total > allocatedTotal && <p>Các khoản cũ chia đều: <Amount value={data.remote!.total - allocatedTotal} /> cho {group.length} thành viên. Phần này được cộng vào số tiền từng người bên dưới.</p>}
+      </> : <p><Amount value={data.remote!.total} /> ÷ {group.length} người. Mỗi người chịu <strong><Amount value={Number(BigInt(data.remote!.total) / BigInt(group.length))} />{data.remote!.total % group.length > 0 && <> – <Amount value={Number(BigInt(data.remote!.total) / BigInt(group.length)) + 1} /></>}</strong>.</p>}
     </section>}
     <section>
       <div className="section-heading"><h2>Số tiền của từng thành viên</h2><span className="tag">{visibleMembers.length} người</span></div>

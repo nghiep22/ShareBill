@@ -50,6 +50,7 @@ export const tripRefSchema = z.strictObject({
 export const balanceSchema = z.strictObject({
   schemaVersion: v1, participantId: entityId, paidMinor: count, owedMinor: count,
   sentMinor: count, receivedMinor: count, netMinor: z.int(), updatedAt: timestamp,
+  allocatedOwedMinor: count.optional(),
 });
 export const signalSchema = z.strictObject({ schemaVersion: v1, revision: version, ledgerVersion: count, updatedAt: timestamp });
 
@@ -86,6 +87,7 @@ export const expenseLedgerSchema = z.object({
   amountMinor: expenseDocumentSchema.shape.amountMinor, status: expenseDocumentSchema.shape.status,
   payerParticipantId: expenseDocumentSchema.shape.payerParticipantId, shares: expenseDocumentSchema.shape.shares,
   category: expenseDocumentSchema.shape.category,
+  sharingScope: expenseDocumentSchema.shape.sharingScope,
 });
 export const settlementLedgerSchema = z.object({
   amountMinor: settlementDocumentSchema.shape.amountMinor, status: settlementDocumentSchema.shape.status,
