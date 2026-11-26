@@ -214,6 +214,7 @@ export function ExpenseForm({ data, expense: latest, update, receiptActions, dis
     const title = fields.title.trim();
     const moneyError = invalid.some(id => id === 'amount' || (mode === 'exact' && selected.includes(id)));
     if (moneyError) { setError('Sửa số tiền chưa đúng định dạng.'); return; }
+    if (!ids.length) { setError('Chọn ít nhất một người để chia khoản chi.'); return; }
     if (!title || !payer || total < 1 || total > maximum || !ids.length || difference !== 0 || receipts.length > 3 || Object.values(shares).some(share => share < (data.remote ? 0 : 1))) {
       if (receipts.length > 3) { setError('Giữ tối đa 3 ảnh trước khi lưu.'); return; }
       setError('Kiểm tra tên, người trả, số tiền và phần chia. Tổng phần chia cần khớp số tiền đã trả.');
@@ -313,7 +314,7 @@ export function ExpenseForm({ data, expense: latest, update, receiptActions, dis
       </section> : <fieldset className="card field-card">
         <legend>Chia cho ai?</legend>
         <div className="split-heading"><span>{ids.length} người được chia</span>
-          <button type="button" className="text-button" onClick={() => setSelected(active.every(member => selected.includes(member.id)) ? selected.filter(id => !active.some(member => member.id === id)) : [...new Set([...selected, ...active.map(member => member.id)])])}>
+          <button type="button" className="text-button" onClick={() => setSelected(active.every(member => selected.includes(member.id)) ? [] : [...new Set([...selected, ...active.map(member => member.id)])])}>
             {active.every(member => selected.includes(member.id)) ? 'Bỏ chọn tất cả' : 'Chọn tất cả'}
           </button></div>
         <div className="segmented" aria-label="Cách chia">
@@ -393,6 +394,7 @@ export function ExpenseDetail({ data, expense, update, receiptActions }: { data:
   const [error, setError] = useState('');
   const receipts = expense.receipts ?? [];
   const shares = expenseShares(data, expense);
+  const active = sharingMembers(data);
   function voidExpense(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const reason = String(new FormData(event.currentTarget).get('reason')).trim();
@@ -428,7 +430,7 @@ export function ExpenseDetail({ data, expense, update, receiptActions }: { data:
       <div className="section-heading"><h2>Mỗi người phải chịu</h2><span className="tag">{expense.mode === 'equal' ? 'Chia đều' : 'Theo số tiền'}</span></div>
       {!shares && <p className="inline-note error" role="alert">Chưa đủ dữ liệu phần chia. Tải lại khoản chi để kiểm tra.</p>}
       <div className="card rows">{data.members.filter(member => shares && Object.hasOwn(shares, member.id)).map(member =>
-        <div key={member.id} className="list-row" aria-label={'Phần phải chịu của ' + nameOf(data, member.id)}><Avatar member={member} /><span className="row-text"><strong>{nameOf(data, member.id)}{member.id === viewerOf(data) && ' (bạn)'}</strong><span>{member.id === expense.payer ? 'Người đã ứng tiền' : 'Phần được chia'}</span></span>
+        <div key={member.id} className="list-row" aria-label={'Phần phải chịu của ' + nameOf(data, member.id)}><Avatar member={member} /><span className="row-text"><strong>{nameOf(data, member.id)}{member.id === viewerOf(data) && ' (bạn)'}</strong><span>{member.id === expense.payer ? 'Người đã ứng tiền' : 'Phần được chia'}{!active.some(person => person.id === member.id) && (data.remote?.sharingMode === 'group-equal' ? ' · Đã rời nhóm' : ' · Ngừng dùng')}</span></span>
           <strong className="row-end"><Amount value={shares![member.id]} /></strong></div>
       )}</div>
       {data.remote?.sharingMode === 'group-equal' && expense.sharingScope !== 'selected' && <p className="inline-note">Khoản cũ vẫn chia đều cho các thành viên đang được tính trong nhóm. Phần lẻ của các khoản cũ được cân bằng trên tổng chi.</p>}

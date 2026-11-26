@@ -1374,6 +1374,40 @@ test('a removed person remains visible in a new draft until explicitly deselecte
   assert.deepEqual((await call(expenses, session)).items[0].shares, [{ participantId: trip.ownerParticipantId, amountMinor: 90000 }]);
 });
 
+test('clearing all expense shares also clears historical members and reselects only current people', async t => {
+  const { page, session, trip, screen, expenses } = await fixture(t, 'group-equal');
+  const root = 'trips/' + trip.id;
+  const member = await call('auth/register', null, { method: 'POST', body: {
+    email: randomUUID() + '@example.test', password: 'BrowserFixture-123!', displayName: 'Bình',
+  } });
+  const invite = await call(root + '/invites', session, { method: 'POST', body: {} });
+  const joined = await call('invites/accept', member, { method: 'POST', body: { token: invite.token } });
+  const bill = await call(expenses, session, { method: 'POST', body: {
+    title: 'Phần chia lưu người cũ', amountMinor: 90000, sharingScope: 'selected', payerParticipantId: trip.ownerParticipantId,
+    occurredOn: '2026-11-26', category: 'other', splitMethod: 'equal', split: { participantIds: [trip.ownerParticipantId, joined.participantId] },
+  } });
+  await call(root + '/memberships/' + member.user.uid + '/remove', session, {
+    method: 'POST', version: 1, body: { reason: 'Rời nhóm sau khi lưu phần chia' },
+  });
+  await page.goto(screen('khoan-chi/' + bill.id)); await heading(page, bill.title);
+  const historicalShare = page.getByLabel('Phần phải chịu của Bình', { exact: true });
+  await historicalShare.getByText('Phần được chia · Đã rời nhóm', { exact: true }).waitFor();
+  await historicalShare.getByText('45.000đ', { exact: true }).waitFor();
+  assert.equal((await call(expenses + '/' + bill.id, session)).version, 1);
+  await page.getByRole('link', { name: 'Sửa khoản chi', exact: true }).click(); await heading(page, 'Sửa khoản chi');
+  await page.getByRole('button', { name: 'Bỏ chọn tất cả', exact: true }).click();
+  assert.equal(await page.getByRole('group', { name: 'Chia cho ai?', exact: true }).getByRole('checkbox', { checked: true }).count(), 0);
+  await page.getByText('0 người được chia', { exact: true }).waitFor();
+  await page.getByRole('button', { name: /Lưu khoản chi/ }).click();
+  await page.getByText('Chọn ít nhất một người để chia khoản chi.', { exact: true }).waitFor();
+  assert.equal((await call(expenses + '/' + bill.id, session)).version, 1);
+  await page.getByRole('button', { name: 'Chọn tất cả', exact: true }).click();
+  assert.equal(await page.getByLabel('Phần chia dự kiến của Bình', { exact: true }).getByRole('checkbox').isChecked(), false);
+  await page.getByText('1 người được chia', { exact: true }).waitFor();
+  await page.getByRole('button', { name: /Lưu khoản chi/ }).click(); await heading(page, bill.title);
+  assert.deepEqual((await call(expenses + '/' + bill.id, session)).shares, [{ participantId: trip.ownerParticipantId, amountMinor: 90000 }]);
+});
+
 test('joining keeps legacy sharing and links people for selection in new expenses', { timeout: 90000 }, async t => {
   const { page, session, trip, screen } = await fixture(t, null);
   const root = 'trips/' + trip.id;

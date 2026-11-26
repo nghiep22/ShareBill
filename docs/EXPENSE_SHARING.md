@@ -28,6 +28,8 @@ QR theo khoản dùng **phần chia gốc**, chưa trừ các lượt chuyển t
 
 ## Hợp đồng dữ liệu
 
+**Bỏ chọn tất cả** bỏ cả người đang tham gia lẫn người đã rời nhóm trong phần chia. **Chọn tất cả** chỉ thêm người đang hoạt động; chưa chọn ai thì form yêu cầu chọn ít nhất một người trước khi gửi. Chi tiết giữ phần chia lịch sử và ghi rõ người đã rời nhóm/ngừng dùng.
+
 Create/PATCH nhận `sharingScope: "selected"` cùng block tiền gồm `amountMinor`, `payerParticipantId`, `splitMethod` và `split`. `equal` dùng `split.participantIds`; `exact` dùng `split.shares`. Giới hạn 50 người, tổng phần phải khớp số tiền. Không gửi field này giữ hành vi cũ để client đã triển khai không bị thay đổi ngầm.
 
 Expense lưu field tùy chọn `sharingScope: "selected"`, vẫn có `splitInput`, `shares` chuẩn và audit. Sửa tiền của expense đã chọn người phải gửi lại `sharingScope`; client cũ thiếu field bị chặn bằng `EXPENSE_SELECTION_REQUIRED` để tải lại ứng dụng. Metadata không cần block tiền và không chuyển cách chia.
@@ -46,4 +48,6 @@ Các field mới là phần mở rộng schema v1. Sau khi có khoản chọn ng
 
 ## Kiểm chứng
 
-Unit kiểm chia phần lẻ, giữ phần cố định, số tổng an toàn, QR theo bill và snapshot tài chính. Emulator kiểm legacy + selected, join/remove/restore, metadata/edit/void, replay, client cũ, danh sách sai và join đồng thời. Browser kiểm ví dụ 700.000đ/350.000đ/775.000đ, phần riêng, thành viên mới, ngoại tuyến, bỏ chọn người đã rời và giải mã QR để đối chiếu số tiền. Bằng chứng phát hành được ghi trong lịch sử triển khai sau khi kiểm cloud.
+Unit kiểm chia phần lẻ, giữ phần cố định, số tổng an toàn, QR theo bill và snapshot tài chính. Emulator kiểm legacy + selected, join/remove/restore, metadata/edit/void, replay, client cũ, danh sách sai và join đồng thời. Browser kiểm ví dụ 700.000đ/350.000đ/775.000đ, phần riêng, thành viên mới, ngoại tuyến, bỏ chọn người đã rời và giải mã QR để đối chiếu số tiền.
+
+FE/API đã lên cùng SHA `5801c47230e322cdd0fb15f0295fede0437a12e6`; CI và cloud đạt, gồm UI tạo/sửa, giữ bản ghi cũ, Blob upload/view/download và giải mã ảnh QR theo khoản 350.000đ so với QR tổng 775.000đ. [Báo cáo phát hành và phạm vi](reports/2026-11-26-expense-selection-release.json). Các khoản synthetic đã hủy, QR thử đã gỡ và chuyến đã chốt; không thực hiện chuyển tiền ngân hàng hoặc gửi Zalo thật.

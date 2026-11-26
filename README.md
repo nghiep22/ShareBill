@@ -2,7 +2,7 @@
 
 **Trạng thái triển khai** — Web/PWA mobile-first nằm trong `fe/` và API nằm trong `be/`. Trong mã nguồn hiện tại, `/` và `/live` dùng API cho tài khoản, chuyến đi, thành viên, lời mời, chi tiêu, quyết toán, lịch trình và báo lỗi. Đã gỡ bản xem thử; link `/demo` cũ chuyển về ứng dụng chính. Môi trường staging hiện có dùng Vercel Hobby và Firebase Spark. [Hướng dẫn chạy frontend](fe/README.md) · [Mở bản đang triển khai](https://sharebill-nghiep22.vercel.app/) · [Tài liệu API staging](https://sharebill-api-staging.vercel.app/docs/) · [Thiết lập staging](docs/CICD_DEPLOY.md).
 
-**Bản phát hành 26/11/2026:** FE/API cùng SHA `113926d`, hoàn thiện cách ly phiên, retry chống trùng và phục hồi khi bộ nhớ ngoại tuyến lỗi. CI và kiểm trên domain thật đã đạt; xem [bằng chứng và phạm vi nghiệm thu](docs/reports/2026-11-26-session-offline-reliability-release.json).
+**Bản phát hành 26/11/2026:** FE/API cùng SHA `5801c47`. Khoản mới chọn người chia, chia đều hoặc nhập từng phần; chi tiết hiện người và số tiền, QR dùng phần của chính khoản chi. Giữ cách tính các khoản cũ. CI và kiểm trên domain thật đã đạt, gồm giải mã QR 350.000đ theo khoản và 775.000đ theo công nợ tổng. [Cách dùng](docs/EXPENSE_SHARING.md) · [Bằng chứng phát hành](docs/reports/2026-11-26-expense-selection-release.json). Bản này gồm các sửa lỗi phiên và ngoại tuyến đã phát hành trước đó.
 
 Tài liệu thiết kế và triển khai, cập nhật ngày **16/11/2026**. Ngôn ngữ sản phẩm: tiếng Việt. Mục tiêu: một người có thể đi từ phân tích bài toán, làm frontend/backend, kiểm thử đến vận hành bản thật.
 
