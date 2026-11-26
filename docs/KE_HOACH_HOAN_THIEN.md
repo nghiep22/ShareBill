@@ -10,6 +10,8 @@ Snapshot và nháp được kiểm cấu trúc, tài khoản/chuyến, loại d�
 
 Kiểm chứng local: 32 ca unit mới kiểm validation và giới hạn chờ; ba hành trình trình duyệt mới kiểm cache hỏng/hết hạn, nháp hỏng rồi soạn lại và lưu chi tiêu khi IndexedDB treo. Bộ hồi quy gồm 238 unit/HTTP, 33 hành trình trên static/PWA, 5 kiểm thử cập nhật PWA và 10 kiểm thử công cụ smoke. Typecheck/build FE và BE đạt. Chưa triển khai cloud; kiểm thử Chromium trên desktop chưa thay cho Safari iOS/Chrome Android và bộ nhớ thiết bị vật lý.
 
+CI phát hiện bước hủy chuyển tiền trong fixture cũ có thể nhận nhầm nút lọc **Đã hủy** trước khi giao dịch hoàn tất. Bài kiểm thử đã đổi sang chờ nhãn trạng thái trên thẻ chuyển tiền và kiểm danh sách pending rỗng trước khi mở sửa khoản chi. Không đổi quy tắc hay runtime quyết toán.
+
 ## Cách ly phiên đăng nhập và khôi phục giao dịch ngày 26/11/2026
 
 Mỗi lần đăng nhập/đăng xuất tạo một mốc phiên riêng, kể cả khi đăng nhập lại cùng tài khoản. Phản hồi đọc, ghi, retry và refresh của phiên cũ bị bỏ qua; lỗi 401 hoặc tài khoản bị khóa đến muộn không làm mới token hoặc đăng xuất phiên mới. Refresh trong cùng phiên vẫn dùng chung một request và giữ các lượt đọc đang chạy. Nếu có nhiều yêu cầu đăng nhập đồng thời, chỉ yêu cầu mới nhất được nhận kết quả.

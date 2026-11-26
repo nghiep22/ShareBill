@@ -1126,7 +1126,8 @@ test('money screens keep equal shares, remaining debt, partial payments and reve
   await recordPartial();
   await page.getByRole('button', { name: 'Hủy', exact: true }).click();
   await page.getByRole('dialog').getByRole('button', { name: 'Xác nhận', exact: true }).click();
-  await page.getByText('Đã hủy', { exact: true }).last().waitFor();
+  await page.locator('.transfer-card .tag').filter({ hasText: /^Đã hủy$/ }).waitFor();
+  assert.equal((await call(root + '/settlements?status=pending', session)).items.length, 0);
   assert.equal((await overview()).balances.find(row => row.participantId === peers[0].id).netMinor, debt.netMinor);
   await page.goto(screen('sua-khoan-chi/' + expense.id));
   await heading(page, 'Sửa khoản chi');
